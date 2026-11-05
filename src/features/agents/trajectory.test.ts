@@ -31,6 +31,18 @@ const tool = (title: string): AgentEntry => ({
   output: null,
   diffs: [],
 });
+const timedTool = (title: string, startedMs: number, endedMs: number | null): AgentEntry => ({
+  type: "tool",
+  id: title,
+  title,
+  kind: "read",
+  status: endedMs == null ? "running" : "completed",
+  locations: [],
+  output: null,
+  diffs: [],
+  startedMs,
+  endedMs,
+});
 
 describe("buildTrajectory", () => {
   it("is empty without entries", () => {
@@ -109,6 +121,34 @@ describe("spans and domain", () => {
     expect(spans[1]!.turn).toBe(0);
     expect(spans[1]!.endMs).toBeNull();
     expect(trajectoryDomain(spans, 5000)).toEqual({ start: 1000, end: 5000 });
+  });
+
+  it("spans timed tool calls with their ledger index", () => {
+    const entries: AgentEntry[] = [
+      user("a", 1000, 9000),
+      timedTool("read x", 1500, 2500),
+      tool("untimed"),
+      {
+        type: "subagent",
+        id: "child",
+        title: "Explore",
+        description: null,
+        status: "running",
+        error: null,
+        prompt: "look",
+        reply: null,
+        tools: 2,
+        activity: "reading",
+        startedMs: 3000,
+        endedMs: null,
+        cancellable: true,
+      },
+    ];
+    const { turns } = buildTrajectory(entries);
+    const spans = buildTrajectorySpans(entries, turns);
+    expect(spans.map((s) => s.key)).toEqual(["turn-0", "tool-1", "subagent-child"]);
+    expect(spans[1]).toMatchObject({ kind: "tool", turn: 0, index: 1, startMs: 1500, endMs: 2500 });
+    expect(trajectoryDomain(spans, 9000)).toEqual({ start: 1000, end: 9000 });
   });
 
   it("has no domain without timed records", () => {

@@ -130,7 +130,7 @@ fn a_captured_v2_turn_folds_into_the_timeline() {
         for u in n.normalize(&session, &update) {
             assert_ne!(u["sessionUpdate"], "state_update");
             assert_ne!(u["sessionUpdate"], "terminal_update");
-            t.apply(&u);
+            t.apply(&u, 1.0);
         }
     }
     let e = &t.entries;
@@ -179,7 +179,7 @@ fn a_replayed_history_clears_each_message_before_its_chunks() {
     let replay = updates(RESUME);
     for (session, update) in &replay {
         for u in n.normalize(session, update) {
-            t.apply(&u);
+            t.apply(&u, 1.0);
         }
     }
     // The resume without a replay sent only its state snapshot; the replay, the history.
@@ -239,7 +239,7 @@ fn tool_calls_are_announced_once_and_content_chunks_append() {
         json!({ "sessionUpdate": "tool_call_content_chunk", "toolCallId": "u", "content": text("two") }),
     ] {
         for v in n.normalize("s", &u) {
-            t.apply(&v);
+            t.apply(&v, 1.0);
         }
     }
     assert_eq!(tool(&t.entries[0]).2, Some("one\ntwo"));
@@ -277,7 +277,7 @@ fn terminal_output_reaches_the_tool_calls_that_show_it() {
         json!({ "sessionUpdate": "tool_call_update", "toolCallId": "t", "status": "completed" }),
     ] {
         for v in n.normalize("s", &u) {
-            t.apply(&v);
+            t.apply(&v, 1.0);
         }
     }
     assert_eq!(tool(&t.entries[0]), ("make", AgentToolStatus::Completed, Some("building…\nok")));
@@ -312,7 +312,7 @@ fn a_compaction_shows_as_a_tool_call() {
         json!({ "sessionUpdate": "compaction_update", "compactionId": "c1", "status": "completed" }),
     ] {
         for v in n.normalize("s", &u) {
-            t.apply(&v);
+            t.apply(&v, 1.0);
         }
     }
     assert_eq!(tool(&t.entries[0]), ("Compact conversation", AgentToolStatus::Completed, Some("Fixed the lexer")));
@@ -327,7 +327,7 @@ fn git_patches_count_their_lines_per_file() {
         "patch": { "format": "git_patch", "text": patch } }] });
     let mut t = Timeline::default();
     for v in Normalizer::default().normalize("s", &update) {
-        t.apply(&v);
+        t.apply(&v, 1.0);
     }
     let AgentEntry::Tool { diffs, .. } = &t.entries[0] else { panic!() };
     let stats: Vec<(&str, u32, u32)> = diffs.iter().map(|d| (d.path.0.to_str().unwrap(), d.added, d.removed)).collect();

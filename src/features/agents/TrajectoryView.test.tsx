@@ -53,6 +53,8 @@ const entries = (): AgentEntry[] => [
     locations: [],
     output: "line one\nline two",
     diffs: [],
+    startedMs: 2000,
+    endedMs: 8000,
   },
   { type: "user", text: "also update Cargo docs", attachments: [], sentMs: 10_000, doneMs: null },
   { type: "error", message: "Denied" },
@@ -197,6 +199,19 @@ describe("TrajectoryView sequence mode", () => {
     expect(screen.getByLabelText("Timing overview")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show sequence" }));
     expect(screen.getByLabelText("Sequence overview")).toBeTruthy();
+  });
+
+  it("shows timed tool calls in the timing overview and jumps to their record", () => {
+    renderView();
+    expect(screen.getByText("6s")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Collapse turn" })[0]!);
+    expect(screen.queryByText("read lexer file")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show actual timing" }));
+    const overview = screen.getByLabelText("Timing overview");
+    const spans = within(overview).getAllByRole("button");
+    expect(spans).toHaveLength(3);
+    fireEvent.click(spans[1]!);
+    expect(screen.getByText("read lexer file")).toBeTruthy();
   });
 
   it("renders steered follow-ups and extra turn counts", () => {

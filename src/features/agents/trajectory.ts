@@ -1,9 +1,9 @@
-/** Frontend-only trajectory projection over a task's flat entries.
+/** Trajectory projection over a task's flat entries: turns, tool calls and subagents.
  *
- * The backend keeps no per-record timing yet (tools carry no timestamps and
- * outputs are truncated), so the overview below only spans what the entries
- * do timestamp: user turns (`sentMs`/`doneMs`) and subagents
- * (`startedMs`/`endedMs`). Tool calls appear as records inside their turn.
+ * The backend timestamps user turns (`sentMs`/`doneMs`), tool calls
+ * (`startedMs`/`endedMs`) and subagents (`startedMs`/`endedMs`); tool outputs
+ * stay truncated. The timing overview spans all three; the sequence overview
+ * gives every record an equal-width lane.
  */
 import type { AgentEntry } from "@/bindings";
 import { turnNumbers } from "./model";
@@ -32,15 +32,17 @@ export interface TrajectoryTurn {
 
 export interface TrajectorySpan {
   key: string;
-  kind: "turn" | "subagent";
+  kind: "turn" | "subagent" | "tool";
   /** Owning turn (the latest one started at the record's index); null before the first turn. */
   turn: number | null;
+  /** Ledger index of the record (a turn's own user message for kind "turn"). */
+  index: number;
   startMs: number;
-  /** Null while the turn or subagent is still running. */
+  /** Null while the turn, tool or subagent is still running. */
   endMs: number | null;
-  /** The subagent's session id; null for turns. */
+  /** The subagent's session id; null for turns and tools. */
   subagent: string | null;
-  /** The subagent's title; null for turns. */
+  /** The subagent's title, or the tool's title; null for turns. */
   title: string | null;
   status: string;
 }
@@ -95,7 +97,7 @@ export function turnOfIndex(turns: readonly TrajectoryTurn[], index: number): nu
   return out;
 }
 
-/** Timed spans for the overview: turns plus every subagent card. */
+/** Timed spans for the overview: turns, timed tool calls and every subagent card. */
 export function buildTrajectorySpans(
   entries: readonly AgentEntry[],
   turns: readonly TrajectoryTurn[],
@@ -107,6 +109,7 @@ export function buildTrajectorySpans(
       key: `turn-${t.turn}`,
       kind: "turn",
       turn: t.turn,
+      index: t.startIndex,
       startMs: t.sentMs,
       endMs: t.doneMs,
       subagent: null,
@@ -115,17 +118,33 @@ export function buildTrajectorySpans(
     });
   }
   entries.forEach((e, i) => {
-    if (e.type !== "subagent" || e.startedMs == null) return;
-    spans.push({
-      key: `subagent-${e.id}`,
-      kind: "subagent",
-      turn: turnOfIndex(turns, i),
-      startMs: e.startedMs,
-      endMs: e.endedMs,
-      subagent: e.id,
-      title: e.title ?? e.description,
-      status: e.status,
-    });
+    if (e.type === "subagent") {
+      if (e.startedMs == null) return;
+      spans.push({
+        key: `subagent-${e.id}`,
+        kind: "subagent",
+        turn: turnOfIndex(turns, i),
+        index: i,
+        startMs: e.startedMs,
+        endMs: e.endedMs,
+        subagent: e.id,
+        title: e.title ?? e.description,
+        status: e.status,
+      });
+    } else if (e.type === "tool") {
+      if (e.startedMs == null) return;
+      spans.push({
+        key: `tool-${i}`,
+        kind: "tool",
+        turn: turnOfIndex(turns, i),
+        index: i,
+        startMs: e.startedMs,
+        endMs: e.endedMs ?? null,
+        subagent: null,
+        title: e.title || e.kind,
+        status: e.status,
+      });
+    }
   });
   return spans.sort((a, b) => a.startMs - b.startMs);
 }

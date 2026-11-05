@@ -348,6 +348,12 @@ pub enum AgentEntry {
         /// Text the tool reported (command output…), truncated.
         output: Option<String>,
         diffs: Vec<AgentToolDiff>,
+        /// When the tool call started (ms since the epoch).
+        #[serde(default)]
+        started_ms: Option<f64>,
+        /// When the tool call finished; `None` while it runs.
+        #[serde(default)]
+        ended_ms: Option<f64>,
     },
     Plan {
         items: Vec<AgentPlanItem>,

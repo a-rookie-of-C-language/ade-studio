@@ -135,7 +135,7 @@ impl Conversation {
             }
             _ => {
                 let Some(timeline) = self.timeline_mut(&owner) else { return out };
-                out.extend(timeline.apply(update).changed.into_iter().map(|i| (owner.clone(), i)));
+                out.extend(timeline.apply(update, now).changed.into_iter().map(|i| (owner.clone(), i)));
                 if let Some(id) = owner.as_deref()
                     && matches!(kind, "tool_call" | "tool_call_update")
                 {

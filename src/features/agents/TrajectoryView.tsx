@@ -1,8 +1,8 @@
 /** Turn-aware ledger over a task's entries: turns, tool records and a timing overview.
  *
- * Frontend-only: the backend keeps no per-record timing yet, so the overview
- * spans user turns and subagents (the entries that carry timestamps) while
- * tool calls appear as records inside their turn.
+ * The timing overview spans turns, timed tool calls and subagents; tool calls
+ * also appear as records inside their turn, and the sequence overview gives
+ * every record an equal-width lane.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
@@ -195,13 +195,19 @@ export function TrajectoryView({
                 className={clsx(
                   styles.span,
                   s.kind === "subagent" && styles.spanSubagent,
+                  s.kind === "tool" && styles.spanTool,
                   s.endMs == null && styles.spanRunning,
                 )}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                title={`${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`}
+                title={
+                  s.title
+                    ? `${s.title} · ${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
+                    : `${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
+                }
                 aria-label={s.kind === "turn" ? tx`Turn ${s.turn! + 1}` : (s.title ?? tx("Subagent"))}
                 onClick={() => {
                   if (s.kind === "turn" && s.turn != null) goToTurn(s.turn);
+                  else if (s.kind === "tool") goToRecord(s.index, s.turn);
                   else if (s.subagent) onOpenSubagent(s.subagent);
                 }}
               />
@@ -526,6 +532,10 @@ function ToolRow({
   index: number;
   copy: string | null;
 }) {
+  const durationMs =
+    entry.startedMs != null && entry.endedMs != null && entry.endedMs > entry.startedMs
+      ? entry.endedMs - entry.startedMs
+      : null;
   const head = (
     <>
       <RecordIndex index={index} />
@@ -538,6 +548,7 @@ function ToolRow({
       ))}
       {(entry.status === "running" || entry.status === "pending") && <Spinner size={12} />}
       {entry.status === "failed" && <Icon name="error" size={12} />}
+      {durationMs != null && <span className={styles.rowMeta}>{formatDuration(durationMs)}</span>}
     </>
   );
   if (!entry.output) {
