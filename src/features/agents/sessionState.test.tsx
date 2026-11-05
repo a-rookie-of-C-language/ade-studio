@@ -401,4 +401,46 @@ describe("meters in the task header", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compact session" }));
     expect(useAgents.getState().composers.get("A")?.text).toBe("/compact");
   });
+
+  it("shows the session environment above the context card", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      provider: "codex",
+      model: "gpt-5.4",
+      cwd: "/p/work",
+      isolation: "worktree",
+      branch: "agent/login-flow",
+      usage: { used: 150_000, size: 200_000 },
+    };
+    useAgents.setState({
+      tasks: new Map([["A", reported]]),
+      providers: [{ id: "codex", name: "Codex" } as never],
+    });
+    useProject.setState({ project: { root: "/p", workspace: { projects: ["/p"] } } as never });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByText("Environment").closest("section")!;
+    expect(card).toBeInTheDocument();
+    // Provider display name plus the model the task runs on.
+    expect(within(card).getByText("Codex · gpt-5.4")).toBeInTheDocument();
+    // Project name plus working directory, and the worktree branch without its prefix.
+    expect(within(card).getByText("p · /p/work")).toBeInTheDocument();
+    expect(within(card).getByText("login-flow")).toBeInTheDocument();
+    // The environment card is the first card in the reserved sidecar.
+    expect(card.parentElement!.firstElementChild).toBe(card);
+  });
+
+  it("collapses the environment card and hides the branch on local checkouts", async () => {
+    const reported: AgentTask = { ...task("A"), usage: null };
+    useAgents.setState({ tasks: new Map([["A", reported]]), providers: [] });
+    useProject.setState({ project: null });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByText("Environment").closest("section")!;
+    // Local checkout: agent and directory rows, no branch row.
+    expect(within(card).getByText("codex")).toBeInTheDocument();
+    expect(within(card).getByText("/project")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Environment" }));
+    expect(within(card).queryByText("/project")).toBeNull();
+  });
 });

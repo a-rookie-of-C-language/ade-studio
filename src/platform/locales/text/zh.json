@@ -6252,5 +6252,6 @@
   "Cache read": "缓存读取",
   "Cache write": "缓存写入",
   "Reasoning": "推理",
-  "Compact session": "压缩会话"
+  "Compact session": "压缩会话",
+  "Environment": "环境"
 }

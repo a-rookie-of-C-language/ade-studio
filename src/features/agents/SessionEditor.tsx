@@ -187,7 +187,11 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
           <SessionComposer task={task} entries={entries ?? null} onOpenSubagent={openSubagent} />
         )}
       </div>
-      {!docked && <div className={styles.sidecar} data-reserved="right-quarter" />}
+      {!docked && (
+        <div className={styles.sidecar} data-reserved="right-quarter">
+          <EnvironmentCard task={task} />
+        </div>
+      )}
       {changesOpen && (
         <ChangesPane
           task={task}
@@ -479,6 +483,50 @@ function Usage({ task }: { task: AgentTask }) {
         )}
       </Popup>
     </>
+  );
+}
+
+/**
+ * Which agent runs the session and where it works, above the context card.
+ * Everything shown comes from the task itself (provider, model, directory,
+ * branch): sessions offer no environment switching, so there is no picker.
+ */
+function EnvironmentCard({ task }: { task: AgentTask }) {
+  const [open, setOpen] = useState(true);
+  const project = useProject((s) => s.project);
+  const projectName = project?.workspace ? basename(task.projectRoot ?? project.root) : null;
+  const where = task.isolation === "worktree" ? branchLabel(task.branch) : null;
+  return (
+    <section className={styles.environmentCard} aria-label={tx("Environment")}>
+      <button type="button" className={styles.environmentHead} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <T>Environment</T>
+        <Icon name="chevron-down" size={14} className={clsx(styles.environmentChevron, !open && styles.collapsed)} />
+      </button>
+      {open && (
+        <div className={styles.environmentRows}>
+          <div className={styles.environmentRow} {...tooltipAttrs(task.provider)}>
+            <Icon name={providerIcon(task.provider)} size={14} />
+            <span className={styles.environmentText}>
+              {providerName(task.provider)}
+              {task.model ? ` · ${task.model}` : ""}
+            </span>
+          </div>
+          <div className={styles.environmentRow} {...tooltipAttrs(task.cwd)}>
+            <Icon name="folder" size={14} />
+            <span className={styles.environmentText}>
+              {projectName ? `${projectName} · ` : ""}
+              {task.cwd}
+            </span>
+          </div>
+          {where ? (
+            <div className={styles.environmentRow} {...tooltipAttrs(task.branch ?? "")}>
+              <Icon name="branch-label" size={14} />
+              <span className={styles.environmentText}>{where}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
   );
 }
 

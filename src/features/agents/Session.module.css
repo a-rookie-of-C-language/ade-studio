@@ -22,6 +22,65 @@
   grid-column: 2;
   min-width: 0;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Session environment: agent, directory, branch. Shares the context card's look. */
+.environmentCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-popup);
+  background: var(--bg-elev);
+  padding: 10px 12px 12px;
+}
+.environmentHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.environmentChevron {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+.environmentChevron.collapsed {
+  transform: rotate(-90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .environmentChevron {
+    transition: none;
+  }
+}
+.environmentRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.environmentRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--fg-muted);
+}
+.environmentText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation[hidden] {
