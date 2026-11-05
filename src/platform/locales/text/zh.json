@@ -6258,5 +6258,8 @@
   "Cache write": "缓存写入",
   "Reasoning": "推理",
   "Compact session": "压缩会话",
-  "Environment": "环境"
+  "Environment": "环境",
+  "Model {model}": "模型 {model}",
+  "Estimated from the last response": "根据上一次响应估算",
+  "{name}: {tokens} tokens": "{name}：{tokens} 个 token"
 }

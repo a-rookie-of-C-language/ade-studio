@@ -579,13 +579,14 @@ pub(super) fn plan(params: &Value) -> Value {
 }
 
 /// `thread/tokenUsage/updated` as an ACP `usage_update`: what the last request put in
-/// the context window, out of its size.
+/// the context window, out of its size. The frame names no model, so none is attached:
+/// what the provider reports is shown, nothing is filled in.
 pub(super) fn usage(params: &Value) -> Option<Value> {
     let usage = params.get("tokenUsage")?;
     let last = usage.get("last")?;
     let used = last.get("totalTokens")?.as_u64()?;
     let size = usage.get("modelContextWindow")?.as_u64().filter(|s| *s > 0)?;
-    let mut update = json!({ "sessionUpdate": "usage_update", "used": used, "size": size });
+    let mut update = json!({ "sessionUpdate": "usage_update", "used": used, "size": size, "kind": "report" });
     // Pass through the splits the SDK reports, so the UI shows what exists and nothing more.
     let mut split = |last: &Value, sdk: &str, out: &str| {
         last.get(sdk).and_then(Value::as_u64).map(|n| update[out] = json!(n.min(u64::from(u32::MAX))))

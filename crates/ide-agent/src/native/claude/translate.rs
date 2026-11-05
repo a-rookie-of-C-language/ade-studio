@@ -63,6 +63,9 @@ pub(super) struct Translator {
     pub cache_write_tokens: Option<u64>,
     pub model: Option<String>,
     windows: HashMap<String, u64>,
+    /// A `usage_cleared` went out for the current tokens-without-window state;
+    /// set so compaction/model-change gaps clear the meter once, not per event.
+    usage_cleared: bool,
     /// The session's cost so far in USD, as the last `result` reported it.
     cost_usd: Option<f64>,
 }
@@ -86,6 +89,7 @@ impl Translator {
             cache_write_tokens: None,
             model: None,
             windows: HashMap::new(),
+            usage_cleared: false,
             cost_usd: None,
         }
     }
@@ -168,7 +172,7 @@ impl Translator {
             }
             Some("message_delta") if parent.is_none() => {
                 self.note_usage(event.get("usage"), None);
-                out.extend(self.usage_update());
+                out.extend(self.usage_updates());
             }
             Some("content_block_start") => {
                 let block = event.get("content_block").cloned().unwrap_or_default();
@@ -246,7 +250,7 @@ impl Translator {
             }
         }
         if parent.is_none() {
-            out.extend(self.usage_update());
+            out.extend(self.usage_updates());
         }
         out
     }
@@ -573,11 +577,14 @@ impl Translator {
         if let Some(cost) = result.get("total_cost_usd").and_then(Value::as_f64).filter(|c| c.is_finite()) {
             self.cost_usd = Some(cost);
         }
-        self.usage_update().into_iter().collect()
+        self.usage_updates()
     }
 
-    fn usage_update(&self) -> Option<Update> {
-        let used = self.used?;
+    /// The meter update for the tokens noted so far: the estimate when a window
+    /// fits the model, a single `usage_cleared` when the last shown share went
+    /// stale (model change, compaction), else nothing.
+    pub(super) fn usage_updates(&mut self) -> Vec<Update> {
+        let Some(used) = self.used else { return Vec::new() };
         let size = self
             .model
             .as_ref()
@@ -586,8 +593,19 @@ impl Translator {
                     .get(m)
                     .or_else(|| self.windows.iter().find(|(k, _)| k.starts_with(m.as_str())).map(|(_, v)| v))
             })
-            .or_else(|| (self.windows.len() == 1).then(|| self.windows.values().next()).flatten())?;
-        let mut update = json!({ "sessionUpdate": "usage_update", "used": used, "size": size });
+            .or_else(|| (self.windows.len() == 1).then(|| self.windows.values().next()).flatten());
+        let Some(size) = size else {
+            if self.usage_cleared {
+                return Vec::new();
+            }
+            self.usage_cleared = true;
+            return vec![Update { session: self.root.clone(), update: json!({ "sessionUpdate": "usage_cleared" }) }];
+        };
+        self.usage_cleared = false;
+        let mut update = json!({ "sessionUpdate": "usage_update", "used": used, "size": size, "kind": "estimate" });
+        if let Some(model) = &self.model {
+            update["model"] = json!(model);
+        }
         let mut split = |key: &str, v: Option<u64>| {
             if let Some(n) = v {
                 update[key] = json!(n.min(u64::from(u32::MAX)));
@@ -600,7 +618,7 @@ impl Translator {
         if let Some(amount) = self.cost_usd {
             update["cost"] = json!({ "amount": amount, "currency": "USD" });
         }
-        Some(Update { session: self.root.clone(), update })
+        vec![Update { session: self.root.clone(), update }]
     }
 
     /// The usage-limit windows a `rate_limit_event` reports, as a [`LIMITS_UPDATE`]: every

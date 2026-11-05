@@ -1367,6 +1367,24 @@ export type AgentConfigVia =
 /**  `session/set_model` (agents that report `models` instead of a model config option). */
 "model";
 
+/**  One row of the provider's own context breakdown, as it names and counts it. */
+export type AgentContextCategory = {
+	/**  Display name as the provider renders it. */
+	name: string,
+	tokens: number,
+};
+
+/**
+ *  Where a context-window reading comes from. `None` (no `AgentUsage` at all)
+ *  means unknown: nothing reported yet, or the last reading was invalidated by
+ *  a compaction or a model change.
+ */
+export type AgentContextKind = 
+/**  The provider's own answer (Codex `tokenUsage`, ACP `usage_update`). */
+"report" | 
+/**  Derived from message-level token counts (Claude stream-json `usage`). */
+"estimate";
+
 export type AgentCost = {
 	amount: number | null,
 	/**  ISO 4217 code, e.g. `USD`. */
@@ -1616,6 +1634,16 @@ export type AgentUsage = {
 	used: number,
 	/**  Size of the context window. */
 	size: number,
+	/**
+	 *  Where the numbers come from: the provider's own report, or our estimate
+	 *  from its message-level token counts. Absent on tasks saved before this
+	 *  was tracked; those read as `Report`.
+	 */
+	kind?: AgentContextKind,
+	/**  The model the numbers were measured for, when the provider names it. */
+	model?: string | null,
+	/**  The provider's own per-category breakdown, when it reports one. */
+	categories?: AgentContextCategory[],
 	/**  What the session has cost so far (ACP `usage_update.cost`), when the agent reports it. */
 	cost?: AgentCost | null,
 	/**  Tokens the last request sent, when the agent reports the split. */
