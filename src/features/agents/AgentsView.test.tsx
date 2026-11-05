@@ -85,7 +85,7 @@ const selectedTasks = () =>
   screen
     .queryAllByRole("treeitem", { selected: true })
     .filter((item) => item.getAttribute("aria-level") === "2")
-    .map((item) => item.querySelector("[title]")?.getAttribute("title"));
+    .map((item) => item.querySelector("[data-tooltip]")?.getAttribute("data-tooltip"));
 const context = (id: string) => {
   fireEvent.mouseDown(row(id), { button: 2 });
   fireEvent.contextMenu(row(id));

@@ -227,9 +227,6 @@ export function trajectoryCopyText(entry: AgentEntry): string | null {
   }
 }
 
-/** Timeline projection for the overview: equal-width or wall-clock. */
-export type TrajectoryTimelineMode = "sequence" | "time";
-
 export interface TrajectoryTimelineSpan {
   key: string;
   /** Ledger index of the record. */

@@ -854,6 +854,7 @@ async fn session_stats_sum_usage_retries_and_turn_timing() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
