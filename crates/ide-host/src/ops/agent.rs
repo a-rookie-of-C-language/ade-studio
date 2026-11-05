@@ -16,12 +16,13 @@ use std::sync::{LazyLock, Mutex};
 
 /// Streams the project's agent events to this window; returns every task.
 pub fn subscribe(host: &Host, window: &str, on_event: Emit<AgentEvent>) -> IdeResult<Vec<AgentTask>> {
-    Ok(host.project(window)?.agents.subscribe(on_event))
+    Ok(host.project_or_default(window)?.agents.subscribe(on_event))
 }
 
 pub fn providers(host: &Host, window: &str) -> IdeResult<Vec<AgentProvider>> {
-    host.require_trust(window)?;
-    let mut providers = host.project(window)?.agents.providers();
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    let mut providers = project.agents.providers();
     ide_agent::registry::mark_updates(&registry_paths(host), &mut providers);
     Ok(providers)
 }
@@ -29,8 +30,9 @@ pub fn providers(host: &Host, window: &str) -> IdeResult<Vec<AgentProvider>> {
 /// Overrides built-in agent `id`'s command with `command` (its agent file keeps the
 /// built-in's driver and arguments), or returns it to auto-detection with `None`.
 pub fn set_command(host: &Host, window: &str, id: String, command: Option<String>) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_builtin_command(&id, command)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_builtin_command(&id, command)
 }
 
 /// Environment variables built-in agent `id` starts with; empty clears them.
@@ -40,8 +42,9 @@ pub fn set_env(
     id: String,
     env: std::collections::BTreeMap<String, String>,
 ) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_builtin_env(&id, env)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_builtin_env(&id, env)
 }
 
 /// Where ACP Registry agents are saved (`<config>/agents`, like the user's own) and installed.
@@ -173,17 +176,17 @@ pub async fn commands(
     provider: String,
     task: Option<String>,
 ) -> IdeResult<Vec<AgentCommand>> {
-    host.project(window)?.agents.commands(&provider, task.as_deref()).await
+    host.project_or_default(window)?.agents.commands(&provider, task.as_deref()).await
 }
 
 /// Entries of `task`'s conversation, or of its subagent `subagent`'s.
 pub fn entries(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<Vec<AgentEntry>> {
-    host.project(window)?.agents.entries(&task, subagent)
+    host.project_or_default(window)?.agents.entries(&task, subagent)
 }
 
 pub async fn create(host: &Host, window: &str, mut request: NewAgentTask) -> IdeResult<AgentTask> {
-    host.require_trust(window)?;
-    let project = host.project(window)?;
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
     let root = project.root.clone();
     let requested = request.project_root.take();
     request.project_root = Some(IpcPath(
@@ -194,78 +197,88 @@ pub async fn create(host: &Host, window: &str, mut request: NewAgentTask) -> Ide
 
 /// Sends a message; while the agent works it is queued, or with `now` it interrupts the turn.
 pub async fn prompt(host: &Host, window: &str, task: String, prompt: AgentPrompt, now: bool) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.prompt(&task, prompt, now).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.prompt(&task, prompt, now).await
 }
 
 /// Drops a queued message and returns it (to edit it).
 pub fn unqueue(host: &Host, window: &str, task: String, queued: String) -> IdeResult<AgentQueued> {
-    host.project(window)?.agents.unqueue(&task, &queued)
+    host.project_or_default(window)?.agents.unqueue(&task, &queued)
 }
 
 /// Sends a queued message now, interrupting the current turn.
 pub fn send_queued_now(host: &Host, window: &str, task: String, queued: String) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.send_queued_now(&task, &queued)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.send_queued_now(&task, &queued)
 }
 
 /// Changes a session setting (model, mode, thinking effort…).
 pub async fn set_config(host: &Host, window: &str, task: String, option: String, value: String) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_config(&task, &option, value).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_config(&task, &option, value).await
 }
 
 /// Copies the task's conversation into a new task, up to its first `turns` turns (all when `None`).
 pub async fn fork(host: &Host, window: &str, task: String, turns: Option<u32>) -> IdeResult<AgentTask> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.fork(&task, turns).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.fork(&task, turns).await
 }
 
 /// Drops the task's turns after its first `turns`; returns the message of the first dropped one.
 pub async fn rollback(host: &Host, window: &str, task: String, turns: u32) -> IdeResult<Option<AgentPrompt>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.rollback(&task, turns).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.rollback(&task, turns).await
 }
 
 /// What the agent reports about itself when it starts, without opening a session.
 pub async fn probe(host: &Host, window: &str, provider: String, refresh: bool) -> IdeResult<AgentProbe> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.probe(&provider, refresh).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.probe(&provider, refresh).await
 }
 
 /// Stops the task's current turn, or with `subagent` only that subagent's work.
 pub fn cancel(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<()> {
-    host.project(window)?.agents.cancel(&task, subagent)
+    host.project_or_default(window)?.agents.cancel(&task, subagent)
 }
 
 /// Answers a permission request; `option: None` cancels it.
 pub fn respond(host: &Host, window: &str, task: String, permission: u32, option: Option<String>) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.respond(&task, permission, option)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.respond(&task, permission, option)
 }
 
 pub fn archive(host: &Host, window: &str, task: String) -> IdeResult<()> {
-    host.project(window)?.agents.archive(&task)
+    host.project_or_default(window)?.agents.archive(&task)
 }
 
 pub fn unarchive(host: &Host, window: &str, task: String) -> IdeResult<()> {
-    host.project(window)?.agents.unarchive(&task)
+    host.project_or_default(window)?.agents.unarchive(&task)
 }
 
 pub async fn delete(host: &Host, window: &str, task: String, remove_worktree: bool) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.delete(&task, remove_worktree).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.delete(&task, remove_worktree).await
 }
 
 pub async fn changes(host: &Host, window: &str, task: String) -> IdeResult<Vec<AgentChange>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.changes(&task).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.changes(&task).await
 }
 
 /// Content of `path` when the task started (left side of its diff).
 pub async fn base_text(host: &Host, window: &str, task: String, path: IpcPath) -> IdeResult<Option<String>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.base_text(&task, path.into_path_buf()).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.base_text(&task, path.into_path_buf()).await
 }
 
 /// Commands of this module the remote server answers.

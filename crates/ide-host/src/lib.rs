@@ -173,6 +173,35 @@ impl Host {
             .ok_or_else(|| IdeError::not_found("no project is open in this window"))
     }
 
+    /// Agent-first home (Codex/Claude Code-like): `~/.openidea/workspace`.
+    pub fn default_workspace() -> PathBuf {
+        dirs::home_dir().unwrap_or_else(std::env::temp_dir).join(".openidea").join("workspace")
+    }
+
+    /// The project of `window`, or the default workspace when none is open.
+    /// Agent flows (Cowork home, Settings › Agents) run here, so a window
+    /// without an explicit project still has somewhere to list providers and tasks.
+    pub fn project_or_default(&self, window: &str) -> IdeResult<Arc<Project>> {
+        let owner = (self.owner)(window).to_owned();
+        if let Some(p) = self.projects.read().get(&owner).cloned() {
+            return Ok(p);
+        }
+        self.ensure_default_project(&owner)
+    }
+
+    /// Opens `~/.openidea/workspace` for `window` (idempotent): the default agent
+    /// workspace. App-owned, so it is trusted without prompting; never touches recents.
+    pub fn ensure_default_project(&self, window: &str) -> IdeResult<Arc<Project>> {
+        let owner = (self.owner)(window).to_owned();
+        if let Some(p) = self.projects.read().get(&owner).cloned() {
+            return Ok(p);
+        }
+        let root = Self::default_workspace();
+        std::fs::create_dir_all(&root)?;
+        self.trust.decide(&root, true, false)?;
+        self.open_project(&owner, &root)
+    }
+
     pub fn require_trust(&self, window: &str) -> IdeResult<()> {
         self.project(window)?.require_trust()
     }
