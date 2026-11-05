@@ -17,7 +17,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import type { FileMatches, SearchQuery, RunConfig } from "@/bindings";
+import type { AgentTask, FileMatches, SearchQuery, RunConfig } from "@/bindings";
 import type { MenuItem } from "@/ui/Menu";
 import type { DragData } from "@/ui/pointerDrag";
 import type { TreeReorder } from "@/ui/Tree";
@@ -259,6 +259,39 @@ export function registerServiceProvider(p: ServiceProviderContribution): () => v
 }
 
 export function serviceProviders(map = useServiceProviders.getState().providers): ServiceProviderContribution[] {
+  return [...map.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
+}
+
+// ---------------------------------------------------------------------------
+// Session sidecar cards: features add cards below an agent session's
+// Environment/Context cards (the reserved right quarter), e.g. GitHub issues
+// in Cowork, where the Pull Requests tool window doesn't exist.
+
+export interface SessionSidecarContribution {
+  id: string;
+  order?: number;
+  component: ComponentType<{ task: AgentTask }>;
+}
+
+export const useSessionSidecarCards = create<{ cards: Map<string, SessionSidecarContribution> }>(() => ({
+  cards: new Map(),
+}));
+
+export function registerSessionSidecarCard(card: SessionSidecarContribution): () => void {
+  useSessionSidecarCards.setState((s) => ({ cards: new Map(s.cards).set(card.id, card) }));
+  return () =>
+    useSessionSidecarCards.setState((s) => {
+      if (s.cards.get(card.id) !== card) return s;
+      const cards = new Map(s.cards);
+      cards.delete(card.id);
+      return { cards };
+    });
+}
+
+/** Registered session sidecar cards in display order. */
+export function sessionSidecarCards(
+  map: ReadonlyMap<string, SessionSidecarContribution>,
+): SessionSidecarContribution[] {
   return [...map.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.id.localeCompare(b.id));
 }
 

@@ -167,6 +167,17 @@ export const commands = {
 	agentChanges: (task: string) => typedError<AgentChange[], IdeError>(__TAURI_INVOKE("agent_changes", { task })),
 	/**  Content of `path` when the task started (left side of its diff). */
 	agentBaseText: (task: string, path: IpcPath) => typedError<string | null, IdeError>(__TAURI_INVOKE("agent_base_text", { task, path })),
+	/**
+	 *  Sessions created outside OpenIDEA (another Codex or Claude client), newest first;
+	 *  `provider` narrows to `codex` or `claude`. Read-only: lists the agents' own
+	 *  history on disk, never modifies it.
+	 */
+	agentExternalSessions: (provider: string | null) => typedError<ExternalSession[], IdeError>(__TAURI_INVOKE("agent_external_sessions", { provider })),
+	/**
+	 *  Imports an external session as a task of the project and resumes it under its own
+	 *  session id. Importing the same session twice returns the first task.
+	 */
+	agentImportExternal: (request: ImportExternalTask) => typedError<AgentTask, IdeError>(__TAURI_INVOKE("agent_import_external", { request })),
 	notebookOpen: (path: string) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_open", { path })),
 	notebookGet: (id: string) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_get", { id })),
 	notebookEdit: (id: string, version: number, edit: NotebookEdit) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_edit", { id, version, edit })),
@@ -1406,7 +1417,11 @@ steered?: boolean } | { type: "agent"; text: string } | { type: "thought"; text:
 /**  ACP tool kind: `read`, `edit`, `execute`, `search`, `fetch`, `think`… */
 kind: string; status: AgentToolStatus; locations: IpcPath[]; 
 /**  Text the tool reported (command output…), truncated. */
-output: string | null; diffs: AgentToolDiff[] } | { type: "plan"; items: AgentPlanItem[] } | 
+output: string | null; diffs: AgentToolDiff[]; 
+/**  When the tool call started (ms since the epoch). */
+startedMs?: number | null; 
+/**  When the tool call finished; `None` while it runs. */
+endedMs?: number | null } | { type: "plan"; items: AgentPlanItem[] } | 
 /**  A subagent the agent started: its own session, whose entries are listed separately. */
 { type: "subagent"; 
 /**  The subagent's session id. */
@@ -1566,6 +1581,39 @@ export type AgentRetry = {
 	error: string | null,
 };
 
+/**
+ *  Cumulative session statistics: what the task spent and how fast it went.
+ *  Every `usage_update` the task's own session reports adds its per-request
+ *  splits to the totals (like the provider CLIs count API calls); turns add
+ *  timing. Rolling the conversation back never refunds the spend.
+ */
+export type AgentSessionStats = {
+	/**  Completed turns (user requests the agent answered, failed or stopped). */
+	requests?: number,
+	/**  Turns that ended in an error. */
+	failures?: number,
+	/**  Retried API requests that later produced output. */
+	retries?: number,
+	/**  Sum of the per-request input tokens agents reported. */
+	inputTokens?: number,
+	/**  Sum of the per-request output tokens agents reported. */
+	outputTokens?: number,
+	/**  Tokens served from cache, summed as reported. */
+	cacheReadTokens?: number,
+	/**  Tokens written to cache, summed as reported. */
+	cacheWriteTokens?: number,
+	/**  Reasoning tokens, summed as reported. */
+	reasoningTokens?: number,
+	/**  What the session has cost so far in USD, as last reported. */
+	costUsd?: number | null,
+	/**  Sum of completed-turn durations (ms). */
+	activeMs?: number,
+	/**  Sum of first-output latencies (ms) over `ttft_samples` turns. */
+	ttftMs?: number,
+	/**  Turns whose first output was timed. */
+	ttftSamples?: number,
+};
+
 /**  What the meters in an agent task's header show. */
 export type AgentSettings = {
 	/**  Context window use. */
@@ -1648,6 +1696,12 @@ export type AgentTask = {
 	 *  Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
 	 */
 	usage: AgentUsage | null,
+	/**
+	 *  Cumulative session statistics: token totals, request outcomes and timing.
+	 *  Saved with the task, so the numbers survive restarts; a fork starts over.
+	 *  Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+	 */
+	stats?: AgentSessionStats,
 	/**  Messages waiting for the current turn to end, oldest first. */
 	queue: AgentQueued[],
 	capabilities?: AgentCapabilities,
@@ -3589,6 +3643,24 @@ export type ExternalFormatterSettings = {
 	runOnSave?: boolean,
 };
 
+/**
+ *  A session created outside OpenIDEA (another Codex or Claude client) that can be
+ *  imported as a task and resumed under its own session id.
+ */
+export type ExternalSession = {
+	/**  `codex` or `claude`. */
+	provider: string,
+	/**  The native session/thread id, reused to resume the conversation. */
+	sessionId: string,
+	title: string,
+	/**  Directory the session worked in, when its history names one. */
+	cwd: IpcPath | null,
+	/**  Last activity (ms since the epoch), newest first. */
+	updatedMs: number | null,
+	/**  An OpenIDEA task already resumes this session. */
+	imported: boolean,
+};
+
 /**  Tools › External Tools entry. */
 export type ExternalTool = {
 	id?: string,
@@ -4349,6 +4421,19 @@ export type IdentifierOccurrence = {
 };
 
 export type IgnoreDestination = "gitignore" | "localExclude";
+
+/**  Import an external session as a task of the project. */
+export type ImportExternalTask = {
+	/**  `codex` or `claude`. */
+	provider: string,
+	/**  The native session/thread id to resume. */
+	sessionId: string,
+	title: string | null,
+	/**  Directory the session worked in, when known; the project root otherwise. */
+	cwd: IpcPath | null,
+	/**  Validated by the host; defaults to the window project root. */
+	projectRoot?: IpcPath | null,
+};
 
 export type ImportedRunConfig = ImportedRunConfig_Serialize | ImportedRunConfig_Deserialize;
 

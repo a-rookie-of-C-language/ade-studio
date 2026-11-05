@@ -1,9 +1,9 @@
-/** Frontend-only trajectory projection over a task's flat entries.
+/** Trajectory projection over a task's flat entries: turns, tool calls and subagents.
  *
- * The backend keeps no per-record timing yet (tools carry no timestamps and
- * outputs are truncated), so the overview below only spans what the entries
- * do timestamp: user turns (`sentMs`/`doneMs`) and subagents
- * (`startedMs`/`endedMs`). Tool calls appear as records inside their turn.
+ * The backend timestamps user turns (`sentMs`/`doneMs`), tool calls
+ * (`startedMs`/`endedMs`) and subagents (`startedMs`/`endedMs`); tool outputs
+ * stay truncated. The timing overview spans all three; the sequence overview
+ * gives every record an equal-width lane.
  */
 import type { AgentEntry } from "@/bindings";
 import { turnNumbers } from "./model";
@@ -32,15 +32,17 @@ export interface TrajectoryTurn {
 
 export interface TrajectorySpan {
   key: string;
-  kind: "turn" | "subagent";
+  kind: "turn" | "subagent" | "tool";
   /** Owning turn (the latest one started at the record's index); null before the first turn. */
   turn: number | null;
+  /** Ledger index of the record (a turn's own user message for kind "turn"). */
+  index: number;
   startMs: number;
-  /** Null while the turn or subagent is still running. */
+  /** Null while the turn, tool or subagent is still running. */
   endMs: number | null;
-  /** The subagent's session id; null for turns. */
+  /** The subagent's session id; null for turns and tools. */
   subagent: string | null;
-  /** The subagent's title; null for turns. */
+  /** The subagent's title, or the tool's title; null for turns. */
   title: string | null;
   status: string;
 }
@@ -95,7 +97,7 @@ export function turnOfIndex(turns: readonly TrajectoryTurn[], index: number): nu
   return out;
 }
 
-/** Timed spans for the overview: turns plus every subagent card. */
+/** Timed spans for the overview: turns, timed tool calls and every subagent card. */
 export function buildTrajectorySpans(
   entries: readonly AgentEntry[],
   turns: readonly TrajectoryTurn[],
@@ -107,6 +109,7 @@ export function buildTrajectorySpans(
       key: `turn-${t.turn}`,
       kind: "turn",
       turn: t.turn,
+      index: t.startIndex,
       startMs: t.sentMs,
       endMs: t.doneMs,
       subagent: null,
@@ -115,17 +118,33 @@ export function buildTrajectorySpans(
     });
   }
   entries.forEach((e, i) => {
-    if (e.type !== "subagent" || e.startedMs == null) return;
-    spans.push({
-      key: `subagent-${e.id}`,
-      kind: "subagent",
-      turn: turnOfIndex(turns, i),
-      startMs: e.startedMs,
-      endMs: e.endedMs,
-      subagent: e.id,
-      title: e.title ?? e.description,
-      status: e.status,
-    });
+    if (e.type === "subagent") {
+      if (e.startedMs == null) return;
+      spans.push({
+        key: `subagent-${e.id}`,
+        kind: "subagent",
+        turn: turnOfIndex(turns, i),
+        index: i,
+        startMs: e.startedMs,
+        endMs: e.endedMs,
+        subagent: e.id,
+        title: e.title ?? e.description,
+        status: e.status,
+      });
+    } else if (e.type === "tool") {
+      if (e.startedMs == null) return;
+      spans.push({
+        key: `tool-${i}`,
+        kind: "tool",
+        turn: turnOfIndex(turns, i),
+        index: i,
+        startMs: e.startedMs,
+        endMs: e.endedMs ?? null,
+        subagent: null,
+        title: e.title || e.kind,
+        status: e.status,
+      });
+    }
   });
   return spans.sort((a, b) => a.startMs - b.startMs);
 }
@@ -152,7 +171,9 @@ export function trajectoryEntryText(entry: AgentEntry): string {
     case "thought":
       return entry.text;
     case "tool":
-      return [entry.title, entry.kind, entry.output ?? ""].join("\n");
+      return [entry.title, entry.kind, ...entry.locations, ...entry.diffs.map((d) => d.path), entry.output ?? ""].join(
+        "\n",
+      );
     case "plan":
       return entry.items.map((i) => i.content).join("\n");
     case "subagent":
@@ -172,9 +193,275 @@ export function trajectoryEntryText(entry: AgentEntry): string {
   }
 }
 
-/** Whether `entry` matches `query` (case-insensitive substring; empty matches all). */
+/** Split a search query into case-insensitive AND terms; empty when there is no query. */
+export function trajectoryQueryTerms(query: string): string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+/** Whether `entry` matches every term of `query` (empty matches all). */
 export function matchTrajectoryEntry(entry: AgentEntry, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return trajectoryEntryText(entry).toLowerCase().includes(q);
+  const terms = trajectoryQueryTerms(query);
+  if (terms.length === 0) return true;
+  const text = trajectoryEntryText(entry).toLowerCase();
+  return terms.every((t) => text.includes(t));
+}
+
+/** Full text worth copying for `entry`; null when the record carries nothing to copy. */
+export function trajectoryCopyText(entry: AgentEntry): string | null {
+  switch (entry.type) {
+    case "user":
+    case "agent":
+    case "thought":
+    case "message":
+      return entry.text || null;
+    case "tool":
+      return [entry.title, entry.kind, entry.output ?? ""].filter(Boolean).join("\n") || null;
+    case "plan":
+      return entry.items.map((i) => i.content).join("\n") || null;
+    case "subagent":
+      return [entry.prompt ?? "", entry.reply ?? ""].filter(Boolean).join("\n\n") || null;
+    case "permission":
+      return entry.title || null;
+    case "error":
+      return entry.message || null;
+  }
+}
+
+export interface TrajectoryTimelineSpan {
+  key: string;
+  /** Ledger index of the record. */
+  index: number;
+  kind: string;
+  label: string;
+  /** Vertical lane: tools sit below replies, mirroring the dsh three-lane layout. */
+  lane: 0 | 1 | 2;
+  /** Owning turn (the latest one started at the record index); null before the first turn. */
+  turn: number | null;
+  start: number;
+  end: number;
+  isError: boolean;
+}
+
+/** Lane of `entry` in sequence mode: tools below, messages in the middle. */
+export function trajectoryLaneFor(entry: AgentEntry): 0 | 1 | 2 {
+  if (entry.type === "tool") return 2;
+  if (entry.type === "message") return 1;
+  return 0;
+}
+
+/** Whether `entry` reads as a failure in the overview. */
+export function trajectoryIsError(entry: AgentEntry): boolean {
+  if (entry.type === "error") return true;
+  if (entry.type === "tool") return entry.status === "failed";
+  if (entry.type === "subagent") return entry.status === "failed";
+  return false;
+}
+
+/** Short label for `entry` in the overview; falls back to its kind. */
+export function trajectorySpanLabel(entry: AgentEntry): string {
+  const first = trajectoryEntryText(entry).split("\n", 1)[0] ?? "";
+  const short = first.trim().slice(0, 80);
+  if (short) return short;
+  if (entry.type === "tool") return entry.title || entry.kind;
+  return entry.type;
+}
+
+/**
+ * Equal-width spans for every ledger record in sequence mode.
+ * User turns own no span (they are the section headers), but steered
+ * follow-ups do: they render as records inside their turn.
+ */
+export function buildSequenceSpans(
+  entries: readonly AgentEntry[],
+  turns: readonly TrajectoryTurn[],
+): TrajectoryTimelineSpan[] {
+  const spans: TrajectoryTimelineSpan[] = [];
+  let pos = 0;
+  entries.forEach((entry, index) => {
+    if (entry.type === "user" && !entry.steered) return;
+    spans.push({
+      key: "record-" + String(index),
+      index,
+      kind: entry.type,
+      label: trajectorySpanLabel(entry),
+      lane: trajectoryLaneFor(entry),
+      turn: turnOfIndex(turns, index),
+      start: pos,
+      end: pos + 1,
+      isError: trajectoryIsError(entry),
+    });
+    pos += 1;
+  });
+  return spans;
+}
+
+/** One labeled fact of a ledger record in the inspector; the view localizes `key`. */
+export interface TrajectoryInspectorFact {
+  key: "kind" | "locations" | "changes" | "calls" | "activity" | "error" | "attachments" | "choice" | "options";
+  value: string;
+}
+
+/** One text section of a ledger record in the inspector. */
+export interface TrajectoryInspectorText {
+  /** The view maps the key to a section title ("text" renders untitled). */
+  key: "text" | "output" | "prompt" | "reply";
+  /** How the view renders it. */
+  format: "plain" | "pre" | "markdown";
+  text: string;
+}
+
+/** The full detail behind one ledger record for the inspector. */
+export interface TrajectoryInspector {
+  kind: AgentEntry["type"];
+  /** Headline (tool title, subagent title, permission title); empty when the record speaks for itself. */
+  title: string;
+  /** Raw status code; null when the record has none. */
+  status: string | null;
+  startMs: number | null;
+  /** Null while the record is still running. */
+  endMs: number | null;
+  durationMs: number | null;
+  facts: TrajectoryInspectorFact[];
+  texts: TrajectoryInspectorText[];
+}
+
+const inspectorDuration = (startMs: number | null, endMs: number | null): number | null =>
+  startMs != null && endMs != null && endMs > startMs ? endMs - startMs : null;
+
+/**
+ * Full detail behind one ledger record for the inspector.
+ * Keys and status codes stay unlocalized (the view maps keys to labels);
+ * a permission without a `choice` fact is still waiting for an answer.
+ */
+export function describeTrajectoryRecord(entry: AgentEntry): TrajectoryInspector {
+  switch (entry.type) {
+    case "user":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: entry.sentMs ?? null,
+        endMs: entry.doneMs ?? null,
+        durationMs: inspectorDuration(entry.sentMs ?? null, entry.doneMs ?? null),
+        facts: entry.attachments.length > 0 ? [{ key: "attachments", value: entry.attachments.join("\n") }] : [],
+        texts: entry.text ? [{ key: "text", format: "plain", text: entry.text }] : [],
+      };
+    case "agent":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: "markdown", text: entry.text }] : [],
+      };
+    case "thought":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: "plain", text: entry.text }] : [],
+      };
+    case "tool": {
+      const facts: TrajectoryInspectorFact[] = [{ key: "kind", value: entry.kind }];
+      if (entry.locations.length > 0) facts.push({ key: "locations", value: entry.locations.join("\n") });
+      if (entry.diffs.length > 0)
+        facts.push({
+          key: "changes",
+          value: entry.diffs.map((d) => `+${d.added} -${d.removed} ${d.path}`).join("\n"),
+        });
+      return {
+        kind: entry.type,
+        title: entry.title || entry.kind,
+        status: entry.status,
+        startMs: entry.startedMs ?? null,
+        endMs: entry.endedMs ?? null,
+        durationMs: inspectorDuration(entry.startedMs ?? null, entry.endedMs ?? null),
+        facts,
+        texts: entry.output ? [{ key: "output", format: "pre", text: entry.output }] : [],
+      };
+    }
+    case "plan":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts:
+          entry.items.length > 0
+            ? [
+                {
+                  key: "text",
+                  format: "plain",
+                  text: entry.items.map((i) => `[${i.status}] ${i.content}`).join("\n"),
+                },
+              ]
+            : [],
+      };
+    case "subagent": {
+      const facts: TrajectoryInspectorFact[] = [];
+      if (entry.tools > 0) facts.push({ key: "calls", value: String(entry.tools) });
+      if (entry.activity) facts.push({ key: "activity", value: entry.activity });
+      if (entry.error) facts.push({ key: "error", value: entry.error });
+      const texts: TrajectoryInspectorText[] = [];
+      if (entry.prompt) texts.push({ key: "prompt", format: "plain", text: entry.prompt });
+      if (entry.reply) texts.push({ key: "reply", format: "markdown", text: entry.reply });
+      return {
+        kind: entry.type,
+        title: entry.title ?? entry.description ?? "",
+        status: entry.status,
+        startMs: entry.startedMs,
+        endMs: entry.endedMs,
+        durationMs: inspectorDuration(entry.startedMs, entry.endedMs),
+        facts,
+        texts,
+      };
+    }
+    case "message":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: entry.incoming ? "plain" : "markdown", text: entry.text }] : [],
+      };
+    case "permission": {
+      const facts: TrajectoryInspectorFact[] = [];
+      if (entry.chosen) facts.push({ key: "choice", value: entry.chosen });
+      if (entry.options.length > 0) facts.push({ key: "options", value: entry.options.map((o) => o.name).join("\n") });
+      return {
+        kind: entry.type,
+        title: entry.title,
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts,
+        texts: [],
+      };
+    }
+    case "error":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: [{ key: "text", format: "plain", text: entry.message }],
+      };
+  }
 }

@@ -4,7 +4,7 @@ use crate::state::AppState;
 use ide_agent::registry::AgentRegistry;
 use ide_agent::{
     AgentChange, AgentCommand, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider, AgentQueued, AgentTask,
-    NewAgentTask,
+    ExternalSession, ImportExternalTask, NewAgentTask,
 };
 use ide_core::{IdeResult, IpcPath, RequestId};
 use ide_host::ops::agent;
@@ -277,4 +277,29 @@ pub async fn agent_base_text(
     path: IpcPath,
 ) -> IdeResult<Option<String>> {
     agent::base_text(&state.host, window.label(), task, path).await
+}
+
+/// Sessions created outside OpenIDEA (another Codex or Claude client), newest first;
+/// `provider` narrows to `codex` or `claude`. Read-only: lists the agents' own
+/// history on disk, never modifies it.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_external_sessions(
+    window: Window,
+    state: State<'_, AppState>,
+    provider: Option<String>,
+) -> IdeResult<Vec<ExternalSession>> {
+    agent::external_sessions(&state.host, window.label(), provider).await
+}
+
+/// Imports an external session as a task of the project and resumes it under its own
+/// session id. Importing the same session twice returns the first task.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_import_external(
+    window: Window,
+    state: State<'_, AppState>,
+    request: ImportExternalTask,
+) -> IdeResult<AgentTask> {
+    agent::import_external(&state.host, window.label(), request).await
 }

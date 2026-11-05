@@ -6,7 +6,7 @@ use crate::rpc::Dispatcher;
 use ide_agent::registry::{AgentRegistry, RegistryPaths};
 use ide_agent::{
     AgentChange, AgentCommand, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider, AgentQueued, AgentTask,
-    NewAgentTask,
+    ExternalSession, ImportExternalTask, NewAgentTask,
 };
 use ide_core::error::ErrorKind;
 use ide_core::{IdeError, IdeEvent, IdeResult, IpcPath, RequestId, SharedSink, TaskId};
@@ -294,6 +294,29 @@ pub async fn base_text(host: &Host, window: &str, task: String, path: IpcPath) -
     project.agents.base_text(&task, path.into_path_buf()).await
 }
 
+/// Sessions created outside OpenIDEA (another Codex or Claude client), newest first;
+/// `provider` narrows to `codex` or `claude`. Read-only: lists the agents' own
+/// history on disk, never modifies it.
+pub async fn external_sessions(host: &Host, window: &str, provider: Option<String>) -> IdeResult<Vec<ExternalSession>> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    Ok(project.agents.external_sessions(provider).await)
+}
+
+/// Imports an external session as a task of the project and resumes it under its own
+/// session id. The task starts in the session's directory when it still exists, else
+/// in the project root; its history loads in the background. Importing the same
+/// session twice returns the first task.
+pub async fn import_external(host: &Host, window: &str, request: ImportExternalTask) -> IdeResult<AgentTask> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    let mut request = request;
+    if request.project_root.is_none() {
+        request.project_root = Some(IpcPath(project.root.clone()));
+    }
+    project.agents.import_external(request).await
+}
+
 /// Commands of this module the remote server answers.
 pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_subscribe", |c| async move { subscribe(&c.host, &c.window, c.channel("onEvent")?) });
@@ -334,6 +357,11 @@ pub(crate) fn register(d: &mut Dispatcher) {
     );
     d.add("agent_changes", |c| async move { changes(&c.host, &c.window, c.arg("task")?).await });
     d.add("agent_base_text", |c| async move { base_text(&c.host, &c.window, c.arg("task")?, c.arg("path")?).await });
+    d.add(
+        "agent_external_sessions",
+        |c| async move { external_sessions(&c.host, &c.window, c.arg("provider")?).await },
+    );
+    d.add("agent_import_external", |c| async move { import_external(&c.host, &c.window, c.arg("request")?).await });
 }
 
 /// Whether `root` is the agent-first home's default workspace
