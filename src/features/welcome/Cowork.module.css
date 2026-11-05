@@ -1,38 +1,4 @@
-/* Agent-first home: sidebar mode tabs, tasks, greeting, ideas. Theme-driven. */
-
-/* ---- Mode tabs (Cowork / Code) ---- */
-
-.modeTabs {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  margin: 0 0 10px;
-  border-radius: var(--radius-popup);
-  background: var(--bg-hover);
-}
-.modeTab {
-  flex: 1;
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-small);
-  background: transparent;
-  color: var(--fg-muted);
-  font: inherit;
-  cursor: default;
-}
-.modeTab:hover {
-  color: var(--fg-strong);
-}
-.modeTab:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.modeTab[aria-selected="true"] {
-  background: var(--bg-elev);
-  color: var(--fg-strong);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
-}
+/* Agent-first home: sidebar tasks, greeting, placeholders. Theme-driven. */
 
 /* ---- Sidebar rows ---- */
 

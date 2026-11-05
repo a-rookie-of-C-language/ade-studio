@@ -8,6 +8,7 @@ import { useTx, useTxTemplate } from "@/platform/i18n";
 import { basename, useProject } from "@/platform/project";
 import { Icon, Select, T, type SelectOption } from "@/ui";
 import { defaultTaskProject } from "./project";
+import { useWorkspace } from "@/features/welcome/workspace";
 import { maybeEditorService, type EditorInput } from "@/workbench/contributions";
 import { Composer } from "./Composer";
 import { SubmitButton } from "./SubmitButton";
@@ -34,11 +35,15 @@ export function HomeEditor({
   const history = useAgents((s) => s.history);
   const composer = useAgents((s) => s.composers.get(HOME)) ?? emptyDraft();
   const project = useProject((s) => s.project);
+  const wsRoot = useWorkspace((s) => s.root);
   const [selected, setSelected] = useState(() =>
     defaultTaskProject(project, maybeEditorService()?.activePath() ?? null, draft.projectRoot),
   );
   const members = project?.workspace?.projects ?? [];
   const root = members.includes(selected ?? "") ? selected! : (members[0] ?? project?.root ?? "");
+  // On the home screen there is no open project: the composer runs in the
+  // picked workspace (or the default one when none is picked).
+  const homeRoot = project?.workspace ? root : (wsRoot ?? "");
   const [repoState, setRepoState] = useState<{
     root: string;
     branches: Branch[];
@@ -89,7 +94,7 @@ export function HomeEditor({
     if (!canStart) return;
     setStarting(true);
     setError(null);
-    startTask(isolation, project?.workspace ? root : null)
+    startTask(isolation, project?.workspace ? root : wsRoot)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setStarting(false));
   };
@@ -107,8 +112,8 @@ export function HomeEditor({
               ? "Describe a task…"
               : "Describe a task for the agent. @ references a file or folder, / runs a command"
           }
-          root={root}
-          projectRoot={root}
+          root={homeRoot}
+          projectRoot={homeRoot}
           commands={agentCommands}
           history={history}
           config={provider?.config ?? []}
@@ -152,8 +157,10 @@ export function HomeEditor({
               }}
             />
           ) : (
-            <span className={styles.project} title={root}>
-              {members.length ? basename(root) : project?.name}
+            <span className={styles.project} title={homeRoot}>
+              {members.length
+                ? basename(root)
+                : (project?.name ?? (wsRoot ? basename(wsRoot) : tx("Default workspace")))}
             </span>
           )}
           {isGit && (
