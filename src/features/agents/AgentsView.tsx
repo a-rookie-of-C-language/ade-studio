@@ -14,6 +14,7 @@ import {
   registerDropTarget,
   showContextMenu,
   startPointerDrag,
+  tooltipAttrs,
 } from "@/ui";
 import { SESSION_KIND, TASK_DRAG, age, branchLabel, groupTasks, sessionKey, type TaskGroup } from "./model";
 import { openHome, useAgents } from "./store";
@@ -194,7 +195,7 @@ export function AgentsView() {
           ) : (
             <span
               className={styles.row}
-              title={n.task.error ?? n.task.title}
+              {...tooltipAttrs(n.task.error ?? n.task.title)}
               onPointerDown={(e) => dragTask(e, n.task.id)}
               onClick={(e) => {
                 if (inline && !e.metaKey && !e.ctrlKey && !e.shiftKey) showTask(n.task.id);
@@ -205,10 +206,15 @@ export function AgentsView() {
                 {n.task.title}
               </span>
               {unread.has(n.task.id) && (
-                <span className={styles.unreadDot} role="img" aria-label={tx("Unread")} title={tx("Unread")} />
+                <span
+                  className={styles.unreadDot}
+                  role="img"
+                  aria-label={tx("Unread")}
+                  {...tooltipAttrs(tx("Unread"))}
+                />
               )}
               {project?.workspace && (
-                <span className={styles.taskProject} title={n.task.projectRoot ?? project.root}>
+                <span className={styles.taskProject} {...tooltipAttrs(n.task.projectRoot ?? project.root)}>
                   {basename(n.task.projectRoot ?? project.root)}
                 </span>
               )}
@@ -252,7 +258,7 @@ export function AgentsView() {
               />
               <span
                 className={styles.dockedTitle}
-                title={dockedTitle ?? undefined}
+                {...tooltipAttrs(dockedTitle ?? undefined)}
                 onPointerDown={(e) => docked && dragTask(e, docked)}
               >
                 {homeOpen ? <T>New Agent Task</T> : dockedTitle}

@@ -45,6 +45,7 @@ import {
   type DragSession,
   type TreeHandle,
   type TreeRowState,
+  tooltipAttrs,
 } from "@/ui";
 import { badgeKind } from "@/ui/symbolKind";
 import { contextMenuItems, menuGroupContext, newMenuItems } from "./contextMenu";
@@ -301,7 +302,7 @@ const Row = memo(function Row({
       data-project-path={node.placeholder ? undefined : node.path}
       data-project-key={node.key}
       data-dir={node.dir || undefined}
-      title={deco.tooltip}
+      {...tooltipAttrs(deco.tooltip)}
       onClick={(e) => onClick(node, e)}
       onDoubleClick={(e) => onDoubleClick(node, e)}
       onPointerDown={(e) => onPointerDown(node, e)}

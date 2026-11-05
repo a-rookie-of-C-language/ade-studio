@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { t } from "@/platform/i18n";
-import { Icon } from "@/ui";
+import { Icon, tooltipAttrs } from "@/ui";
 import styles from "./TitleBar.module.css";
 
 type AppWindow = import("@tauri-apps/api/window").Window;
@@ -20,7 +20,7 @@ function CloseButton() {
       type="button"
       className={clsx(styles.caption, styles.captionClose)}
       aria-label={t("window.caption.close")}
-      title={t("window.caption.close")}
+      {...tooltipAttrs(t("window.caption.close"))}
       onClick={() => withWindow((w) => w.close())}
     >
       <Icon name="window-close" size={16} />
@@ -54,7 +54,7 @@ function SizeButtons() {
         type="button"
         className={styles.caption}
         aria-label={t("window.caption.minimize")}
-        title={t("window.caption.minimize")}
+        {...tooltipAttrs(t("window.caption.minimize"))}
         onClick={() => withWindow((w) => w.minimize())}
       >
         <Icon name="window-minimize" size={16} />
@@ -63,7 +63,7 @@ function SizeButtons() {
         type="button"
         className={styles.caption}
         aria-label={maximizeLabel}
-        title={maximizeLabel}
+        {...tooltipAttrs(maximizeLabel)}
         onClick={() => withWindow((w) => w.toggleMaximize())}
       >
         <Icon name={maximized ? "window-restore" : "window-maximize"} size={16} />

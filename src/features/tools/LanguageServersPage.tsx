@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import type { ToolInfo } from "@/bindings";
-import { Badge, Button, EmptyState, IconButton, ProgressBar, SearchField, Spinner, T } from "@/ui";
+import { Badge, Button, EmptyState, IconButton, ProgressBar, SearchField, Spinner, T, tooltipAttrs } from "@/ui";
 import { onIdeEvent } from "@/platform/ipc";
 import { useProject } from "@/platform/project";
 import { useSettingsForm } from "@/workbench/contributions";
@@ -81,7 +81,7 @@ function JobRow({ name, job }: { name: string; job: InstallJob }) {
     <div className={styles.job}>
       <ProgressBar value={job.fraction} aria-label={tx`Installing ${name}`} className={styles.jobBar} />
       <div className={styles.jobLine}>
-        <span className={styles.jobMessage} title={job.message ?? undefined}>
+        <span className={styles.jobMessage} {...tooltipAttrs(job.message ?? undefined)}>
           {job.message ?? "Starting…"}
         </span>
         <Button size="small" variant="ghost" onClick={() => cancelInstall(name)}>
@@ -112,7 +112,7 @@ function ToolRow({
         className={clsx(styles.rowMain, off && styles.rowOff)}
         aria-current={selected || undefined}
         data-tool={tool.name}
-        title={`${tool.displayName} — ${tool.languages.join(", ")}`}
+        {...tooltipAttrs(`${tool.displayName} — ${tool.languages.join(", ")}`)}
         onClick={onSelect}
       >
         <Badge dot tone={pending ? "accent" : STATUS_TONE[tool.status]}>

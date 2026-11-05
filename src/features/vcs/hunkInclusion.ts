@@ -71,7 +71,7 @@ class CheckboxMarker extends GutterMarker {
     box.className = "cm-include-hunk";
     box.checked = this.checked;
     box.setAttribute("aria-label", tx("Include in commit"));
-    box.title = tx("Include in commit");
+    box.setAttribute("data-tooltip", tx("Include in commit") ?? "");
     box.onmousedown = (e) => e.stopPropagation();
     box.onchange = () => toggleBlock(this.path, this.all, this.key);
     return box;

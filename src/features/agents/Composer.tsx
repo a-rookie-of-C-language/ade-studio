@@ -12,7 +12,7 @@ import { invokeLocal } from "@/platform/tauriCore";
 import { useTx } from "@/platform/i18n";
 import { basename } from "@/platform/project";
 import { notifications, OWNS_FILE_DROP } from "@/workbench/contributions";
-import { Icon, IconButton, Popup, fileIconName } from "@/ui";
+import { Icon, IconButton, Popup, fileIconName, tooltipAttrs } from "@/ui";
 import {
   IMAGE_EXTENSIONS,
   MAX_IMAGE_BYTES,
@@ -369,7 +369,7 @@ export function Composer(props: ComposerProps) {
       {images.length > 0 && (
         <div className={styles.images} onClick={(e) => e.stopPropagation()}>
           {images.map((img, i) => (
-            <span key={i} className={styles.image} title={img.name ?? undefined}>
+            <span key={i} className={styles.image} {...tooltipAttrs(img.name ?? undefined)}>
               <button type="button" className={styles.previewImage} onClick={() => setPreview(img)}>
                 <img src={imageSrc(img)} alt={img.name ?? tx("Image")} />
               </button>

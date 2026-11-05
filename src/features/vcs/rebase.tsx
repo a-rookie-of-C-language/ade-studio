@@ -6,7 +6,7 @@ import { commitRepo } from "./multiRoot";
 import { useState } from "react";
 import type { Commit, RebaseAction, RebaseEntry } from "@/bindings";
 import { call, commands } from "@/platform/ipc";
-import { Dialog, IconButton, Select, T } from "@/ui";
+import { Dialog, IconButton, Select, T, tooltipAttrs } from "@/ui";
 import { workflowSettings } from "@/platform/workflowSettings";
 import { ask, showError } from "@/workbench/messages";
 import { useCommit } from "./commitStore";
@@ -358,7 +358,7 @@ function InteractiveRebaseDialog({
               <span
                 className={styles.commitSubject}
                 style={r.action === "drop" ? { textDecoration: "line-through" } : undefined}
-                title={r.commit.message}
+                {...tooltipAttrs(r.commit.message)}
               >
                 {r.commit.summary}
               </span>

@@ -355,7 +355,9 @@ describe("meters in the task header", () => {
     useAgents.setState({ tasks: new Map([["A", reported]]), limits: new Map([["codex", limits]]) });
     render(<SessionEditor input={input("A")} />);
     await screen.findByText("Answer A");
-    expect(screen.getByText("12%")).toBeInTheDocument();
+    // Context lives in the sidecar card now, not as a header button.
+    expect(screen.queryByRole("button", { name: /Context / })).toBeNull();
+    expect(screen.getByText("Used")).toBeInTheDocument();
     expect(screen.getByText("5h 19%")).toBeInTheDocument();
     expect(screen.getByText("7d 9%")).toBeInTheDocument();
     expect(screen.queryByText("$0.42")).toBeNull();
@@ -364,8 +366,142 @@ describe("meters in the task header", () => {
         settings: { agents: { showContextUsage: false, showUsageLimits: false, showCost: true } },
       }),
     );
-    expect(screen.queryByText("12%")).toBeNull();
+    expect(screen.queryByText("Used")).toBeNull();
     expect(screen.queryByText("5h 19%")).toBeNull();
     expect(screen.getByText("$0.42")).toBeInTheDocument();
+  });
+
+  it("shows the context breakdown in the sidecar with only the splits the agent reported", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      usage: { used: 150_000, size: 200_000, inputTokens: 96_000, outputTokens: 5_000, cacheReadTokens: 27_000 },
+      commands: [],
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    // The details render directly in the persistent sidecar card.
+    expect(screen.getAllByText("Free space").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Input").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Output").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Cache read").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Cache write")).toBeNull();
+    expect(screen.queryByText("Reasoning")).toBeNull();
+    expect(screen.queryByText("Compact session")).toBeNull();
+  });
+
+  it("offers Compact session when the agent reports a compact command", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      usage: { used: 150_000, size: 200_000 },
+      commands: [{ name: "compact", description: "Free up context", hint: null }],
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    // The sidecar card offers it; clicking it compacts.
+    fireEvent.click(screen.getByRole("button", { name: "Compact session" }));
+    expect(useAgents.getState().composers.get("A")?.text).toBe("/compact");
+  });
+
+  it("shows Open in IDE in the session header on the Cowork home only", async () => {
+    const reported: AgentTask = { ...task("A"), usage: null };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    useProject.setState({ project: null });
+    const { unmount } = render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    expect(screen.getByRole("button", { name: "Open in IDE" })).toBeInTheDocument();
+    unmount();
+    useProject.setState({ project: { root: "/p", workspace: { projects: ["/p"] } } as never });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    expect(screen.queryByRole("button", { name: "Open in IDE" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to Cowork" })).toBeInTheDocument();
+  });
+
+  it("shows the session environment above the context card", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      provider: "codex",
+      model: "gpt-5.4",
+      cwd: "/p/work",
+      isolation: "worktree",
+      branch: "agent/login-flow",
+      usage: { used: 150_000, size: 200_000 },
+    };
+    useAgents.setState({
+      tasks: new Map([["A", reported]]),
+      providers: [{ id: "codex", name: "Codex" } as never],
+    });
+    useProject.setState({ project: { root: "/p", workspace: { projects: ["/p"] } } as never });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByText("Environment").closest("section")!;
+    expect(card).toBeInTheDocument();
+    // Provider display name plus the model the task runs on.
+    expect(within(card).getByText("Codex · gpt-5.4")).toBeInTheDocument();
+    // Project name plus working directory, and the worktree branch without its prefix.
+    expect(within(card).getByText("p · /p/work")).toBeInTheDocument();
+    expect(within(card).getByText("login-flow")).toBeInTheDocument();
+    // The environment card is the first card in the reserved sidecar.
+    expect(card.parentElement!.firstElementChild).toBe(card);
+  });
+
+  it("collapses the environment card and hides the branch on local checkouts", async () => {
+    const reported: AgentTask = { ...task("A"), usage: null };
+    useAgents.setState({ tasks: new Map([["A", reported]]), providers: [] });
+    useProject.setState({ project: null });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByText("Environment").closest("section")!;
+    // Local checkout: agent and directory rows, no branch row.
+    expect(within(card).getByText("codex")).toBeInTheDocument();
+    expect(within(card).getByText("/project")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Environment" }));
+    expect(within(card).queryByText("/project")).toBeNull();
+  });
+});
+
+describe("message index", () => {
+  const convo: AgentEntry[] = [
+    { type: "user", text: "First question", attachments: [] },
+    { type: "agent", text: "First answer" },
+    { type: "user", text: "Second question", attachments: [] },
+    { type: "agent", text: "Second answer" },
+    { type: "user", text: "Third question", attachments: [] },
+  ];
+
+  it("shows one tick per user message and jumps to it", async () => {
+    useAgents.setState({ entries: new Map(useAgents.getState().entries).set("A", convo) });
+    const scrollIntoView = vi.fn();
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    const prev = proto["scrollIntoView"];
+    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+      value: scrollIntoView,
+      configurable: true,
+      writable: true,
+    });
+    try {
+      render(<SessionEditor input={input("A")} />);
+      await screen.findByText("Third question");
+      const nav = screen.getByRole("navigation", { name: "Message index" });
+      const ticks = within(nav).getAllByRole("button");
+      expect(ticks).toHaveLength(3);
+      fireEvent.click(ticks[1]!);
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(stream().querySelector('[data-entry-index="2"]')?.textContent).toContain("Second question");
+    } finally {
+      if (prev === undefined) Reflect.deleteProperty(window.HTMLElement.prototype, "scrollIntoView");
+      else proto["scrollIntoView"] = prev;
+    }
+  });
+
+  it("stays hidden with a single user message", async () => {
+    useAgents.setState({
+      entries: new Map(useAgents.getState().entries).set("A", [convo[0]!, convo[1]!]),
+    });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("First answer");
+    expect(screen.queryByRole("navigation", { name: "Message index" })).toBeNull();
   });
 });

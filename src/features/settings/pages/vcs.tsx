@@ -8,7 +8,7 @@ import { useEffect, useId, useState } from "react";
 import { call, commands, isTauri } from "@/platform/ipc";
 import { useProject } from "@/platform/project";
 import { WORKFLOW_LIMITS, type IssueLinkValid } from "@/platform/workflowSettings";
-import { Button, Icon, Input, type SelectOption, T } from "@/ui";
+import { Button, Icon, Input, type SelectOption, T, tooltipAttrs } from "@/ui";
 import { Row, SettingSelect } from "../components/Form";
 import { useSetting } from "../components/context";
 import type { PageSpec } from "./spec";
@@ -57,7 +57,7 @@ function MappingsTable() {
             </tr>
           ) : (
             <tr>
-              <td title={project.root}>
+              <td {...tooltipAttrs(project.root)}>
                 <Icon name="folder" size={16} className={styles.mappingIcon} />
                 {tx("<Project>")} {project.root}
               </td>

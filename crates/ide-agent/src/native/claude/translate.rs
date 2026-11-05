@@ -56,6 +56,11 @@ pub(super) struct Translator {
     /// Context use of the main conversation: tokens in its last request, the model, the
     /// window of each model seen in a `result`.
     pub used: Option<u64>,
+    /// The splits the SDK reported for the last request, when it did.
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cache_read_tokens: Option<u64>,
+    pub cache_write_tokens: Option<u64>,
     pub model: Option<String>,
     windows: HashMap<String, u64>,
     /// A `usage_cleared` went out for the current tokens-without-window state;
@@ -78,6 +83,10 @@ impl Translator {
             agent_ids: HashMap::new(),
             tasks: Vec::new(),
             used: None,
+            input_tokens: None,
+            output_tokens: None,
+            cache_read_tokens: None,
+            cache_write_tokens: None,
             model: None,
             windows: HashMap::new(),
             usage_cleared: false,
@@ -541,6 +550,21 @@ impl Translator {
         if total > 0 {
             self.used = Some(total);
         }
+        // Keep the splits the SDK reports; absent keys stay absent so the UI
+        // shows what exists and nothing more.
+        let opt = |k: &str| u.get(k).and_then(Value::as_u64);
+        if u.get("input_tokens").is_some() {
+            self.input_tokens = opt("input_tokens");
+        }
+        if u.get("output_tokens").is_some() {
+            self.output_tokens = opt("output_tokens");
+        }
+        if u.get("cache_read_input_tokens").is_some() {
+            self.cache_read_tokens = opt("cache_read_input_tokens");
+        }
+        if u.get("cache_creation_input_tokens").is_some() {
+            self.cache_write_tokens = opt("cache_creation_input_tokens");
+        }
     }
 
     /// Learns the context window of the models a `result` reports; returns the usage then.
@@ -582,6 +606,15 @@ impl Translator {
         if let Some(model) = &self.model {
             update["model"] = json!(model);
         }
+        let mut split = |key: &str, v: Option<u64>| {
+            if let Some(n) = v {
+                update[key] = json!(n.min(u64::from(u32::MAX)));
+            }
+        };
+        split("inputTokens", self.input_tokens);
+        split("outputTokens", self.output_tokens);
+        split("cacheReadTokens", self.cache_read_tokens);
+        split("cacheWriteTokens", self.cache_write_tokens);
         if let Some(amount) = self.cost_usd {
             update["cost"] = json!({ "amount": amount, "currency": "USD" });
         }

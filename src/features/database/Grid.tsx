@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
-import { Dialog, Icon, showContextMenu, type MenuItem } from "@/ui";
+import { Dialog, Icon, showContextMenu, type MenuItem, tooltipAttrs } from "@/ui";
 import { parseDelimited, toCsv, toTsv, type Cell } from "./model";
 import styles from "./Database.module.css";
 import { tx } from "@/platform/i18n";
@@ -392,7 +392,7 @@ export function Grid(props: GridProps) {
                 key={ci}
                 role="columnheader"
                 className={clsx(styles.headerCell, onSort && styles.sortable)}
-                title={`${c.name}: ${c.type}${onSort ? "\nClick to sort, ⇧-click to add to the sort" : ""}`}
+                {...tooltipAttrs(`${c.name}: ${c.type}${onSort ? "\nClick to sort, ⇧-click to add to the sort" : ""}`)}
                 onClick={(e) => onSort?.(c.name, e.shiftKey)}
               >
                 <Icon
@@ -406,7 +406,7 @@ export function Grid(props: GridProps) {
                     type="button"
                     className={clsx(styles.headerFilter, props.filtered?.(ci) && styles.headerFilterOn)}
                     aria-label={`Filter ${c.name}`}
-                    title={tx("Local filter")}
+                    {...tooltipAttrs(tx("Local filter"))}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();

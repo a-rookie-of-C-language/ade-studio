@@ -14,6 +14,7 @@ import {
   T,
   fuzzyMatch,
   listNavigate,
+  tooltipAttrs,
 } from "@/ui";
 import type { CloneSourceProps } from "@/workbench/contributions";
 import { openInBrowser } from "../data/local";
@@ -149,7 +150,7 @@ export function GitHubCloneSource({ url, onUrl, onClone, disabled }: CloneSource
           renderItem={(r) => (
             <span
               className={styles.row}
-              title={r.repo.description ?? undefined}
+              {...tooltipAttrs(r.repo.description ?? undefined)}
               onDoubleClick={() => onClone(r.repo.cloneUrl)}
             >
               <Icon name={r.repo.private ? "lock" : "github"} size={14} className={styles.rowIcon} />

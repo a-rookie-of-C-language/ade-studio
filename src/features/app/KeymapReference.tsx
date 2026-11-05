@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { useActions, type Action } from "@/platform/actions";
 import { useT } from "@/platform/i18n";
 import { effectiveBindings, formatBinding, useKeymap } from "@/platform/keymap";
-import { Dialog, Kbd, SearchField } from "@/ui";
+import { Dialog, Kbd, SearchField, tooltipAttrs } from "@/ui";
 import styles from "./app.module.css";
 
 export const useKeymapReference = create<{ open: boolean }>(() => ({ open: false }));
@@ -118,7 +118,7 @@ function KeymapReferenceDialog({ onClose }: { onClose: () => void }) {
               <h3 className={styles.keymapHeading}>{g.category}</h3>
               <ul className={styles.keymapList}>
                 {g.entries.map((e) => (
-                  <li key={e.id} className={styles.keymapRow} title={e.id}>
+                  <li key={e.id} className={styles.keymapRow} {...tooltipAttrs(e.id)}>
                     <span className={styles.keymapTitle}>{e.title}</span>
                     <span className={styles.keymapKeys}>
                       {e.shortcuts.map((s, i) => (

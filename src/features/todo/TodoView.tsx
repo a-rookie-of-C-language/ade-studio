@@ -24,6 +24,7 @@ import {
   type TreeHandle,
   type TreeRowState,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { previewText } from "./ipc";
 import { PreviewEditor } from "./PreviewEditor";
@@ -434,7 +435,7 @@ export function TodoView() {
       );
     }
     return (
-      <span className={styles.row} title={n.item.text}>
+      <span className={styles.row} {...tooltipAttrs(n.item.text)}>
         <span className={styles.position}>
           ({n.item.line + 1}, {n.item.col + 1})
         </span>

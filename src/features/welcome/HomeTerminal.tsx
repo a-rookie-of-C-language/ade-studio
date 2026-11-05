@@ -5,8 +5,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { Icon, IconButton, Tabs, T, type TabItem } from "@/ui";
-import { isTauri } from "@/platform/ipc";
+import { Icon, IconButton, Tabs, T, tooltipAttrs, type TabItem } from "@/ui";
 import { basename } from "@/platform/project";
 import { loadTerminalRuntime, type TerminalRuntime } from "@/features/terminal/loader";
 import { ensureHomeCwd, resolveHomeCwd } from "./workspace";
@@ -31,12 +30,6 @@ export function _resetHomeTerminalForTests() {
   useHomeTerminal.setState({ open: false, cwd: null });
 }
 
-/** Top-right button; hidden outside the desktop app (no PTY backend there). */
-export function HomeTerminalButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  if (!isTauri()) return null;
-  return <IconButton icon="terminal" title="Terminal" pressed={open} onClick={onToggle} />;
-}
-
 /** A session pane: attaches the store's xterm session, like the IDE's panes. */
 function HomeTerminalPane({ rt, sessionKey }: { rt: TerminalRuntime; sessionKey: string }) {
   const { useTerminals, getSession } = rt;
@@ -55,7 +48,7 @@ function HomeTerminalPane({ rt, sessionKey }: { rt: TerminalRuntime; sessionKey:
   return <div ref={ref} className={dead ? `${styles.terminalPane} ${styles.terminalExited}` : styles.terminalPane} />;
 }
 
-function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void }) {
+function LoadedPanel({ rt, card, onClose }: { rt: TerminalRuntime; card?: boolean; onClose: () => void }) {
   const { useTerminals, newTab, startDirectory, selectTab, requestCloseTab, tabTitle, activeSession } = rt;
   const tabs = useTerminals((s) => s.tabs);
   const sessions = useTerminals((s) => s.sessions);
@@ -113,14 +106,14 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
   const sessionKey = tabs.find((t) => t.id === activeTab)?.session ?? null;
 
   return (
-    <div className={styles.terminalDrawer} role="complementary" aria-label="Terminal">
+    <div className={card ? styles.terminalCard : styles.terminalDrawer} role="complementary" aria-label="Terminal">
       <div className={styles.terminalHeader}>
         <Icon name="terminal" size={16} />
         <span className={styles.terminalTitle}>
           <T>Terminal</T>
         </span>
         {cwd && (
-          <span className={styles.terminalCwd} title={cwd}>
+          <span className={styles.terminalCwd} {...tooltipAttrs(cwd)}>
             {basename(cwd)}
           </span>
         )}
@@ -146,8 +139,12 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
   );
 }
 
-/** The drawer; the runtime (and its xterm chunk) loads on first open. */
-export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
+/**
+ * The home terminal: an overlay drawer by default, or an inline rounded card
+ * (`card`) docked into the cowork session's right quarter. The runtime (and
+ * its xterm chunk) loads on first open.
+ */
+export function HomeTerminalPanel({ card, onClose }: { card?: boolean; onClose: () => void }) {
   const [rt, setRt] = useState<TerminalRuntime | null>(null);
   useEffect(() => {
     let live = true;
@@ -160,7 +157,7 @@ export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
   }, []);
   if (!rt) {
     return (
-      <div className={styles.terminalDrawer} role="complementary" aria-label="Terminal">
+      <div className={card ? styles.terminalCard : styles.terminalDrawer} role="complementary" aria-label="Terminal">
         <div className={styles.terminalHeader}>
           <Icon name="terminal" size={16} />
           <span className={styles.terminalTitle}>
@@ -172,5 +169,5 @@ export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
       </div>
     );
   }
-  return <LoadedPanel rt={rt} onClose={onClose} />;
+  return <LoadedPanel rt={rt} card={card} onClose={onClose} />;
 }

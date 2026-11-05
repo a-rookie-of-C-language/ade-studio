@@ -5,7 +5,7 @@ import { useProject } from "@/platform/project";
 import { lookup, t, useI18n } from "@/platform/i18n";
 import { commands, type MenuNode } from "@/platform/ipc";
 import { usePlatform } from "@/platform/platformInfo";
-import { Icon, MenuList, Popup, type MenuItem } from "@/ui";
+import { Icon, MenuList, Popup, type MenuItem, tooltipAttrs } from "@/ui";
 import menuStyles from "@/ui/Menu.module.css";
 import { isDistractionFree } from "./distractionFree";
 import styles from "./TitleBar.module.css";
@@ -197,7 +197,7 @@ function MainMenuBar({ merged, onExpandedChange }: MainMenuProps & { merged: boo
       type="button"
       className={styles.mainMenuButton}
       aria-label={t("menu.mainMenu")}
-      title={t("menu.mainMenu")}
+      {...tooltipAttrs(t("menu.mainMenu"))}
       aria-haspopup="menu"
       aria-expanded={expanded}
       onClick={() => {

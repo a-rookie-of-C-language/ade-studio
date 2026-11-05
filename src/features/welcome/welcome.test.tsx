@@ -88,7 +88,7 @@ import { projectInitials } from "@/workbench/projectColor";
 import { handleListKey } from "./ProjectsPage";
 import { filterRecent, useRecent } from "./recent";
 import { openCurrentWorkspaceInIDE, openWorkspaceInIDE, useWorkspace } from "./workspace";
-import { _resetHomeTerminalForTests } from "./HomeTerminal";
+import { _resetHomeTerminalForTests, useHomeTerminal } from "./HomeTerminal";
 import { WelcomeView } from "./WelcomeView";
 import { useAgents } from "@/features/agents/store";
 import type { AgentTask } from "@/bindings";
@@ -349,9 +349,12 @@ describe("Welcome › Cowork", () => {
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
   });
 
-  it("opens a terminal drawer rooted at the workspace from the top-right button", async () => {
+  it("opens a terminal drawer rooted at the workspace from the terminal action", async () => {
     await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
+    act(() => {
+      useHomeTerminal.getState().setOpen(true);
+    });
     await screen.findByLabelText("Terminal sessions");
     expect(termNewTab).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
     expect(screen.getByRole("button", { name: "New Tab" })).toBeTruthy();
@@ -362,12 +365,14 @@ describe("Welcome › Cowork", () => {
   it("roots new terminal tabs at the picked workspace", async () => {
     useWorkspace.setState({ root: "/Users/me/repo/acme-api" });
     await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    act(() => {
+      useHomeTerminal.getState().setOpen(true);
+    });
     await screen.findByLabelText("Terminal sessions");
     expect(termNewTab).toHaveBeenCalledWith("/Users/me/repo/acme-api");
-    expect(
-      within(screen.getByRole("complementary", { name: "Terminal" })).getByTitle("/Users/me/repo/acme-api"),
-    ).toBeTruthy();
+    // The cwd uses the shared tooltip channel (`data-tooltip`), not a native `title`.
+    const cwd = within(screen.getByRole("complementary", { name: "Terminal" })).getByText("acme-api");
+    expect(cwd.getAttribute("data-tooltip")).toBe("/Users/me/repo/acme-api");
     fireEvent.click(screen.getByRole("button", { name: "New Tab" }));
     expect(termNewTab).toHaveBeenCalledTimes(2);
   });

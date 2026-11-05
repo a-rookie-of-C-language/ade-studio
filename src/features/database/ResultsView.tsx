@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import type { DbPlanNode } from "@/platform/ipc";
 import { shortcutLabel } from "@/platform/keymap";
-import { EmptyState, Icon, IconButton, Select, Spinner, Tabs, Tree, showContextMenu, T } from "@/ui";
+import { EmptyState, Icon, IconButton, Select, Spinner, Tabs, Tree, showContextMenu, T, tooltipAttrs } from "@/ui";
 import { ChartView } from "./ChartView";
 import { DataView, ExtractorSelect, PanelToggle, exportMenu, type DataPanel } from "./DataView";
 import type { ExportData, ExportFormat } from "./export";
@@ -106,7 +106,7 @@ function Pager({ tab }: { tab: ResultTab }) {
       className={styles.resultPager}
       role="toolbar"
       aria-label={tx("Result pages")}
-      title={outcomeSummary(tab.outcome)}
+      {...tooltipAttrs(outcomeSummary(tab.outcome))}
     >
       <IconButton
         icon="page-first"
@@ -126,7 +126,7 @@ function Pager({ tab }: { tab: ResultTab }) {
         type="button"
         className={clsx(styles.resultPagerRange, styles.resultPagerCount)}
         disabled={w.total !== null || !canPage || !countable(tab)}
-        title={w.total === null ? tx("Count rows") : undefined}
+        {...tooltipAttrs(w.total === null ? tx("Count rows") : undefined)}
         onClick={() => void countResult(tab.id)}
       >
         {tx`${first}-${last} of ${total}`}
@@ -190,7 +190,7 @@ function Result({ tab }: { tab: ResultTab }) {
         )}
         {tab.busy && <Spinner size={12} />}
         <span className={styles.spacer} />
-        <span className={styles.resultSource} title={tab.outcome.statement.text}>
+        <span className={styles.resultSource} {...tooltipAttrs(tab.outcome.statement.text)}>
           {targetLabel(tab.sourceId)}
         </span>
         <ExtractorSelect value={extractor} onChange={setExtractor} />
@@ -271,7 +271,7 @@ function PlanResult({ tab }: { tab: ResultTab }) {
         <IconButton icon="refresh" title="Explain Again" disabled={tab.busy} onClick={() => void rerunResult(tab.id)} />
         {tab.busy && <Spinner size={12} />}
         <span className={styles.spacer} />
-        <span className={styles.resultSource} title={tab.outcome.statement.text}>
+        <span className={styles.resultSource} {...tooltipAttrs(tab.outcome.statement.text)}>
           {targetLabel(tab.sourceId)}
         </span>
       </div>

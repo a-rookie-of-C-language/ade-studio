@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useRef, type MouseEvent } from "react";
 import { tx, txTemplate, useTx } from "@/platform/i18n";
-import { Icon, Spinner, showContextMenu } from "@/ui";
+import { Icon, Spinner, showContextMenu, tooltipAttrs } from "@/ui";
 import { notifyEditorDocumentChanged, type EditorInput } from "@/workbench/contributions";
 import type { GHPullRequest } from "../api/types";
 import { openInBrowser } from "../data/local";
@@ -95,7 +95,7 @@ function Timeline({ data }: { data: TimelineInputData }) {
           <a
             className={styles.link}
             href={pr.url}
-            title={t("View in browser")}
+            {...tooltipAttrs(t("View in browser"))}
             onClick={(e) => {
               e.preventDefault();
               void openInBrowser(pr.url);

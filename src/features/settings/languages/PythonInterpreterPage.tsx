@@ -7,7 +7,7 @@
 import { isCancelled } from "@/platform/ipc";
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import clsx from "clsx";
-import { Button, IconButton, Input, Spinner, showContextMenu, T } from "@/ui";
+import { Button, IconButton, Input, Spinner, showContextMenu, T, tooltipAttrs } from "@/ui";
 import { useProject } from "@/platform/project";
 import { Section, Toggle } from "../components/Form";
 import { effectivePython, listPackages, pip, useSdks, type PythonPackage } from "./api";
@@ -161,7 +161,7 @@ export function PythonInterpreterPage() {
         </Button>
       </div>
       {python && (
-        <div className={styles.path} title={python}>
+        <div className={styles.path} {...tooltipAttrs(python)}>
           {current ? `${current.name} — ` : ""}
           {tildify(python)}
         </div>

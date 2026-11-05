@@ -28,6 +28,7 @@ import {
   type TreeRowState,
   T,
   selectableText,
+  tooltipAttrs,
 } from "@/ui";
 import {
   cancelInspection,
@@ -309,7 +310,7 @@ export function InspectionView() {
         );
       case "problem":
         return (
-          <span className={clsx(styles.row, off)} title={n.p.d.message}>
+          <span className={clsx(styles.row, off)} {...tooltipAttrs(n.p.d.message)}>
             <span className={styles.message}>{n.p.d.message.split("\n")[0]}</span>
             <span className={styles.muted}>:{n.p.d.range.start.line + 1}</span>
           </span>

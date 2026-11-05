@@ -1646,6 +1646,22 @@ export type AgentUsage = {
 	categories?: AgentContextCategory[],
 	/**  What the session has cost so far (ACP `usage_update.cost`), when the agent reports it. */
 	cost?: AgentCost | null,
+	/**  Tokens the last request sent, when the agent reports the split. */
+	inputTokens?: number | null,
+	/**  Tokens the last request produced, when reported. */
+	outputTokens?: number | null,
+	/**
+	 *  Tokens served from cache, when reported (Codex `cachedInputTokens`,
+	 *  Claude `cache_read_input_tokens`).
+	 */
+	cacheReadTokens?: number | null,
+	/**
+	 *  Tokens written to cache, when reported (Codex `cacheWriteInputTokens`,
+	 *  Claude `cache_creation_input_tokens`).
+	 */
+	cacheWriteTokens?: number | null,
+	/**  Reasoning tokens, when reported (Codex `reasoningOutputTokens`). */
+	reasoningTokens?: number | null,
 };
 
 /**  One entry of `adb devices -l`. */

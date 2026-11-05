@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Button, Icon, IconButton, Input, Tree, folderIconName, type FolderKind, T } from "@/ui";
+import { Button, Icon, IconButton, Input, Tree, folderIconName, type FolderKind, T, tooltipAttrs } from "@/ui";
 import { call, commands, isTauri, type FileEntry } from "@/platform/ipc";
 import { relativePath, useProject } from "@/platform/project";
 import {
@@ -124,13 +124,13 @@ function ContentRoots({ root }: { root: string }) {
         <T>Add Content Root</T>
       </Button>
       <div className={clsx(styles.rootItem, styles.contentRoot)}>
-        <span className={styles.rootPath} title={root}>
+        <span className={styles.rootPath} {...tooltipAttrs(root)}>
           {root}
         </span>
       </div>
       {list.map((r) => (
         <div key={r} className={clsx(styles.rootItem, styles.contentRoot)}>
-          <span className={styles.rootPath} title={r}>
+          <span className={styles.rootPath} {...tooltipAttrs(r)}>
             {r}
           </span>
           <IconButton
@@ -298,7 +298,7 @@ export function ProjectStructurePage() {
                   const shown = x.path || name || ".";
                   return (
                     <div key={x.path} className={styles.rootItem}>
-                      <span className={styles.rootPath} title={x.path || root || undefined}>
+                      <span className={styles.rootPath} {...tooltipAttrs(x.path || root || undefined)}>
                         {shown}
                         {x.detectedFrom && (
                           <span className={styles.rootHint}> {tx`detected from ${x.detectedFrom}`}</span>

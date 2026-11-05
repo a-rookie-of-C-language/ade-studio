@@ -158,6 +158,7 @@ pub(crate) fn commands_of(update: &Value) -> Vec<AgentCommand> {
 /// `"report"`), `model` and `categories` the native drivers attach.
 pub(crate) fn usage_of(update: &Value) -> Option<Box<AgentUsage>> {
     let tokens = |key: &str| update.get(key)?.as_f64().map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
+    let split = |key: &str| update.get(key).and_then(Value::as_f64).map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
     let cost = update.get("cost").and_then(|c| {
         Some(Box::new(AgentCost {
             amount: c.get("amount")?.as_f64().filter(|a| a.is_finite() && *a >= 0.0)?,
@@ -176,6 +177,11 @@ pub(crate) fn usage_of(update: &Value) -> Option<Box<AgentUsage>> {
         model,
         categories: categories_of(update),
         cost,
+        input_tokens: split("inputTokens"),
+        output_tokens: split("outputTokens"),
+        cache_read_tokens: split("cacheReadTokens"),
+        cache_write_tokens: split("cacheWriteTokens"),
+        reasoning_tokens: split("reasoningTokens"),
     }))
 }
 
@@ -321,6 +327,16 @@ mod tests {
         assert_eq!((cmds[1].name.as_str(), cmds[1].hint.as_ref()), ("init", None));
         let u = usage_of(&json!({"used": 1200, "size": 200000, "cost": {"amount": 0.42, "currency": "USD"}})).unwrap();
         assert_eq!((u.used, u.size), (1200, 200000));
+        assert_eq!(
+            (u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens, u.reasoning_tokens),
+            (None, None, None, None, None),
+            "absent splits stay absent"
+        );
+        let u = usage_of(&json!({"used": 1200, "size": 200000, "inputTokens": 1000, "outputTokens": 200, "cacheReadTokens": 50, "cacheWriteTokens": 60, "reasoningTokens": 70})).unwrap();
+        assert_eq!(
+            (u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens, u.reasoning_tokens),
+            (Some(1000), Some(200), Some(50), Some(60), Some(70))
+        );
         assert!(usage_of(&json!({"used": 1, "size": 0})).is_none());
         // Provenance rides along when the driver attaches it; malformed rows never break the meter.
         let e = usage_of(&json!({"used": 15, "size": 1000, "kind": "estimate", "model": "x",

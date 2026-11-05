@@ -12,6 +12,7 @@ import {
   listNavigate,
   showContextMenu,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { askRemoveRecent, groupMenu, ProjectBadge, recentMenu } from "./RecentList";
 import { recentRows, setGroupExpanded, useRecent, type RecentMatch, type RecentRow } from "./recent";
@@ -70,7 +71,7 @@ function DefaultRow({ current, onPick }: { current: boolean; onPick?: () => void
     <div
       role="option"
       aria-selected={current}
-      title="~/.openidea/workspace"
+      {...tooltipAttrs("~/.openidea/workspace")}
       className={clsx(styles.project, current && styles.projectSelected)}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => {
@@ -182,7 +183,7 @@ function ProjectRow({
       id={id}
       role="option"
       aria-selected={selected}
-      title={m.project.path}
+      {...tooltipAttrs(m.project.path)}
       className={clsx(styles.project, nested && styles.projectNested, selected && styles.projectSelected)}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => {

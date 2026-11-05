@@ -65,7 +65,7 @@ export function StatusInfo() {
   const text = useStatusInfo((s) => s.text);
   if (!text) return null;
   return (
-    <span className={styles.info} role="status" title={text}>
+    <span className={styles.info} role="status" {...tooltipAttrs(text)}>
       {text}
     </span>
   );

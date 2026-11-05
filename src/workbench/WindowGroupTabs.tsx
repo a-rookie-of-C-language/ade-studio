@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { executeAction } from "@/platform/actions";
 import { useTx } from "@/platform/i18n";
 import { reorderedTabs, useWindowGroup } from "@/platform/windowGroups";
-import { Icon, IconButton, showContextMenu } from "@/ui";
+import { Icon, IconButton, showContextMenu, tooltipAttrs } from "@/ui";
 import { notifications } from "./contributions";
 import styles from "./WindowGroupTabs.module.css";
 
@@ -90,7 +90,7 @@ export function WindowGroupTabs() {
               role="tab"
               aria-selected={tab.current}
               tabIndex={tab.current ? 0 : -1}
-              title={tab.root ?? tab.name}
+              {...tooltipAttrs(tab.root ?? tab.name)}
               onClick={() => run(executeAction("window.selectTab", tab.label))}
               onKeyDown={(e) => {
                 if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;

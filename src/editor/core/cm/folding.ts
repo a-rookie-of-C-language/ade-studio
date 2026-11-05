@@ -372,7 +372,7 @@ export const expandRecursively = (view: EditorView) =>
 function chevron(open: boolean): HTMLElement {
   const span = document.createElement("span");
   span.className = open ? "cm-openidea-foldOpen" : "cm-openidea-foldClosed";
-  span.title = open ? "Collapse" : "Expand";
+  span.setAttribute("data-tooltip", open ? "Collapse" : "Expand");
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("width", "9");
@@ -403,7 +403,7 @@ export function foldingExtension(showOutline = true): Extension {
         const el = document.createElement("span");
         el.className = "cm-foldPlaceholder";
         el.textContent = name ?? "…";
-        el.title = "Expand";
+        el.setAttribute("data-tooltip", "Expand");
         el.setAttribute("aria-label", "folded code");
         el.onclick = onclick;
         return el;

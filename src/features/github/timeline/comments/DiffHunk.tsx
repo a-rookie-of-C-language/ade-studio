@@ -5,7 +5,7 @@
  * (`createDiffWithHeader`), whose name opens the file's diff and whose chevron collapses it.
  */
 import type { ReactNode } from "react";
-import { IconButton } from "@/ui";
+import { tooltipAttrs, IconButton } from "@/ui";
 import { hunkLineNumbers, type PatchHunk } from "../model";
 import styles from "./comments.module.css";
 
@@ -50,7 +50,7 @@ export function DiffBox({
           className={styles.fileName}
           role="link"
           tabIndex={0}
-          title={path}
+          {...tooltipAttrs(path)}
           onClick={onOpen}
           onKeyDown={(e) => e.key === "Enter" && onOpen?.()}
         >

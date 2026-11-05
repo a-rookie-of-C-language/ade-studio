@@ -6,7 +6,7 @@ import { executeAction } from "@/platform/actions";
 import { call, commands } from "@/platform/ipc";
 import { useTx, useTxTemplate } from "@/platform/i18n";
 import { basename, useProject } from "@/platform/project";
-import { Icon, IconButton, Select, T, type SelectOption } from "@/ui";
+import { Button, Icon, Select, T, type SelectOption, tooltipAttrs } from "@/ui";
 import { defaultTaskProject } from "./project";
 import { useWorkspace } from "@/features/welcome/workspace";
 import { maybeEditorService, type EditorInput } from "@/workbench/contributions";
@@ -157,19 +157,11 @@ export function HomeEditor({
               }}
             />
           ) : (
-            <span className={styles.project} title={homeRoot}>
+            <span className={styles.project} {...tooltipAttrs(homeRoot)}>
               {members.length
                 ? basename(root)
                 : (project?.name ?? (wsRoot ? basename(wsRoot) : tx("Default workspace")))}
             </span>
-          )}
-          {!project?.workspace && (
-            <IconButton
-              icon="open-in-tool-window"
-              title="Open in IDE"
-              iconSize={14}
-              onClick={() => void executeAction("welcome.openInIDE")}
-            />
           )}
           {isGit && (
             <Select
@@ -197,7 +189,7 @@ export function HomeEditor({
                   <T>on</T>
                 </span>
               )}
-              <span className={styles.branch} title={current}>
+              <span className={styles.branch} {...tooltipAttrs(current)}>
                 <Icon name="branch" size={14} />
                 <span className={styles.branchName}>{current}</span>
               </span>
@@ -219,6 +211,27 @@ export function HomeEditor({
                 onChange={(b) => updateDraft({ base: b === current ? null : b })}
               />
             </>
+          )}
+          {!project ? (
+            <Button
+              variant="secondary"
+              size="small"
+              icon="open-in-tool-window"
+              className={styles.openInIDE}
+              onClick={() => void executeAction("welcome.openInIDE")}
+            >
+              <T>Open in IDE</T>
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="small"
+              icon="arrow-left"
+              className={styles.openInIDE}
+              onClick={() => void executeAction("file.closeProject")}
+            >
+              <T>Back to Cowork</T>
+            </Button>
           )}
         </div>
         {probe && (!docked || probe.error) && (

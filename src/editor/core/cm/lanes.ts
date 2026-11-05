@@ -154,7 +154,7 @@ class OverviewLane {
           el.style.height = `${r.height}${unit}`;
           el.style.background = r.mark.color;
           el.dataset.pos = String(r.mark.from);
-          if (r.mark.tooltip) el.title = r.mark.tooltip;
+          if (r.mark.tooltip) el.setAttribute("data-tooltip", r.mark.tooltip ?? "");
           frag.appendChild(el);
         }
         const c = document.createElement("div");

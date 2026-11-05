@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Icon, T } from "@/ui";
+import { Icon, T, tooltipAttrs } from "@/ui";
 import { useEditorBanners, type EditorBannerContribution } from "@/workbench/contributions";
 import { useDocMeta } from "../model/document";
 import styles from "./EditorArea.module.css";
@@ -47,7 +47,7 @@ export function VirtualBanner({
         {reason && ` ${tx(reason)}`}
       </span>
       {description && (
-        <span className={styles.bannerDetail} title={description}>
+        <span className={styles.bannerDetail} {...tooltipAttrs(description)}>
           {description}
         </span>
       )}

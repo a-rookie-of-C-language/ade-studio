@@ -6,6 +6,7 @@ import { List, listNavigate } from "./List";
 import { useTx } from "@/platform/i18n";
 import { SearchField } from "./Input";
 import styles from "./Select.module.css";
+import { tooltipAttrs } from "@/ui";
 
 export interface SelectOption<V extends string = string> {
   value: V;
@@ -267,7 +268,7 @@ export function Select<V extends string = string>({
                 {o.icon && <Icon name={o.icon} size={14} />}
                 <span className={clsx(styles.optionLabel, o.detail && styles.withDetail)}>{tx(o.label)}</span>
                 {o.detail && (
-                  <span className={styles.detail} title={o.detail}>
+                  <span className={styles.detail} {...tooltipAttrs(o.detail)}>
                     {tx(o.detail)}
                   </span>
                 )}

@@ -35,6 +35,7 @@ import {
   showContextMenu,
   type MenuItem,
   type SelectOption,
+  tooltipAttrs,
 } from "@/ui";
 import {
   analyze,
@@ -573,7 +574,7 @@ export function DependencyAnalyzer(_props: { input: EditorInput }) {
               </span>
             </div>
           ) : report.error && report.deps ? (
-            <div className={styles.banner} role="alert" title={report.error}>
+            <div className={styles.banner} role="alert" {...tooltipAttrs(report.error)}>
               <Icon name="warning" size={16} />
               <span className={styles.bannerText}>
                 <T>Cannot resolve dependencies</T>: {report.error}

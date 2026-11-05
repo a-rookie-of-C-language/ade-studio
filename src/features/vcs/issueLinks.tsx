@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { isTauri } from "@/platform/ipc";
 import { useWorkflowSettings, type IssueLinkValid } from "@/platform/workflowSettings";
 import styles from "./GitLog.module.css";
+import { tooltipAttrs } from "@/ui";
 
 export type IssueSegment = string | { text: string; url: string };
 
@@ -60,7 +61,7 @@ export function IssueText({ text }: { text: string }): ReactNode {
         key={i}
         href={seg.url}
         className={styles.issueLink}
-        title={seg.url}
+        {...tooltipAttrs(seg.url)}
         onClick={(e) => {
           e.preventDefault();
           void openUrl(seg.url).catch(() => undefined);

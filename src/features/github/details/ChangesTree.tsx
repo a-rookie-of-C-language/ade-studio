@@ -13,7 +13,7 @@ import { dirKeys, type FileTreeNode } from "@/features/vcs/fileTree";
 import { baseName, dirName, fileCount, KIND_COLOR } from "@/features/vcs/model";
 import { currentRepoRoot } from "@/features/vcs/store";
 import { useTx } from "@/platform/i18n";
-import { Icon, Tree, fileIconName, showContextMenu, T, type MenuItem, type TreeHandle } from "@/ui";
+import { Icon, Tree, fileIconName, showContextMenu, T, type MenuItem, type TreeHandle, tooltipAttrs } from "@/ui";
 import { editorService } from "@/workbench/contributions";
 import type { GHCommitFile, GHPullRequestFileViewedState, GHPullRequestReviewThread } from "../api/types";
 import { openPullRequestFileDiff } from "../data/local";
@@ -239,7 +239,7 @@ function ChangeRow(props: {
   return (
     <span
       className={styles.fileRow}
-      title={f ? (f.previousFilename ? `${f.previousFilename} → ${f.filename}` : f.filename) : undefined}
+      {...tooltipAttrs(f ? (f.previousFilename ? `${f.previousFilename} → ${f.filename}` : f.filename) : undefined)}
     >
       {name}
       {progress && (

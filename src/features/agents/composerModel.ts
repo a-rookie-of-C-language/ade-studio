@@ -222,6 +222,11 @@ export function usageLabel(u: AgentUsage): { short: string; detail: string } {
   return { short, detail: lines.join("\n") };
 }
 
+/** `850`, `83.1k`, `1M`: the token counts shown in the context breakdown. */
+export function formatTokens(n: number): string {
+  return tokens(n);
+}
+
 /** The usage-limit windows agents report, by the name they give them; others show that name. */
 const LIMIT_WINDOWS: Record<string, { short: string; name: string }> = {
   five_hour: { short: "5h", name: "5-hour limit" },

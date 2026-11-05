@@ -34,8 +34,8 @@ describe("MergeRebaseWidget", () => {
     try {
       useVcs.setState({ branch: { head: "x", operation: "rebase" } as never });
       render(<MergeRebaseWidget />);
-      expect(screen.getByLabelText("继续变基")).toHaveAttribute("title", "继续变基");
-      expect(screen.getByLabelText("中止变基")).toHaveAttribute("title", "中止变基");
+      expect(screen.getByLabelText("继续变基")).toHaveAttribute("data-tooltip", "继续变基");
+      expect(screen.getByLabelText("中止变基")).toHaveAttribute("data-tooltip", "中止变基");
     } finally {
       await setLocale("en");
     }

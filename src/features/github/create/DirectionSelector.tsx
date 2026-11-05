@@ -5,7 +5,18 @@
  * the chosen repository (the project's GitHub remotes and forks).
  */
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { HighlightedText, Icon, List, Popup, SearchField, Select, T, fuzzyMatch, listNavigate } from "@/ui";
+import {
+  HighlightedText,
+  Icon,
+  List,
+  Popup,
+  SearchField,
+  Select,
+  T,
+  fuzzyMatch,
+  listNavigate,
+  tooltipAttrs,
+} from "@/ui";
 import { useTx } from "@/platform/i18n";
 import { NO_REMOTES, nameWithOwner, sameRepository, useGhRepository, type GHRemote } from "../data/repository";
 import { ChooserPopup } from "../ui/ChooserPopup";
@@ -29,7 +40,7 @@ function DropDownLink(props: { text: string | null; label: string; onClick: (el:
       type="button"
       className={styles.link}
       aria-label={tx(props.label)}
-      title={props.text ?? undefined}
+      {...tooltipAttrs(props.text ?? undefined)}
       onClick={(e) => props.onClick(e.currentTarget)}
     >
       <span className={styles.linkText}>{props.text ?? tx("Select…")}</span>

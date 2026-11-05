@@ -176,6 +176,14 @@ fn other_items() {
     // The provider's own tokenUsage is shown as-is: a report, never an estimate.
     assert_eq!(u, Some(json!({"sessionUpdate": "usage_update", "used": 20, "size": 1000, "kind": "report"})));
     assert!(usage(&json!({"tokenUsage": {"last": {"totalTokens": 20}, "modelContextWindow": null}})).is_none());
+    let u = usage(
+        &json!({"tokenUsage": {"last": {"totalTokens": 20, "inputTokens": 12, "outputTokens": 5, "cachedInputTokens": 3, "cacheWriteInputTokens": 4, "reasoningOutputTokens": 2}, "modelContextWindow": 1000}}),
+    )
+    .unwrap();
+    assert_eq!(
+        u,
+        json!({"sessionUpdate": "usage_update", "used": 20, "size": 1000, "kind": "report", "inputTokens": 12, "outputTokens": 5, "cacheReadTokens": 3, "cacheWriteTokens": 4, "reasoningTokens": 2})
+    );
     assert_eq!(reasoning_text(&json!({"summary": ["a", "b"], "content": ["raw"]})), "a\n\nb");
     assert!(tail(&"é".repeat(MAX_OUTPUT)).starts_with('…'));
 }

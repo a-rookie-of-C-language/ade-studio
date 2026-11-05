@@ -32,7 +32,7 @@ import { getContext, setContext } from "@/platform/context";
 import { call, commands } from "@/platform/ipc";
 import { bindingsFor, normalizeBinding, shortcutLabel, strokeOf } from "@/platform/keymap";
 import { tx } from "@/platform/i18n";
-import { IconButton, Select, Spinner, T, showContextMenu } from "@/ui";
+import { IconButton, Select, Spinner, T, showContextMenu, tooltipAttrs } from "@/ui";
 import { editorService, type EditorInput } from "@/workbench/contributions";
 import { changedLineGutters, diffWords, languageFor, viewerBase } from "./cm";
 import { applyChunk, arrowControls, chunkAt, hoverRevert, revertUnifiedChunk } from "./diffControls";
@@ -491,7 +491,7 @@ export function DiffEditor({ input, toolbarActions }: { input: EditorInput; tool
                     return btn;
                   }
                   btn.textContent = "Revert";
-                  btn.title = "Revert this change";
+                  btn.setAttribute("data-tooltip", "Revert this change");
                   btn.onmousedown = (event) => {
                     event.preventDefault();
                     revertUnifiedChunk(view, view.posAtDOM(btn));
@@ -1093,7 +1093,7 @@ export function DiffEditor({ input, toolbarActions }: { input: EditorInput; tool
       </div>
       {opts.mode === "split" ? (
         <div className={styles.labels}>
-          <span className={styles.label} title={sideLabel(left)}>
+          <span className={styles.label} {...tooltipAttrs(sideLabel(left))}>
             {sideLabel(left)}
             {editableA && (
               <span className={styles.badge}>
@@ -1101,7 +1101,7 @@ export function DiffEditor({ input, toolbarActions }: { input: EditorInput; tool
               </span>
             )}
           </span>
-          <span className={styles.label} title={sideLabel(right)}>
+          <span className={styles.label} {...tooltipAttrs(sideLabel(right))}>
             {sideLabel(right)}
             {editableB && (
               <span className={styles.badge}>{left.type === "rev" ? tx("working copy") : tx("editable")}</span>

@@ -10,7 +10,7 @@ import { openDiff, withChain } from "@/features/vcs/diffInput";
 import { KIND_COLOR, baseName, fileCount, type EffectiveKind } from "@/features/vcs/model";
 import type { Commit } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
-import { Icon, IconButton, Spinner, T, Tree, fileIconName, showContextMenu, type MenuItem } from "@/ui";
+import { Icon, IconButton, Spinner, T, Tree, fileIconName, showContextMenu, type MenuItem, tooltipAttrs } from "@/ui";
 import { ChooserPopup } from "../ui/ChooserPopup";
 import { prettyDate } from "../ui/prettyDate";
 import { commitDescription } from "./model";
@@ -247,7 +247,7 @@ function ChangeRow({ node }: { node: FileTreeNode<CreateChange> }) {
     );
   const f = node.file;
   return (
-    <span className={styles.fileRow} title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
+    <span className={styles.fileRow} {...tooltipAttrs(f.oldPath ? `${f.oldPath} → ${f.path}` : f.path)}>
       <Icon name={fileIconName(node.name)} size={16} />
       <span className={styles.fileName} style={{ color: KIND_COLOR[kindOf(f)] }}>
         {node.name}

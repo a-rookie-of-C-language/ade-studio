@@ -19,6 +19,7 @@ import {
   listNavigate,
   T,
   type PopupAnchor,
+  tooltipAttrs,
 } from "@/ui";
 import { useTx } from "@/platform/i18n";
 import type { GHPullRequestCommit } from "../api/types";
@@ -222,7 +223,7 @@ export function CommitInfo({ commit }: { commit: GHPullRequestCommit }) {
   return (
     <div className={styles.commitInfo}>
       <div className={styles.commitInfoTop}>
-        <span className={clsx(styles.commitInfoTitle, !detailed && styles.ellipsis)} title={p.title}>
+        <span className={clsx(styles.commitInfoTitle, !detailed && styles.ellipsis)} {...tooltipAttrs(p.title)}>
           {p.title}
         </span>
         <button type="button" className={styles.link} onClick={() => setDetailed(!detailed)}>

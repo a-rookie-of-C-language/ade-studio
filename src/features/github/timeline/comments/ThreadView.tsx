@@ -16,7 +16,7 @@
  */
 import { useState } from "react";
 import { tx, useTx } from "@/platform/i18n";
-import { IconButton } from "@/ui";
+import { IconButton, tooltipAttrs } from "@/ui";
 import { errorMessage } from "../../api/client";
 import type { GHPullRequestReviewComment, GHPullRequestReviewThread } from "../../api/types";
 import { openPullRequestFileDiff } from "../../data/local";
@@ -289,7 +289,7 @@ function FullThread({ number, thread }: Omit<ThreadViewProps, "variant">) {
                   {n === 0 ? t("Reply") : n === 1 ? tx`${n} reply` : tx`${n} replies`}
                 </button>
                 {last && (
-                  <span className={styles.secondary} title={fullDateTime(last.createdAt)}>
+                  <span className={styles.secondary} {...tooltipAttrs(fullDateTime(last.createdAt))}>
                     {prettyDate(last.createdAt)}
                   </span>
                 )}

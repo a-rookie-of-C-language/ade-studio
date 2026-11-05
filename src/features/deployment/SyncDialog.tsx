@@ -19,6 +19,7 @@ import {
   T,
   fileIconName,
   type DialogProps,
+  tooltipAttrs,
 } from "@/ui";
 import { TitleBar } from "@/workbench/TitleBar";
 import { usePlatform } from "@/platform/platformInfo";
@@ -350,11 +351,11 @@ function SyncComparison({
           </label>
         </div>
         <div className={styles.comparisonRoots}>
-          <span title={root ?? ""}>
+          <span {...tooltipAttrs(root ?? "")}>
             <Icon name="folder" size={14} />
             <span>{root ?? tx("Local files")}</span>
           </span>
-          <span title={server?.rootPath}>
+          <span {...tooltipAttrs(server?.rootPath)}>
             <Icon name="web" size={14} />
             <span>
               {sync.serverName}: {server?.rootPath || "/"}
@@ -439,7 +440,7 @@ function SyncComparison({
                               event.currentTarget.closest("table")?.focus({ preventScroll: true });
                           }}
                         >
-                          <td title={entry.local && root ? `${root}/${entry.path}` : tx("(does not exist)")}>
+                          <td {...tooltipAttrs(entry.local && root ? `${root}/${entry.path}` : tx("(does not exist)"))}>
                             {entry.local && (
                               <span className={styles.fileName}>
                                 <Icon name={fileIconName(entry.path)} size={14} />
@@ -453,13 +454,13 @@ function SyncComparison({
                             <select
                               className={styles.choice}
                               aria-label={`${tx("Action")} ${entry.path}`}
-                              title={checkErrors[entry.path] ?? tx(STATUS[entry.status])}
+                              {...tooltipAttrs(checkErrors[entry.path] ?? tx(STATUS[entry.status]))}
                               value={sync.choices[entry.path] ?? "skip"}
                               disabled={busy}
                               onChange={(e) => choose(entry, e.target.value as SyncChoice)}
                             >
                               {syncChoices(entry).map((choice) => (
-                                <option key={choice} value={choice} title={tx(CHOICES[choice][1])}>
+                                <option key={choice} value={choice} {...tooltipAttrs(tx(CHOICES[choice][1]))}>
                                   {CHOICES[choice][0]} {tx(CHOICES[choice][1])}
                                 </option>
                               ))}
@@ -467,7 +468,7 @@ function SyncComparison({
                           </td>
                           <td>{formatTime(entry.remote?.mtime)}</td>
                           <td className={styles.num}>{entry.remote ? formatSize(entry.remote.size) : ""}</td>
-                          <td title={entry.remotePath}>
+                          <td {...tooltipAttrs(entry.remotePath)}>
                             {entry.remote && (
                               <span className={styles.fileName}>
                                 <Icon name={fileIconName(entry.path)} size={14} />

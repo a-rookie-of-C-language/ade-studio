@@ -29,6 +29,7 @@ import {
   copyText,
   fileIconName,
   selectableText,
+  tooltipAttrs,
   useSelectionBoundary,
   showContextMenu,
 } from "@/ui";
@@ -37,7 +38,16 @@ import { isImeKey } from "@/platform/ime";
 import { TaskStatusIcon } from "./AgentsView";
 import { Composer } from "./Composer";
 import { SubmitButton } from "./SubmitButton";
-import { canSend, costLabel, emptyDraft, limitLabel, retryParts, usageLabel, workTime } from "./composerModel";
+import {
+  canSend,
+  costLabel,
+  emptyDraft,
+  formatTokens,
+  limitLabel,
+  retryParts,
+  usageLabel,
+  workTime,
+} from "./composerModel";
 import { ConfigPickers } from "./ConfigPickers";
 import { findRanges, formatDuration, formatSentAt } from "./conversation";
 import { ImagePreview, imageSrc } from "./ImagePreview";
@@ -57,6 +67,7 @@ import {
 } from "./model";
 import {
   cancelTask,
+  focusComposer,
   loadEntries,
   markVisible,
   refreshChanges,
@@ -70,6 +81,7 @@ import {
   sendMessage,
   sendQueuedNow,
   setTaskConfig,
+  updateComposer,
   useAgentCommands,
   useAgents,
 } from "./store";
@@ -174,6 +186,12 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
           <SessionComposer task={task} entries={entries ?? null} onOpenSubagent={openSubagent} />
         )}
       </div>
+      {!docked && (
+        <div className={styles.sidecar} data-reserved="right-quarter">
+          <EnvironmentCard task={task} />
+          <ContextCard task={task} />
+        </div>
+      )}
       {changesOpen && (
         <ChangesPane
           task={task}
@@ -239,6 +257,10 @@ function Header({
   const count = changes?.length ?? 0;
   const busy = isBusy(task.status);
   const where = task.isolation === "worktree" ? branchLabel(task.branch) : null;
+  // Cowork home has no IDE project open: offer the same always-visible
+  // TRAE-style entry as the home composer, opening this session's folder.
+  // Inside the IDE the same slot returns to Cowork instead.
+  const inCoworkHome = !project;
   return (
     <div
       className={styles.header}
@@ -249,11 +271,11 @@ function Header({
     >
       <TaskStatusIcon status={task.status} />
       {!docked && (
-        <span className={styles.title} title={task.title}>
+        <span className={styles.title} {...tooltipAttrs(task.title)}>
           {task.title}
         </span>
       )}
-      <span className={styles.headerDetail} title={task.cwd}>
+      <span className={styles.headerDetail} {...tooltipAttrs(task.cwd)}>
         <Icon name={providerIcon(task.provider)} size={13} className={styles.providerIcon} />
         <span className={styles.headerText}>
           {providerName(task.provider)}
@@ -301,38 +323,56 @@ function Header({
         aria-pressed={changesOpen}
         disabled={count === 0 && !changesOpen}
         aria-label={changesOpen ? tx("Hide changes") : tx("Show changes")}
-        title={changesOpen ? tx("Hide changes") : tx("Show changes")}
+        {...tooltipAttrs(changesOpen ? tx("Hide changes") : tx("Show changes"))}
         onClick={onToggleChanges}
       >
         <Icon name="toolwindow-changes" size={14} />
         {count > 0 && <span>{count}</span>}
       </button>
+      {inCoworkHome ? (
+        <Button
+          variant="secondary"
+          size="small"
+          icon="open-in-tool-window"
+          onClick={() => void executeAction("welcome.openInIDE", task.cwd)}
+        >
+          <T>Open in IDE</T>
+        </Button>
+      ) : (
+        <Button
+          variant="secondary"
+          size="small"
+          icon="arrow-left"
+          onClick={() => void executeAction("file.closeProject")}
+        >
+          <T>Back to Cowork</T>
+        </Button>
+      )}
     </div>
   );
 }
 
 /**
- * Context use, usage limits and cost (when the agent reports them) and the time spent on
+ * Usage limits and cost (when the agent reports them) and the time spent on
  * the task, each as Settings › Tools › Agents › Chat allows.
  */
 function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | null }) {
-  const tx = useTx();
   const show = useProject((s) => s.settings?.agents);
   const busy = isBusy(task.status);
   const now = useNow(busy ? 1000 : 60_000);
-  const usage = show?.showContextUsage !== false ? task.usage : null;
   const reported = useAgents((s) => s.limits.get(task.provider));
   const limits = show?.showUsageLimits !== false ? (reported ?? []) : [];
   const cost = show?.showCost === true ? task.usage?.cost : null;
   const work = show?.showWorkTime !== false && entries ? workTime(entries, busy ? now : null) : 0;
   return (
     <span className={styles.meters}>
-      {usage && <Usage usage={usage} />}
       {limits.map((l) => (
         <Limit key={l.window} limit={l} now={now} />
       ))}
-      {cost && <span title={tx("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>}
-      {work >= 1000 && <span title={tx("Time the agent spent on this task")}>{formatDuration(work)}</span>}
+      {cost && (
+        <span {...tooltipAttrs("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>
+      )}
+      {work >= 1000 && <span {...tooltipAttrs("Time the agent spent on this task")}>{formatDuration(work)}</span>}
     </span>
   );
 }
@@ -341,7 +381,7 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
 function Limit({ limit, now }: { limit: AgentLimit; now: number }) {
   const label = limitLabel(limit, now);
   return (
-    <span className={styles.meter} title={label.detail} aria-label={label.detail}>
+    <span className={styles.meter} {...tooltipAttrs(label.detail)} aria-label={label.detail}>
       <span className={styles.usageBar} aria-hidden>
         <span style={{ width: `${label.percent}%` }} />
       </span>
@@ -350,16 +390,150 @@ function Limit({ limit, now }: { limit: AgentLimit; now: number }) {
   );
 }
 
-/** Context window use: "12%", the numbers in the tooltip. */
-function Usage({ usage }: { usage: AgentUsage }) {
+/**
+ * Context window details shared by the header popup and the sidecar card:
+ * total plus the splits the agent sent, and the free space derived from them.
+ * Absent splits stay absent: nothing is estimated.
+ */
+function UsageDetails({ task, onDone }: { task: AgentTask; onDone?: () => void }) {
+  const usage = task.usage as AgentUsage;
   const label = usageLabel(usage);
+  const free = Math.max(0, usage.size - usage.used);
+  const canCompact = task.commands.some((c) => c.name === "compact");
+  const compact = () => {
+    updateComposer(task.id, { text: "/compact" });
+    focusComposer(task.id);
+    onDone?.();
+  };
   return (
-    <span className={styles.meter} title={label.detail} aria-label={`Context ${label.short}, ${label.detail}`}>
-      <span className={styles.usageBar} aria-hidden>
+    <>
+      <div className={styles.usageHead}>
+        <span className={styles.usageTitle}>
+          <T>Context</T>
+        </span>
+        <span className={styles.usageTotal}>
+          {label.short} <T>used</T>
+        </span>
+      </div>
+      <div className={styles.usageNumbers}>{label.detail}</div>
+      <div className={styles.usageBarLarge} aria-hidden>
         <span style={{ width: label.short }} />
-      </span>
-      {label.short}
-    </span>
+      </div>
+      <div className={styles.usageRows}>
+        <div className={styles.usageRow}>
+          <span>
+            <T>Used</T>
+          </span>
+          <span>{formatTokens(usage.used)}</span>
+        </div>
+        <div className={styles.usageRow}>
+          <span>
+            <T>Free space</T>
+          </span>
+          <span>{formatTokens(free)}</span>
+        </div>
+        {usage.inputTokens != null && (
+          <div className={styles.usageRow}>
+            <span>
+              <T>Input</T>
+            </span>
+            <span>{formatTokens(usage.inputTokens)}</span>
+          </div>
+        )}
+        {usage.outputTokens != null && (
+          <div className={styles.usageRow}>
+            <span>
+              <T>Output</T>
+            </span>
+            <span>{formatTokens(usage.outputTokens)}</span>
+          </div>
+        )}
+        {usage.cacheReadTokens != null && (
+          <div className={styles.usageRow}>
+            <span>
+              <T>Cache read</T>
+            </span>
+            <span>{formatTokens(usage.cacheReadTokens)}</span>
+          </div>
+        )}
+        {usage.cacheWriteTokens != null && (
+          <div className={styles.usageRow}>
+            <span>
+              <T>Cache write</T>
+            </span>
+            <span>{formatTokens(usage.cacheWriteTokens)}</span>
+          </div>
+        )}
+        {usage.reasoningTokens != null && (
+          <div className={styles.usageRow}>
+            <span>
+              <T>Reasoning</T>
+            </span>
+            <span>{formatTokens(usage.reasoningTokens)}</span>
+          </div>
+        )}
+      </div>
+      {canCompact && (
+        <Button size="small" onClick={compact}>
+          <T>Compact session</T>
+        </Button>
+      )}
+    </>
+  );
+}
+
+/** Persistent context card for the reserved right quarter. */
+function ContextCard({ task }: { task: AgentTask }) {
+  const show = useProject((s) => s.settings?.agents);
+  if (show?.showContextUsage === false || !task.usage) return null;
+  return (
+    <section className={styles.contextCard} aria-label={tx("Context")}>
+      <UsageDetails task={task} />
+    </section>
+  );
+}
+
+/**
+ * Which agent runs the session and where it works, above the context card.
+ * Everything shown comes from the task itself (provider, model, directory,
+ * branch): sessions offer no environment switching, so there is no picker.
+ */
+function EnvironmentCard({ task }: { task: AgentTask }) {
+  const [open, setOpen] = useState(true);
+  const project = useProject((s) => s.project);
+  const projectName = project?.workspace ? basename(task.projectRoot ?? project.root) : null;
+  const where = task.isolation === "worktree" ? branchLabel(task.branch) : null;
+  return (
+    <section className={styles.environmentCard} aria-label={tx("Environment")}>
+      <button type="button" className={styles.environmentHead} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <T>Environment</T>
+        <Icon name="chevron-down" size={14} className={clsx(styles.environmentChevron, !open && styles.collapsed)} />
+      </button>
+      {open && (
+        <div className={styles.environmentRows}>
+          <div className={styles.environmentRow} {...tooltipAttrs(task.provider)}>
+            <Icon name={providerIcon(task.provider)} size={14} />
+            <span className={styles.environmentText}>
+              {providerName(task.provider)}
+              {task.model ? ` · ${task.model}` : ""}
+            </span>
+          </div>
+          <div className={styles.environmentRow} {...tooltipAttrs(task.cwd)}>
+            <Icon name="folder" size={14} />
+            <span className={styles.environmentText}>
+              {projectName ? `${projectName} · ` : ""}
+              {task.cwd}
+            </span>
+          </div>
+          {where ? (
+            <div className={styles.environmentRow} {...tooltipAttrs(task.branch ?? "")}>
+              <Icon name="branch-label" size={14} />
+              <span className={styles.environmentText}>{where}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -400,7 +574,7 @@ function SubagentBar({
             <Fragment key={sub}>
               <Icon name="chevron-right" size={12} className={styles.muted} />
               {i === path.length - 1 ? (
-                <span className={styles.crumbCurrent} title={cards[i]?.description ?? title}>
+                <span className={styles.crumbCurrent} {...tooltipAttrs(cards[i]?.description ?? title)}>
                   {title}
                 </span>
               ) : (
@@ -476,13 +650,33 @@ function Stream({ task, entries, subagent, onOpenSubagent, finding, findFocus, o
   const lastUser = entries?.findLast((e): e is UserEntry => e.type === "user");
   // Forks and undo apply to the task's own turns, not a subagent's conversation.
   const turns = useMemo(() => (entries && !subagent ? turnNumbers(entries) : null), [entries, subagent]);
+  // Absolute entry indexes of the user's messages: the index rail jumps to them.
+  const userTargets = useMemo(
+    () => (entries ? entries.flatMap((e, i) => (e.type === "user" ? [i] : [])) : []),
+    [entries],
+  );
+  const showIndex = userTargets.length > 1;
+  const scrollToUser = (target: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const selector = `[data-entry-index="${target}"]`;
+    if (el.querySelector(selector)) {
+      el.querySelector(selector)!.scrollIntoView({ block: "start" });
+      return;
+    }
+    // The target is above the rendered batch: render everything, then jump.
+    setShown(Infinity);
+    requestAnimationFrame(() => {
+      el.querySelector(selector)?.scrollIntoView({ block: "start" });
+    });
+  };
   return (
     <div className={styles.streamArea}>
       {finding && <FindBar streamRef={ref} focus={findFocus} onClose={onCloseFind} />}
       <div
         ref={ref}
         // The conversation is read and copied like a document; focusable so ⌘F reaches it.
-        className={clsx(styles.stream, selectableText)}
+        className={clsx(styles.stream, showIndex && styles.streamWithIndex, selectableText)}
         tabIndex={-1}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -511,6 +705,7 @@ function Stream({ task, entries, subagent, onOpenSubagent, finding, findFocus, o
                 key={start + i}
                 task={task}
                 entry={entry}
+                index={start + i}
                 turn={turns?.get(start + i) ?? null}
                 turnCount={turns?.size ?? 0}
                 onOpenSubagent={onOpenSubagent}
@@ -536,6 +731,22 @@ function Stream({ task, entries, subagent, onOpenSubagent, finding, findFocus, o
           </div>
         )}
       </div>
+      {showIndex && (
+        <nav className={styles.messageIndex} aria-label={tx("Message index")}>
+          {userTargets.map((target, n) => {
+            const num = n + 1;
+            return (
+              <button
+                key={target}
+                type="button"
+                className={styles.messageIndexTick}
+                aria-label={tx`Go to message ${num}`}
+                onClick={() => scrollToUser(target)}
+              />
+            );
+          })}
+        </nav>
+      )}
     </div>
   );
 }
@@ -549,7 +760,7 @@ function Retrying({ retry }: { retry: AgentRetry }) {
   const now = useNow(1000);
   const { attempt, wait } = retryParts(retry, now);
   return (
-    <span className={styles.retrying} title={retry.error ?? undefined}>
+    <span className={styles.retrying} {...tooltipAttrs(retry.error ?? undefined)}>
       {wait > 0
         ? tx`API request failed, retrying in ${wait}s (attempt ${attempt})`
         : tx`API request failed, retrying (attempt ${attempt})`}
@@ -741,12 +952,15 @@ const TOOL_ICONS: Record<string, string> = {
 function Entry({
   task,
   entry,
+  index,
   turn,
   turnCount,
   onOpenSubagent,
 }: {
   task: AgentTask;
   entry: AgentEntry;
+  /** Absolute entry index, anchoring the message index rail. */
+  index: number;
   /** Number of the turn this message started (from 0), when it started one. */
   turn: number | null;
   turnCount: number;
@@ -754,7 +968,7 @@ function Entry({
 }) {
   switch (entry.type) {
     case "user":
-      return <UserMessage task={task} entry={entry} turn={turn} turnCount={turnCount} />;
+      return <UserMessage task={task} entry={entry} index={index} turn={turn} turnCount={turnCount} />;
     case "agent":
       return <Markdown text={entry.text} cwd={task.cwd} />;
     case "thought":
@@ -831,11 +1045,13 @@ function renderUserText(text: string) {
 function UserMessage({
   task,
   entry,
+  index,
   turn,
   turnCount,
 }: {
   task: AgentTask;
   entry: UserEntry;
+  index: number;
   turn: number | null;
   turnCount: number;
 }) {
@@ -868,7 +1084,7 @@ function UserMessage({
   // Images are listed after the files in `attachments` and shown as thumbnails instead.
   const files = entry.attachments.slice(0, entry.attachments.length - images.length);
   return (
-    <div className={styles.message}>
+    <div className={styles.message} data-entry-index={index}>
       <div className={styles.user}>
         {renderUserText(entry.text)}
         <ImageStrip images={images} />
@@ -885,12 +1101,12 @@ function UserMessage({
       </div>
       <div className={styles.messageMeta}>
         {entry.sentMs != null && (
-          <span className={styles.muted} title={new Date(entry.sentMs).toLocaleString()}>
+          <span className={styles.muted} {...tooltipAttrs(new Date(entry.sentMs).toLocaleString())}>
             {formatSentAt(entry.sentMs)}
           </span>
         )}
         {entry.sentMs != null && entry.doneMs != null && (
-          <span className={styles.muted} title={tx("Time the agent took to answer")}>
+          <span className={styles.muted} {...tooltipAttrs(tx("Time the agent took to answer"))}>
             {` · ${formatDuration(entry.doneMs - entry.sentMs)}`}
           </span>
         )}
@@ -1027,7 +1243,7 @@ function ImageStrip({ images, onRemove }: { images: AgentImage[]; onRemove?: (in
           <button
             type="button"
             className={styles.imageButton}
-            title={img.name ?? undefined}
+            {...tooltipAttrs(img.name ?? undefined)}
             onClick={() => setOpen(img)}
           >
             <img className={styles.image} src={imageSrc(img)} alt={img.name ?? tx("Image")} />
@@ -1059,7 +1275,7 @@ function ToolEntry({ task, entry }: { task: AgentTask; entry: Extract<AgentEntry
           key={d.path}
           type="button"
           className={styles.toolDiff}
-          title={d.path}
+          {...tooltipAttrs(d.path)}
           onClick={(e) => {
             e.preventDefault();
             void openChangeDiff(task, d.path);
@@ -1110,7 +1326,7 @@ function SubagentCard({ task, entry, onOpen }: { task: AgentTask; entry: Subagen
           type="button"
           className={styles.subagentOpen}
           onClick={onOpen}
-          title={tx("Open the subagent's conversation")}
+          {...tooltipAttrs(tx("Open the subagent's conversation"))}
         >
           <SubagentStatusIcon status={entry.status} />
           <Icon name="toolwindow-agents" size={14} className={styles.muted} />
@@ -1138,7 +1354,7 @@ function SubagentCard({ task, entry, onOpen }: { task: AgentTask; entry: Subagen
         )}
       </div>
       {working && entry.activity && (
-        <div className={styles.subagentActivity} title={entry.activity}>
+        <div className={styles.subagentActivity} {...tooltipAttrs(entry.activity)}>
           {shortTitle(task, entry.activity)}
         </div>
       )}
@@ -1238,7 +1454,7 @@ function PermissionLine({ task, entry }: { task: AgentTask; entry: PermissionEnt
   return (
     <div className={styles.permissionLine}>
       <Icon name={!entry.chosen ? "warning" : entry.chosen === "Cancelled" ? "minus" : "check"} size={13} />
-      <span className={styles.permissionTitle} title={shortTitle(task, entry.title)}>
+      <span className={styles.permissionTitle} {...tooltipAttrs(shortTitle(task, entry.title))}>
         {shortTitle(task, entry.title)}
       </span>
       <span className={styles.muted}>{entry.chosen ?? <T>Waiting for your answer</T>}</span>
@@ -1344,7 +1560,7 @@ function Queue({ task }: { task: AgentTask }) {
       {task.queue.map((q) => (
         <div key={q.id} className={styles.queued}>
           <Icon name="pause" size={12} className={styles.muted} />
-          <span className={styles.queuedText} title={q.prompt.text}>
+          <span className={styles.queuedText} {...tooltipAttrs(q.prompt.text)}>
             {q.prompt.text || <T>Image</T>}
           </span>
           <button
@@ -1478,7 +1694,7 @@ function ChangesPane({
             onSelectionChange={(sel) => setSelected(sel)}
             onActivate={(c) => void openChangeDiff(task, c.path)}
             renderNode={(c) => (
-              <span className={styles.change} title={c.relPath}>
+              <span className={styles.change} {...tooltipAttrs(c.relPath)}>
                 <Icon name={fileIconName(basename(c.path), c.path)} size={16} />
                 <span className={styles.changeName} style={{ color: KIND_COLOR[c.kind] }}>
                   {basename(c.path)}

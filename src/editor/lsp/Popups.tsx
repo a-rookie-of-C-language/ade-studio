@@ -17,6 +17,7 @@ import {
   fuzzyMatch,
   selectableText,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { basename, relativePath, useProject } from "@/platform/project";
 import { editorService } from "@/workbench/contributions";
@@ -216,7 +217,7 @@ function ListPopup({ popup }: { popup: Extract<LspPopup, { kind: "list" }> }) {
               return (
                 <div
                   className={clsx(styles.item, item.disabled && styles.disabled, item.emphasis && styles.emphasis)}
-                  title={item.disabled ?? undefined}
+                  {...tooltipAttrs(item.disabled ?? undefined)}
                 >
                   {popup.numbered && <span className={styles.mnemonic}>{n > 0 && n <= 9 ? n : ""}</span>}
                   <ItemIcon item={item} />
@@ -660,7 +661,7 @@ export function UsagesStatus() {
   const text = useUsagesStatus((s) => s.text);
   if (!text) return null;
   return (
-    <span className={styles.statusMessage} role="status" title={text}>
+    <span className={styles.statusMessage} role="status" {...tooltipAttrs(text)}>
       {text}
     </span>
   );
