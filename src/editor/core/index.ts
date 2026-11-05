@@ -29,6 +29,7 @@ import {
   IndentStatus,
   LineEndingStatus,
   ReadOnlyStatus,
+  SoftWrapStatus,
 } from "./view/StatusItems";
 
 export function activate(): void | (() => void) {
@@ -104,6 +105,14 @@ export function activate(): void | (() => void) {
       priority: 50,
       component: IndentStatus,
       title: "Indentation",
+      lightEdit: true,
+    }),
+    registerStatusItem({
+      id: "editor.softWrap",
+      align: "right",
+      priority: 57,
+      component: SoftWrapStatus,
+      title: "Soft-Wrap",
       lightEdit: true,
     }),
     registerStatusItem({

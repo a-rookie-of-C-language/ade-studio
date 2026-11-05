@@ -206,6 +206,7 @@ export const vscodeMacos: Record<string, string[]> = {
   "editor.cloneCaretBelow": ["Meta+Alt+Down"],
   "editor.matchBrace": ["Meta+Shift+\\"],
   "editor.toggleInsertState": [],
+  "editor.toggleSoftWrap": ["Alt+Z"],
 
   // Explorer (when: projectViewFocus)
   "project.newFile": [],

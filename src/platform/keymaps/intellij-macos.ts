@@ -146,6 +146,8 @@ export const intellijMacos: Record<string, string[]> = {
   "editor.cloneCaretBelow": ["Alt Alt+Down"],
   "editor.matchBrace": ["Ctrl+M"],
   "editor.toggleInsertState": ["Insert"],
+  // IDEA leaves Soft-Wrap unbound; we use VS Code's Alt+Z so the issue's shortcut exists on the default keymap.
+  "editor.toggleSoftWrap": ["Alt+Z"],
   "code.joinLines": ["Ctrl+Shift+J"],
   "code.toggleCase": ["Meta+Shift+U"],
   "code.pasteFromHistory": ["Meta+Shift+V"],
