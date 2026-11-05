@@ -498,6 +498,20 @@ mod tests {
     }
 
     #[test]
+    fn entries_saved_before_timing_still_settle() {
+        let entry: AgentEntry = serde_json::from_value(json!({
+            "type": "tool", "id": "c", "title": "Run", "kind": "run",
+            "status": "completed", "locations": [], "output": null, "diffs": []
+        }))
+        .unwrap();
+        assert!(matches!(entry, AgentEntry::Tool { started_ms: None, ended_ms: None, .. }));
+        let mut t = Timeline::from_entries(vec![entry]);
+        // A late terminal update stamps the end; the start stays a point, never open-ended.
+        t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed"}), 9.0);
+        assert!(matches!(t.entries[0], AgentEntry::Tool { started_ms: Some(9.0), ended_ms: Some(9.0), .. }));
+    }
+
+    #[test]
     fn plan_is_one_entry_and_end_turn_settles_open_items() {
         let mut t = Timeline::default();
         let plan =
