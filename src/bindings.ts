@@ -1448,6 +1448,31 @@ export type AgentImage = {
 	name: string | null,
 };
 
+/**
+ *  Why a launch did not stay on its preferred surface. Never constructed today:
+ *  kept so the first real fallback reports its cause instead of silently changing surface.
+ */
+export type AgentLaunchFallback = {
+	from: AgentSurface,
+	to: AgentSurface,
+	reason: string,
+};
+
+/**
+ *  How a task was launched: the exact binary, the surface it landed on, and the
+ *  idempotency key that created it. Only what the backend knows is filled in;
+ *  the UI renders anything missing as unknown.
+ */
+export type AgentLaunchReceipt = {
+	provider: string,
+	program: string,
+	args: string[],
+	surface?: AgentSurface,
+	installed: boolean,
+	fallback?: AgentLaunchFallback | null,
+	operationId?: string | null,
+};
+
 /**  One usage-limit window of an agent's account. */
 export type AgentLimit = {
 	/**  The window as the agent names it: `five_hour`, `seven_day`, `seven_day_opus`… */
@@ -1577,6 +1602,17 @@ export type AgentSubagentStatus = "running" |
 /**  One of its requests (a permission) waits for an answer. */
 "needsInput" | "done" | "cancelled" | "failed";
 
+/**
+ *  Where a task runs. Today every task runs in-process behind the chat surface;
+ *  `Terminal` exists so a future fallback can be reported honestly instead of
+ *  being invented by the UI.
+ */
+export type AgentSurface = 
+/**  In-process agent session driving the chat UI. */
+"chat" | 
+/**  The agent's own CLI in a terminal. */
+"terminal";
+
 export type AgentTask = {
 	/**  Original project folder; absent in tasks saved before per-task roots. */
 	projectRoot?: IpcPath | null,
@@ -1622,6 +1658,12 @@ export type AgentTask = {
 	 *  by its next output or any status change.
 	 */
 	retry?: AgentRetry | null,
+	/**
+	 *  How the task was launched: which agent binary, on which surface, and why it
+	 *  fell back when it did. Absent on tasks saved before this was tracked.
+	 *  Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+	 */
+	launch?: AgentLaunchReceipt | null,
 };
 
 export type AgentToolDiff = {
@@ -5356,6 +5398,11 @@ export type NewAgentTask = {
 	isolation: Isolation,
 	/**  Branch to start the worktree from; the current branch when `None`. */
 	base: string | null,
+	/**
+	 *  Idempotency key: replaying the same key returns the first task instead
+	 *  of creating a duplicate (Orca `operationId` semantics).
+	 */
+	operationId?: string | null,
 };
 
 /**  Result of `node_at`: the smallest named node covering a range, with its ancestors. */

@@ -18,6 +18,7 @@ import {
   recall,
   toPrompt,
   mergeMatches,
+  launchLabel,
   retryParts,
   usageLabel,
   limitLabel,
@@ -230,6 +231,24 @@ describe("usage meters", () => {
     );
   });
 
+  it("marks estimates and shows what the provider reports", () => {
+    // Estimates wear a `~` and say what they are; the provider's own report does not.
+    expect(usageLabel({ used: 24_000, size: 200_000, kind: "estimate", model: "x" })).toEqual({
+      short: "~12%",
+      detail: "24k / 200k tokens\nModel x\nEstimated from the last response",
+    });
+    // The provider's own per-category breakdown, when it reports one.
+    expect(
+      usageLabel({
+        used: 1000,
+        size: 2000,
+        kind: "report",
+        model: "y",
+        categories: [{ name: "Messages", tokens: 600 }],
+      }).detail,
+    ).toBe("1k / 2k tokens\nModel y\nMessages: 600 tokens");
+  });
+
   it("names usage-limit windows and says when they reset", () => {
     const hour = 3_600_000;
     expect(limitLabel({ window: "five_hour", usedPercent: 19.4, resetsMs: 2 * hour + 51 * 60_000 }, 0)).toEqual({
@@ -250,6 +269,37 @@ describe("usage meters", () => {
   it("formats the session cost", () => {
     expect(costLabel({ amount: 0.4231, currency: "USD" })).toBe("$0.42");
     expect(costLabel({ amount: 1.5, currency: "credits" })).toBe("1.50 credits");
+  });
+
+  it("shows the launch environment and nothing it was not told", () => {
+    // What the backend reports: agent, binary, surface. Nothing invented.
+    expect(
+      launchLabel(
+        { provider: "codex", program: "codex", args: ["app-server"], surface: "chat", installed: true },
+        "Codex",
+      ),
+    ).toEqual({ short: "Codex · chat", detail: "Runs in chat\ncodex app-server" });
+    // A missing binary and a fallback cause show only when reported.
+    expect(launchLabel({ provider: "codex", program: "codex", args: [], installed: false }, "Codex").detail).toBe(
+      "Runs in chat\ncodex\nNot installed",
+    );
+    expect(
+      launchLabel(
+        {
+          provider: "codex",
+          program: "codex",
+          args: [],
+          installed: true,
+          fallback: { from: "chat", to: "terminal", reason: "no chat driver" },
+        },
+        "Codex",
+      ).detail,
+    ).toBe("Runs in chat\ncodex\nFell back: no chat driver");
+    // Tasks saved before the receipt read as unknown, never as a guess.
+    expect(launchLabel(null, "Codex")).toEqual({
+      short: "Codex",
+      detail: "How this task was launched was not reported",
+    });
   });
 
   it("adds up the time spent on turns", () => {

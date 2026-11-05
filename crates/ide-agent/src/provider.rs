@@ -2,7 +2,7 @@
 //! `<config>/agents/<id>.toml` (written by hand, or by installing one from the ACP
 //! Registry, see `registry`).
 
-use crate::{AgentCommandReadOnlyReason, AgentProvider, AgentSource};
+use crate::{AgentCommandReadOnlyReason, AgentLaunchReceipt, AgentProvider, AgentSource, AgentSurface};
 use ide_core::{IdeError, IdeResult};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -128,6 +128,21 @@ pub(crate) fn describe(spec: &ProviderSpec) -> AgentProvider {
         config: vec![],
         commands: vec![],
         source: spec.source.clone(),
+    }
+}
+
+/// Honest launch receipt: what was actually started, on which surface, and with
+/// which idempotency key. No terminal fallback is invented: every task starts on
+/// `Chat`, and a missing binary is reported by `create` instead of a fake receipt.
+pub(crate) fn launch_receipt(spec: &ProviderSpec, operation_id: Option<String>) -> AgentLaunchReceipt {
+    AgentLaunchReceipt {
+        provider: spec.id.clone(),
+        program: spec.command.clone(),
+        args: spec.args.clone(),
+        surface: AgentSurface::Chat,
+        installed: installed(&spec.command),
+        fallback: None,
+        operation_id,
     }
 }
 

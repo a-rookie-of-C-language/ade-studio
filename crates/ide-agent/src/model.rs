@@ -90,6 +90,11 @@ pub struct AgentTask {
     /// by its next output or any status change.
     #[serde(default)]
     pub retry: Option<AgentRetry>,
+    /// How the task was launched: which agent binary, on which surface, and why it
+    /// fell back when it did. Absent on tasks saved before this was tracked.
+    /// Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+    #[serde(default)]
+    pub launch: Option<Box<AgentLaunchReceipt>>,
 }
 
 /// An API request the agent is about to retry.
@@ -101,6 +106,47 @@ pub struct AgentRetry {
     /// When the next attempt starts (ms since the epoch).
     pub retry_at_ms: f64,
     pub error: Option<String>,
+}
+
+/// Where a task runs. Today every task runs in-process behind the chat surface;
+/// `Terminal` exists so a future fallback can be reported honestly instead of
+/// being invented by the UI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentSurface {
+    /// In-process agent session driving the chat UI.
+    #[default]
+    Chat,
+    /// The agent's own CLI in a terminal.
+    Terminal,
+}
+
+/// Why a launch did not stay on its preferred surface. Never constructed today:
+/// kept so the first real fallback reports its cause instead of silently changing surface.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentLaunchFallback {
+    pub from: AgentSurface,
+    pub to: AgentSurface,
+    pub reason: String,
+}
+
+/// How a task was launched: the exact binary, the surface it landed on, and the
+/// idempotency key that created it. Only what the backend knows is filled in;
+/// the UI renders anything missing as unknown.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentLaunchReceipt {
+    pub provider: String,
+    pub program: String,
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub surface: AgentSurface,
+    pub installed: bool,
+    #[serde(default)]
+    pub fallback: Option<AgentLaunchFallback>,
+    #[serde(default)]
+    pub operation_id: Option<String>,
 }
 
 /// One value of a select-type session setting.
@@ -473,6 +519,10 @@ pub struct NewAgentTask {
     pub isolation: Isolation,
     /// Branch to start the worktree from; the current branch when `None`.
     pub base: Option<String>,
+    /// Idempotency key: replaying the same key returns the first task instead
+    /// of creating a duplicate (Orca `operationId` semantics).
+    #[serde(default)]
+    pub operation_id: Option<String>,
 }
 
 /// A file the task changed, relative to [`AgentTask::base_commit`].

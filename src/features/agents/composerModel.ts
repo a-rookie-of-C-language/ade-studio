@@ -5,6 +5,7 @@ import type {
   AgentCost,
   AgentEntry,
   AgentImage,
+  AgentLaunchReceipt,
   AgentLimit,
   AgentPrompt,
   AgentRetry,
@@ -225,6 +226,23 @@ export function usageLabel(u: AgentUsage): { short: string; detail: string } {
 /** `850`, `83.1k`, `1M`: the token counts shown in the context breakdown. */
 export function formatTokens(n: number): string {
   return tokens(n);
+}
+
+/**
+ * The launch environment card: what the backend reports about how the task was
+ * started (agent, binary, surface), and nothing it doesn't. A missing receipt
+ * (tasks saved before this was tracked) reads as unknown, never as a guess.
+ */
+export function launchLabel(
+  launch: AgentLaunchReceipt | null | undefined,
+  providerName: string,
+): { short: string; detail: string } {
+  if (!launch) return { short: providerName, detail: tx`How this task was launched was not reported` };
+  const surface = launch.surface === "terminal" ? tx`terminal` : tx`chat`;
+  const lines = [tx`Runs in ${surface}`, [launch.program, ...(launch.args ?? [])].join(" ")];
+  if (!launch.installed) lines.push(tx`Not installed`);
+  if (launch.fallback) lines.push(tx`Fell back: ${launch.fallback.reason}`);
+  return { short: `${providerName} · ${surface}`, detail: lines.join("\n") };
 }
 
 /** The usage-limit windows agents report, by the name they give them; others show that name. */
