@@ -4,8 +4,10 @@ import {
   buildTrajectory,
   buildTrajectorySpans,
   matchTrajectoryEntry,
+  trajectoryCopyText,
   trajectoryDomain,
   trajectoryEntryText,
+  trajectoryQueryTerms,
   turnOfIndex,
 } from "./trajectory";
 
@@ -140,5 +142,60 @@ describe("search", () => {
     ).toBe(true);
     expect(matchTrajectoryEntry(tool("read a"), "zzz")).toBe(false);
     expect(matchTrajectoryEntry(tool("read a"), "  ")).toBe(true);
+  });
+});
+
+describe("multi-term search", () => {
+  it("requires every query term", () => {
+    const entry = tool("read Cargo.toml");
+    expect(matchTrajectoryEntry(entry, "read cargo")).toBe(true);
+    expect(matchTrajectoryEntry(entry, "read  toml")).toBe(true);
+    expect(matchTrajectoryEntry(entry, "TOML READ")).toBe(true);
+    expect(matchTrajectoryEntry(entry, "read missing")).toBe(false);
+  });
+
+  it("splits queries into terms", () => {
+    expect(trajectoryQueryTerms("  read  Cargo ")).toEqual(["read", "cargo"]);
+    expect(trajectoryQueryTerms("   ")).toEqual([]);
+  });
+});
+
+describe("trajectoryCopyText", () => {
+  const subagent = (prompt: string | null, reply: string | null): AgentEntry => ({
+    type: "subagent",
+    id: "c",
+    title: null,
+    description: null,
+    status: "done",
+    error: null,
+    prompt,
+    reply,
+    tools: 0,
+    activity: null,
+    startedMs: null,
+    endedMs: null,
+    cancellable: false,
+  });
+
+  it("copies text records", () => {
+    expect(trajectoryCopyText({ type: "agent", text: "hello" })).toBe("hello");
+    expect(trajectoryCopyText({ type: "agent", text: "" })).toBeNull();
+    expect(trajectoryCopyText({ type: "error", message: "Denied" })).toBe("Denied");
+    expect(trajectoryCopyText({ type: "user", text: "go", attachments: [], sentMs: null, doneMs: null })).toBe("go");
+  });
+
+  it("copies tool output with its title", () => {
+    expect(trajectoryCopyText(tool("read a"))).toContain("read a");
+  });
+
+  it("copies permission titles and plan items", () => {
+    expect(trajectoryCopyText({ type: "permission", id: 1, title: "Run?", options: [], chosen: null })).toBe("Run?");
+    expect(trajectoryCopyText({ type: "plan", items: [{ content: "x", status: "pending" }] })).toBe("x");
+    expect(trajectoryCopyText({ type: "plan", items: [] })).toBeNull();
+  });
+
+  it("copies subagent prompt and reply", () => {
+    expect(trajectoryCopyText(subagent("look", "found"))).toBe("look\n\nfound");
+    expect(trajectoryCopyText(subagent(null, null))).toBeNull();
   });
 });

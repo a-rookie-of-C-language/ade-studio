@@ -15,6 +15,12 @@ vi.mock("@/workbench/contributions", async (original) => ({
   toolWindowService: () => ({ show: vi.fn() }),
 }));
 
+const { copyTextMock } = vi.hoisted(() => ({ copyTextMock: vi.fn(async (_text: string) => {}) }));
+vi.mock("@/ui", async (original) => ({
+  ...(await original<typeof import("@/ui")>()),
+  copyText: copyTextMock,
+}));
+
 const task = (): AgentTask => ({
   id: "task",
   title: "Task",
@@ -116,5 +122,59 @@ describe("TrajectoryView", () => {
     expect(spans.length).toBeGreaterThan(0);
     fireEvent.click(spans[0]!);
     expect(document.getElementById("traj-turn-0")).toBeTruthy();
+  });
+});
+
+describe("TrajectoryView records", () => {
+  it("numbers records by their ledger position", () => {
+    renderView();
+    expect(screen.getByText("#2")).toBeTruthy();
+    expect(screen.getByText("#3")).toBeTruthy();
+    expect(screen.getByText("#5")).toBeTruthy();
+    expect(screen.queryByText("#1")).toBeNull();
+    expect(screen.queryByText("#4")).toBeNull();
+  });
+
+  it("copies a record's text", () => {
+    renderView();
+    const copies = screen.getAllByRole("button", { name: "Copy" });
+    expect(copies.length).toBeGreaterThan(0);
+    fireEvent.click(copies[0]!);
+    expect(copyTextMock).toHaveBeenCalledWith("On it.");
+  });
+
+  it("collapses turns individually and all at once", () => {
+    renderView();
+    const toggles = screen.getAllByRole("button", { name: "Collapse turn" });
+    expect(toggles).toHaveLength(2);
+    fireEvent.click(toggles[0]!);
+    expect(screen.queryByText("read lexer file")).toBeNull();
+    expect(screen.getByText("Turn 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Expand turn" }));
+    expect(screen.getByText("read lexer file")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse turns" }));
+    expect(screen.queryByText("read lexer file")).toBeNull();
+    expect(screen.queryByText("Denied")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand turns" }));
+    expect(screen.getByText("Denied")).toBeTruthy();
+  });
+
+  it("matches every search term", () => {
+    renderView();
+    const search = screen.getByPlaceholderText("Search trajectory");
+    fireEvent.change(search, { target: { value: "lexer file" } });
+    expect(screen.getByText("Turn 1")).toBeTruthy();
+    expect(screen.queryByText("Turn 2")).toBeNull();
+    fireEvent.change(search, { target: { value: "lexer denied" } });
+    expect(screen.getByText("No matching records")).toBeTruthy();
+  });
+
+  it("unfolds a collapsed turn when jumping from the overview", () => {
+    renderView();
+    fireEvent.click(screen.getAllByRole("button", { name: "Collapse turn" })[0]!);
+    expect(screen.queryByText("read lexer file")).toBeNull();
+    const overview = screen.getByLabelText("Timing overview");
+    fireEvent.click(within(overview).getAllByRole("button")[0]!);
+    expect(screen.getByText("read lexer file")).toBeTruthy();
   });
 });

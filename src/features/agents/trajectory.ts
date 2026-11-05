@@ -172,9 +172,36 @@ export function trajectoryEntryText(entry: AgentEntry): string {
   }
 }
 
-/** Whether `entry` matches `query` (case-insensitive substring; empty matches all). */
+/** Split a search query into case-insensitive AND terms; empty when there is no query. */
+export function trajectoryQueryTerms(query: string): string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+/** Whether `entry` matches every term of `query` (empty matches all). */
 export function matchTrajectoryEntry(entry: AgentEntry, query: string): boolean {
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return trajectoryEntryText(entry).toLowerCase().includes(q);
+  const terms = trajectoryQueryTerms(query);
+  if (terms.length === 0) return true;
+  const text = trajectoryEntryText(entry).toLowerCase();
+  return terms.every((t) => text.includes(t));
+}
+
+/** Full text worth copying for `entry`; null when the record carries nothing to copy. */
+export function trajectoryCopyText(entry: AgentEntry): string | null {
+  switch (entry.type) {
+    case "user":
+    case "agent":
+    case "thought":
+    case "message":
+      return entry.text || null;
+    case "tool":
+      return [entry.title, entry.kind, entry.output ?? ""].filter(Boolean).join("\n") || null;
+    case "plan":
+      return entry.items.map((i) => i.content).join("\n") || null;
+    case "subagent":
+      return [entry.prompt ?? "", entry.reply ?? ""].filter(Boolean).join("\n\n") || null;
+    case "permission":
+      return entry.title || null;
+    case "error":
+      return entry.message || null;
+  }
 }

@@ -276,3 +276,71 @@ details.row > summary.rowHead:hover {
   display: grid;
   place-items: center;
 }
+
+/* Record identity (#N) and the hover copy action. */
+.row {
+  position: relative;
+}
+
+.rowIndex {
+  flex: none;
+  color: var(--fg-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.lineHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.lineBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowCopy {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  opacity: 0;
+}
+
+.row:hover .rowCopy,
+.rowCopy:focus-visible,
+.errorRow:hover .rowCopy {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .rowCopy {
+    opacity: 1;
+  }
+}
+
+.errorRow {
+  position: relative;
+}
+
+/* Per-turn folding. */
+.turnToggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.turnToggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}

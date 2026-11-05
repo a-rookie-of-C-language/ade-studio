@@ -53,5 +53,10 @@
   "error": "error",
   "errors": "errors",
   "Timing overview": "Timing overview",
-  "Open Terminal": "Open Terminal"
+  "Open Terminal": "Open Terminal",
+  "Collapse turns": "Collapse turns",
+  "Expand turns": "Expand turns",
+  "Collapse turn": "Collapse turn",
+  "Expand turn": "Expand turn",
+  "Copy": "Copy"
 }

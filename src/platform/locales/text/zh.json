@@ -6285,5 +6285,9 @@
   "error": "个错误",
   "errors": "个错误",
   "Timing overview": "时序概览",
-  "Open Terminal": "打开终端"
+  "Open Terminal": "打开终端",
+  "Collapse turns": "折叠全部轮次",
+  "Expand turns": "展开全部轮次",
+  "Collapse turn": "折叠本轮",
+  "Expand turn": "展开本轮"
 }

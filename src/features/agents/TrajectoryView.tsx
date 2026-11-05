@@ -8,11 +8,17 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import type { AgentEntry, AgentTask } from "@/bindings";
 import { useTx } from "@/platform/i18n";
-import { EmptyState, Icon, IconButton, SearchField, Spinner, T, fileIconName } from "@/ui";
+import { EmptyState, Icon, IconButton, SearchField, Spinner, T, copyText, fileIconName } from "@/ui";
 import { formatDuration, formatSentAt } from "./conversation";
 import { Markdown } from "./Markdown";
 import { isBusy, subagentTitle, subagentWorking, type SubagentEntry } from "./model";
-import { buildTrajectory, buildTrajectorySpans, matchTrajectoryEntry, trajectoryDomain } from "./trajectory";
+import {
+  buildTrajectory,
+  buildTrajectorySpans,
+  matchTrajectoryEntry,
+  trajectoryCopyText,
+  trajectoryDomain,
+} from "./trajectory";
 import styles from "./TrajectoryView.module.css";
 
 const TOOL_ICONS: Record<string, string> = {
@@ -48,6 +54,7 @@ export function TrajectoryView({
   const tx = useTx();
   const [query, setQuery] = useState("");
   const [follow, setFollow] = useState(true);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
   const listRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const trajectory = useMemo(() => buildTrajectory(entries ?? []), [entries]);
@@ -65,6 +72,21 @@ export function TrajectoryView({
     return found;
   }, [entries, q]);
   const matchCount = matching?.size ?? 0;
+  // A search shows every match; folding only applies to the unfiltered ledger.
+  const searching = matching !== null;
+  const toggleTurn = (turn: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(turn)) next.delete(turn);
+      else next.add(turn);
+      return next;
+    });
+  const allCollapsed = trajectory.turns.length > 0 && trajectory.turns.every((t) => collapsed.has(t.turn));
+  const toggleAllTurns = () =>
+    setCollapsed((prev) => {
+      if (trajectory.turns.length > 0 && trajectory.turns.every((t) => prev.has(t.turn))) return new Set();
+      return new Set(trajectory.turns.map((t) => t.turn));
+    });
 
   useLayoutEffect(() => {
     const el = listRef.current;
@@ -82,19 +104,42 @@ export function TrajectoryView({
   if (matching?.size === 0)
     return (
       <div className={styles.view}>
-        <Toolbar query={query} onQuery={setQuery} matchCount={0} follow={follow} onFollow={setFollow} />
+        <Toolbar
+          query={query}
+          onQuery={setQuery}
+          matchCount={0}
+          follow={follow}
+          onFollow={setFollow}
+          allCollapsed={allCollapsed}
+          onToggleAll={toggleAllTurns}
+        />
         <EmptyState title="No matching records" />
       </div>
     );
 
   const anchorOf = (turn: number) => `traj-turn-${turn}`;
   const goToTurn = (turn: number) => {
+    // Jumping from the overview unfolds the turn first.
+    setCollapsed((prev) => {
+      if (!prev.has(turn)) return prev;
+      const next = new Set(prev);
+      next.delete(turn);
+      return next;
+    });
     // `scrollIntoView` is absent in jsdom; the optional call keeps tests honest.
     document.getElementById(anchorOf(turn))?.scrollIntoView?.({ block: "nearest" });
   };
   return (
     <div className={styles.view}>
-      <Toolbar query={query} onQuery={setQuery} matchCount={matchCount} follow={follow} onFollow={setFollow} />
+      <Toolbar
+        query={query}
+        onQuery={setQuery}
+        matchCount={matchCount}
+        follow={follow}
+        onFollow={setFollow}
+        allCollapsed={allCollapsed}
+        onToggleAll={toggleAllTurns}
+      />
       {domain && (
         <div className={styles.overview} role="group" aria-label={tx("Timing overview")}>
           {spans.map((s) => {
@@ -138,7 +183,7 @@ export function TrajectoryView({
               .slice(0, trajectory.prefaceEnd)
               .map((entry, i) =>
                 matching && !matching.has(i) ? null : (
-                  <Row key={i} task={task} entry={entry} onOpenSubagent={onOpenSubagent} />
+                  <Row key={i} task={task} entry={entry} index={i} onOpenSubagent={onOpenSubagent} />
                 ),
               )}
           </div>
@@ -147,9 +192,19 @@ export function TrajectoryView({
           if (matching && !matching.has(t.startIndex) && !hasMatchInRange(matching, t.startIndex + 1, t.endIndex)) {
             return null;
           }
+          const isCollapsed = !searching && collapsed.has(t.turn);
           return (
             <section key={t.turn} id={anchorOf(t.turn)} aria-label={tx`Turn ${t.turn + 1}`} className={styles.turn}>
               <div className={styles.turnHead}>
+                <button
+                  type="button"
+                  className={styles.turnToggle}
+                  aria-expanded={!isCollapsed}
+                  aria-label={isCollapsed ? tx("Expand turn") : tx("Collapse turn")}
+                  onClick={() => toggleTurn(t.turn)}
+                >
+                  <Icon name={isCollapsed ? "chevron-right" : "chevron-down"} size={14} />
+                </button>
                 <span className={styles.turnTitle}>{tx`Turn ${t.turn + 1}`}</span>
                 {t.durationMs != null && (
                   <span className={styles.turnMeta} title={tx("Time the agent took to answer")}>
@@ -180,14 +235,16 @@ export function TrajectoryView({
                   </div>
                 )}
               </div>
-              <div className={styles.rows}>
-                {entries.slice(t.startIndex + 1, t.endIndex).map((entry, k) => {
-                  const index = t.startIndex + 1 + k;
-                  return matching && !matching.has(index) ? null : (
-                    <Row key={index} task={task} entry={entry} onOpenSubagent={onOpenSubagent} />
-                  );
-                })}
-              </div>
+              {!isCollapsed && (
+                <div className={styles.rows}>
+                  {entries.slice(t.startIndex + 1, t.endIndex).map((entry, k) => {
+                    const index = t.startIndex + 1 + k;
+                    return matching && !matching.has(index) ? null : (
+                      <Row key={index} task={task} entry={entry} index={index} onOpenSubagent={onOpenSubagent} />
+                    );
+                  })}
+                </div>
+              )}
             </section>
           );
         })}
@@ -207,12 +264,16 @@ function Toolbar({
   matchCount,
   follow,
   onFollow,
+  allCollapsed,
+  onToggleAll,
 }: {
   query: string;
   onQuery: (q: string) => void;
   matchCount: number;
   follow: boolean;
   onFollow: (follow: boolean) => void;
+  allCollapsed: boolean;
+  onToggleAll: () => void;
 }) {
   const tx = useTx();
   return (
@@ -226,6 +287,13 @@ function Toolbar({
         trailing={query.trim() ? <span className={styles.count}>{matchCount}</span> : null}
       />
       <IconButton
+        icon={allCollapsed ? "expand-all" : "collapse-all"}
+        title={allCollapsed ? tx("Expand turns") : tx("Collapse turns")}
+        size="small"
+        pressed={allCollapsed}
+        onClick={onToggleAll}
+      />
+      <IconButton
         icon="autoscroll-to-source"
         title={follow ? tx("Stop following") : tx("Follow new activity")}
         size="small"
@@ -236,35 +304,64 @@ function Toolbar({
   );
 }
 
+/** The record's 1-based ledger number, stable across filtering and folding. */
+function RecordIndex({ index }: { index: number }) {
+  return <span className={styles.rowIndex}>#{index + 1}</span>;
+}
+
+/** Hover action copying the record's full text; absent when there is nothing to copy. */
+function RowCopy({ text }: { text: string | null }) {
+  const tx = useTx();
+  if (text == null) return null;
+  return (
+    <IconButton
+      icon="copy"
+      title={tx("Copy")}
+      size="small"
+      className={styles.rowCopy}
+      onClick={() => void copyText(text)}
+    />
+  );
+}
+
 function Row({
   task,
   entry,
+  index,
   onOpenSubagent,
 }: {
   task: AgentTask;
   entry: AgentEntry;
+  index: number;
   onOpenSubagent: (id: string) => void;
 }) {
+  const copy = trajectoryCopyText(entry);
   switch (entry.type) {
     case "user":
       return null;
     case "agent":
-      return <AgentRow task={task} text={entry.text} />;
+      return <AgentRow task={task} text={entry.text} index={index} copy={copy} />;
     case "thought":
       return (
         <details className={styles.row}>
-          <summary className={styles.thoughtSummary}>
-            <T>Thinking</T>
+          <RowCopy text={copy} />
+          <summary className={styles.rowHead}>
+            <RecordIndex index={index} />
+            <span className={styles.thoughtSummary}>
+              <T>Thinking</T>
+            </span>
           </summary>
           <div className={styles.thought}>{entry.text}</div>
         </details>
       );
     case "tool":
-      return <ToolRow entry={entry} />;
+      return <ToolRow entry={entry} index={index} copy={copy} />;
     case "plan":
       return (
         <div className={styles.row}>
+          <RowCopy text={copy} />
           <div className={styles.rowHead}>
+            <RecordIndex index={index} />
             <T>Plan</T>
           </div>
           {entry.items.map((item, i) => (
@@ -279,11 +376,13 @@ function Row({
         </div>
       );
     case "subagent":
-      return <SubagentRow task={task} entry={entry} onOpen={onOpenSubagent} />;
+      return <SubagentRow task={task} entry={entry} index={index} copy={copy} onOpen={onOpenSubagent} />;
     case "message":
       return (
         <div className={styles.row}>
+          <RowCopy text={copy} />
           <div className={styles.messageLabel}>
+            <RecordIndex index={index} />{" "}
             {entry.incoming ? <T>Task from the parent agent</T> : <T>Report to the parent agent</T>}
           </div>
           {entry.incoming ? (
@@ -296,7 +395,9 @@ function Row({
     case "permission":
       return (
         <div className={styles.row}>
+          <RowCopy text={copy} />
           <div className={styles.rowHead}>
+            <RecordIndex index={index} />
             <Icon name="warning" size={13} />
             <span className={styles.rowTitle}>{entry.title}</span>
             <span className={styles.rowMeta}>{entry.chosen ?? <T>Waiting for your answer</T>}</span>
@@ -307,18 +408,33 @@ function Row({
       return (
         <div className={styles.errorRow} role="alert">
           <Icon name="error" size={14} />
+          <RecordIndex index={index} />
           <span>{entry.message}</span>
+          <RowCopy text={copy} />
         </div>
       );
   }
 }
 
-function AgentRow({ task, text }: { task: AgentTask; text: string }) {
+function AgentRow({ task, text, index, copy }: { task: AgentTask; text: string; index: number; copy: string | null }) {
   const firstLine = text.split("\n", 1)[0]!.slice(0, 140);
-  if (text.length <= 140 && !text.includes("\n")) return <Markdown text={text} cwd={task.cwd} />;
+  if (text.length <= 140 && !text.includes("\n"))
+    return (
+      <div className={styles.row}>
+        <RowCopy text={copy} />
+        <div className={styles.lineHead}>
+          <RecordIndex index={index} />
+          <div className={styles.lineBody}>
+            <Markdown text={text} cwd={task.cwd} />
+          </div>
+        </div>
+      </div>
+    );
   return (
     <details className={styles.row}>
+      <RowCopy text={copy} />
       <summary className={styles.rowHead}>
+        <RecordIndex index={index} />
         <span className={styles.rowTitle}>{firstLine}</span>
       </summary>
       <Markdown text={text} cwd={task.cwd} />
@@ -326,9 +442,18 @@ function AgentRow({ task, text }: { task: AgentTask; text: string }) {
   );
 }
 
-function ToolRow({ entry }: { entry: Extract<AgentEntry, { type: "tool" }> }) {
+function ToolRow({
+  entry,
+  index,
+  copy,
+}: {
+  entry: Extract<AgentEntry, { type: "tool" }>;
+  index: number;
+  copy: string | null;
+}) {
   const head = (
     <>
+      <RecordIndex index={index} />
       <Icon name={TOOL_ICONS[entry.kind] ?? "run"} size={14} />
       <span className={styles.rowTitle}>{entry.title || entry.kind}</span>
       {entry.diffs.map((d) => (
@@ -343,12 +468,14 @@ function ToolRow({ entry }: { entry: Extract<AgentEntry, { type: "tool" }> }) {
   if (!entry.output) {
     return (
       <div className={styles.row}>
+        <RowCopy text={copy} />
         <div className={styles.rowHead}>{head}</div>
       </div>
     );
   }
   return (
     <details className={styles.row}>
+      <RowCopy text={copy} />
       <summary className={clsx(styles.rowHead, styles.rowTitle)}>{head}</summary>
       <div className={styles.inspect}>
         <span>
@@ -360,15 +487,29 @@ function ToolRow({ entry }: { entry: Extract<AgentEntry, { type: "tool" }> }) {
   );
 }
 
-function SubagentRow({ task, entry, onOpen }: { task: AgentTask; entry: SubagentEntry; onOpen: (id: string) => void }) {
+function SubagentRow({
+  task,
+  entry,
+  index,
+  copy,
+  onOpen,
+}: {
+  task: AgentTask;
+  entry: SubagentEntry;
+  index: number;
+  copy: string | null;
+  onOpen: (id: string) => void;
+}) {
   const tx = useTx();
   const working = subagentWorking(entry.status);
   const now = useNow(working ? 1000 : 60_000);
   const time = entry.startedMs == null ? null : (entry.endedMs ?? now) - entry.startedMs;
   return (
     <div className={styles.row}>
+      <RowCopy text={copy} />
       <div className={styles.rowHead}>
         <SubagentStatusIcon status={entry.status} />
+        <RecordIndex index={index} />
         <button
           type="button"
           className={styles.subagentOpen}
