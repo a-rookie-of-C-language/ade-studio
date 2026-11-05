@@ -11,8 +11,13 @@ const confirmProjectTrust = vi.fn();
 const invokeLocal = vi.fn();
 const dialogOpen = vi.fn();
 const notify = vi.fn();
+const executeAction = vi.fn();
 let recent: RecentProject[] = [];
 
+vi.mock("@/platform/actions", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/platform/actions")>();
+  return { ...real, executeAction: (...args: unknown[]) => executeAction(...args) };
+});
 vi.mock("@/platform/ipc", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/platform/ipc")>();
   return {
@@ -82,7 +87,7 @@ import { MessagesHost } from "@/workbench/messages";
 import { projectInitials } from "@/workbench/projectColor";
 import { handleListKey } from "./ProjectsPage";
 import { filterRecent, useRecent } from "./recent";
-import { useWorkspace } from "./workspace";
+import { openCurrentWorkspaceInIDE, openWorkspaceInIDE, useWorkspace } from "./workspace";
 import { WelcomeView } from "./WelcomeView";
 import { useAgents } from "@/features/agents/store";
 import type { AgentTask } from "@/bindings";
@@ -135,6 +140,7 @@ beforeEach(() => {
   invokeLocal.mockReset().mockResolvedValue({ trusted: true });
   dialogOpen.mockReset().mockResolvedValue(null);
   notify.mockReset();
+  executeAction.mockReset();
   termTabs.length = 0;
   termNewTab.mockClear();
   useRecent.setState({ projects: [], loaded: false, home: null, version: null, opening: null });
@@ -253,6 +259,43 @@ describe("Welcome › Projects", () => {
     expect(useWorkspace.getState().root).toBe("/Users/me/repo/fresh");
     expect(screen.getByText("Where should we start?")).toBeTruthy();
   });
+
+  it("opens a row in the IDE without touching the home workspace", async () => {
+    await renderProjects();
+    fireEvent.click(within(listRows()[0]!).getByRole("button", { name: "Open in IDE" }));
+    await act(async () => {});
+    expect(executeAction).toHaveBeenCalledWith("welcome.openInIDE", "/Users/me/repo/acme-api");
+    expect(useWorkspace.getState().root).toBeNull();
+  });
+});
+
+describe("Welcome › IDE switch", () => {
+  it("opens the workspace as an IDE project without revealing the panel here", async () => {
+    const ok = await openWorkspaceInIDE("/Users/me/repo/acme-api", "acme-api");
+    expect(ok).toBe(true);
+    expect(openProject).toHaveBeenCalledWith("/Users/me/repo/acme-api");
+    expect(executeAction).not.toHaveBeenCalledWith("agents.showToolWindow");
+  });
+
+  it("reveals the agent panel when the project opened in this window", async () => {
+    useProject.setState({ project: { root: "/Users/me/repo/acme-api", name: "acme-api" } } as never);
+    const ok = await openWorkspaceInIDE("/Users/me/repo/acme-api");
+    expect(ok).toBe(true);
+    expect(executeAction).toHaveBeenCalledWith("agents.showToolWindow");
+  });
+
+  it("opens the picked workspace from the current-workspace switch", async () => {
+    useWorkspace.setState({ root: "/Users/me/repo/delta" });
+    const ok = await openCurrentWorkspaceInIDE();
+    expect(ok).toBe(true);
+    expect(openProject).toHaveBeenCalledWith("/Users/me/repo/delta");
+  });
+
+  it("falls back to the default workspace when none is picked", async () => {
+    const ok = await openCurrentWorkspaceInIDE();
+    expect(ok).toBe(true);
+    expect(openProject).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
+  });
 });
 
 describe("Welcome › Cowork", () => {
@@ -325,6 +368,14 @@ describe("Welcome › Cowork", () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "New Tab" }));
     expect(termNewTab).toHaveBeenCalledTimes(2);
+  });
+
+  it("switches the picked workspace to the IDE from the composer", async () => {
+    useWorkspace.setState({ root: "/Users/me/repo/acme-api" });
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Open in IDE" }));
+    await act(async () => {});
+    expect(executeAction).toHaveBeenCalledWith("welcome.openInIDE");
   });
 });
 

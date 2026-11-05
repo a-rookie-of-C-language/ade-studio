@@ -2,12 +2,13 @@
 import { create } from "zustand";
 import { executeAction } from "@/platform/actions";
 import { call, commands, isCancelled, isTauri, type TrustStatus } from "@/platform/ipc";
+import { basename, useProject } from "@/platform/project";
 import { invokeLocal } from "@/platform/tauriCore";
 import { confirmProjectTrust } from "@/platform/projectTrust";
 import { parseRemoteLocation } from "@/platform/remote";
 import { tx } from "@/platform/i18n";
 import { notifications } from "@/workbench/contributions";
-import { removeRecent } from "./recent";
+import { openRecent, removeRecent } from "./recent";
 
 const STORAGE_KEY = "openidea.workspace.root";
 
@@ -164,4 +165,33 @@ export async function dropWorkspace(paths: readonly string[]): Promise<boolean> 
   if (files.length) void executeAction("file.openPaths", files);
   if (!dir) return false;
   return selectWorkspace(dir);
+}
+
+/**
+ * Opens `path` as an IDE project in this window and reveals the Agents panel
+ * on the right. A remote project opens in a new window instead: still true,
+ * without revealing anything here.
+ */
+export async function openWorkspaceInIDE(path: string, name?: string): Promise<boolean> {
+  if (!isTauri()) {
+    desktopOnly();
+    return false;
+  }
+  const ok = await openRecent({ path, name: name ?? basename(path) });
+  if (!ok) return false;
+  if (useProject.getState().project?.root !== path) return true;
+  await executeAction("agents.showToolWindow");
+  return true;
+}
+
+/** IDE switch for the current agent workspace (picked or default). */
+export async function openCurrentWorkspaceInIDE(): Promise<boolean> {
+  if (!isTauri()) {
+    desktopOnly();
+    return false;
+  }
+  const picked = useWorkspace.getState().root;
+  const target = picked ?? (await resolveHomeCwd());
+  if (!target) return false;
+  return openWorkspaceInIDE(target);
 }

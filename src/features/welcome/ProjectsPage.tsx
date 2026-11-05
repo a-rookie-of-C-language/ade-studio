@@ -1,6 +1,7 @@
 /** Welcome › Projects: the agent workspace picker (search, open a folder, recent workspaces). */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
+import { executeAction } from "@/platform/actions";
 import {
   Button,
   HighlightedText,
@@ -210,6 +211,17 @@ function ProjectRow({
           <T>Current</T>
         </span>
       )}
+      <IconButton
+        icon="open-in-tool-window"
+        title="Open in IDE"
+        iconSize={16}
+        className={styles.projectMore}
+        tabIndex={-1}
+        onClick={(e) => {
+          e.stopPropagation();
+          void executeAction("welcome.openInIDE", m.project.path);
+        }}
+      />
       <IconButton
         icon="more"
         title="Project actions"

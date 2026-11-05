@@ -5,6 +5,7 @@ import { ProjectPopup } from "./ProjectPopup";
 import { RecentProjectsPopup, showRecentProjectsPopup } from "./RecentProjectsPopup";
 import { reopenLastProject, trackSession } from "./session";
 import { WelcomeView } from "./WelcomeView";
+import { openCurrentWorkspaceInIDE, openWorkspaceInIDE } from "./workspace";
 
 export function activate(): () => void {
   const disposers = [
@@ -13,6 +14,14 @@ export function activate(): () => void {
     provideProjectPopup(ProjectPopup),
     registerOverlay({ id: "welcome.recentProjects", component: RecentProjectsPopup }),
     registerActions([
+      {
+        id: "welcome.openInIDE",
+        title: "Open in IDE",
+        category: "File",
+        icon: "open-in-tool-window",
+        keywords: ["ide", "open project", "agent panel"],
+        run: ({ arg }) => void (typeof arg === "string" && arg ? openWorkspaceInIDE(arg) : openCurrentWorkspaceInIDE()),
+      },
       {
         id: "welcome.recentProjects",
         title: "Recent Projects…",

@@ -6,7 +6,7 @@ import { executeAction } from "@/platform/actions";
 import { call, commands } from "@/platform/ipc";
 import { useTx, useTxTemplate } from "@/platform/i18n";
 import { basename, useProject } from "@/platform/project";
-import { Icon, Select, T, type SelectOption } from "@/ui";
+import { Icon, IconButton, Select, T, type SelectOption } from "@/ui";
 import { defaultTaskProject } from "./project";
 import { useWorkspace } from "@/features/welcome/workspace";
 import { maybeEditorService, type EditorInput } from "@/workbench/contributions";
@@ -162,6 +162,14 @@ export function HomeEditor({
                 ? basename(root)
                 : (project?.name ?? (wsRoot ? basename(wsRoot) : tx("Default workspace")))}
             </span>
+          )}
+          {!project?.workspace && (
+            <IconButton
+              icon="open-in-tool-window"
+              title="Open in IDE"
+              iconSize={14}
+              onClick={() => void executeAction("welcome.openInIDE")}
+            />
           )}
           {isGit && (
             <Select
