@@ -8,8 +8,15 @@ describe("agent chat settings", () => {
       showWorkTime: true,
       showUsageLimits: true,
       showCost: false,
+      binaries: {},
     });
     const stored = validateSettings({ agents: { showUsageLimits: false, showCost: true, showWorkTime: "no" } }).agents;
-    expect(stored).toEqual({ showContextUsage: true, showWorkTime: true, showUsageLimits: false, showCost: true });
+    expect(stored).toEqual({
+      showContextUsage: true,
+      showWorkTime: true,
+      showUsageLimits: false,
+      showCost: true,
+      binaries: {},
+    });
   });
 });

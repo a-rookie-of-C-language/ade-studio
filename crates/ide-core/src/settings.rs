@@ -45,9 +45,6 @@ pub struct Settings {
     /// Language servers / debug adapters at a user-chosen location, by the
     /// command the language definition launches (`elixir-ls`, `codelldb`).
     pub tools: BTreeMap<String, ToolSettings>,
-    /// Coding agents at a user-chosen location, by agent id (`claude`);
-    /// empty = auto-detect.
-    pub agents: BTreeMap<String, AgentBinarySettings>,
     /// Per language server, by name (`rust-analyzer`): launch and protocol
     /// options on top of the language definition, or a server defined here.
     pub language_servers: BTreeMap<String, LanguageServerSettings>,
@@ -81,11 +78,28 @@ pub struct AgentSettings {
     pub show_usage_limits: bool,
     /// What the session has cost so far, as the agent reports it.
     pub show_cost: bool,
+    /// Coding agents at a user-chosen location, by agent id (`claude`);
+    /// empty path = auto-detect.
+    pub binaries: BTreeMap<String, AgentBinarySettings>,
+}
+
+/// Executable to launch instead of the auto-detected one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AgentBinarySettings {
+    /// Executable to launch instead of the auto-detected one; empty = auto-detect.
+    pub path: String,
 }
 
 impl Default for AgentSettings {
     fn default() -> Self {
-        Self { show_context_usage: true, show_work_time: true, show_usage_limits: true, show_cost: false }
+        Self {
+            show_context_usage: true,
+            show_work_time: true,
+            show_usage_limits: true,
+            show_cost: false,
+            binaries: BTreeMap::new(),
+        }
     }
 }
 
@@ -129,13 +143,6 @@ impl Default for CMakeProfile {
 #[serde(default, rename_all = "camelCase")]
 pub struct ToolSettings {
     /// Executable to launch instead of the managed / `PATH` one; empty = auto-detect.
-    pub path: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(default, rename_all = "camelCase")]
-pub struct AgentBinarySettings {
-    /// Executable to launch instead of the auto-detected one; empty = auto-detect.
     pub path: String,
 }
 
@@ -211,7 +218,7 @@ impl Settings {
 
     /// The configured executable for the agent `id`, if any (`~/` not yet expanded).
     pub fn agent_path(&self, id: &str) -> Option<&str> {
-        self.agents.get(id).map(|a| a.path.trim()).filter(|p| !p.is_empty())
+        self.agents.binaries.get(id).map(|a| a.path.trim()).filter(|p| !p.is_empty())
     }
 }
 
@@ -237,7 +244,6 @@ impl Default for Settings {
             actions_on_save: ActionsOnSaveSettings::default(),
             external_tools: Vec::new(),
             tools: BTreeMap::new(),
-            agents: BTreeMap::new(),
             language_servers: BTreeMap::new(),
             inspections: InspectionSettings::default(),
             spelling: SpellingSettings::default(),
@@ -1060,6 +1066,18 @@ mod tests {
     }
 
     #[test]
+    fn agent_path_round_trip_and_trimming() {
+        let s: Settings =
+            serde_json::from_str(r#"{"agents":{"binaries":{"claude":{"path":"  /opt/claude  "}}}}"#).unwrap();
+        assert_eq!(s.agent_path("claude"), Some("/opt/claude"));
+        assert_eq!(s.agent_path("codex"), None);
+        let empty: Settings = serde_json::from_str(r#"{"agents":{"binaries":{"claude":{"path":"  "}}}}"#).unwrap();
+        assert_eq!(empty.agent_path("claude"), None);
+        let json = serde_json::to_value(Settings::default()).unwrap();
+        assert_eq!(json["agents"]["binaries"], serde_json::json!({}));
+    }
+
+    #[test]
     fn main_menu_style_defaults_and_round_trips() {
         let old: Settings = serde_json::from_str(r#"{"appearance":{"compactMode":true}}"#).unwrap();
         assert_eq!(old.appearance.main_menu_style, "hamburger");
@@ -1099,17 +1117,6 @@ mod tests {
         assert_eq!((k.name.as_str(), k.parent.as_str()), ("Mine", "vscode-macos"));
         assert!(k.overrides["file.save"].is_empty());
         assert_eq!(serde_json::to_value(Settings::default()).unwrap()["customKeymaps"], serde_json::json!({}));
-    }
-
-    #[test]
-    fn agent_path_round_trip_and_trimming() {
-        let s: Settings = serde_json::from_str(r#"{"agents":{"claude":{"path":"  /opt/claude  "}}}"#).unwrap();
-        assert_eq!(s.agent_path("claude"), Some("/opt/claude"));
-        assert_eq!(s.agent_path("codex"), None);
-        let empty: Settings = serde_json::from_str(r#"{"agents":{"claude":{"path":"  "}}}"#).unwrap();
-        assert_eq!(empty.agent_path("claude"), None);
-        let json = serde_json::to_value(Settings::default()).unwrap();
-        assert_eq!(json["agents"], serde_json::json!({}));
     }
 
     #[test]

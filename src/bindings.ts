@@ -1298,6 +1298,7 @@ export type ActiveTheme = {
 	theme: ThemeDef,
 };
 
+/**  Executable to launch instead of the auto-detected one. */
 export type AgentBinarySettings = {
 	/**  Executable to launch instead of the auto-detected one; empty = auto-detect. */
 	path?: string,
@@ -1581,6 +1582,11 @@ export type AgentSettings = {
 	showUsageLimits?: boolean,
 	/**  What the session has cost so far, as the agent reports it. */
 	showCost?: boolean,
+	/**
+	 *  Coding agents at a user-chosen location, by agent id (`claude`);
+	 *  empty path = auto-detect.
+	 */
+	binaries?: { [key in string]: AgentBinarySettings },
 };
 
 /**  Where an agent comes from. */
@@ -6784,11 +6790,6 @@ export type Settings_Deserialize = {
 	 */
 	tools?: { [key in string]: ToolSettings },
 	/**
-	 *  Coding agents at a user-chosen location, by agent id (`claude`);
-	 *  empty = auto-detect.
-	 */
-	agents?: { [key in string]: AgentBinarySettings },
-	/**
 	 *  Per language server, by name (`rust-analyzer`): launch and protocol
 	 *  options on top of the language definition, or a server defined here.
 	 */
@@ -6848,11 +6849,6 @@ export type Settings_Serialize = {
 	 *  command the language definition launches (`elixir-ls`, `codelldb`).
 	 */
 	tools: { [key in string]: ToolSettings },
-	/**
-	 *  Coding agents at a user-chosen location, by agent id (`claude`);
-	 *  empty = auto-detect.
-	 */
-	agents: { [key in string]: AgentBinarySettings },
 	/**
 	 *  Per language server, by name (`rust-analyzer`): launch and protocol
 	 *  options on top of the language definition, or a server defined here.
