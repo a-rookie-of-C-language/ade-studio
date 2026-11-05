@@ -295,7 +295,7 @@ impl Timeline {
                 && matches!(status, AgentSubagentStatus::Running | AgentSubagentStatus::NeedsInput)
             {
                 *status = AgentSubagentStatus::Cancelled;
-                *ended_ms = Some(now);
+                *ended_ms = (*ended_ms).or(Some(now));
                 changed.push(i);
             }
         }
@@ -478,6 +478,18 @@ mod tests {
         t.end_turn(Some(9.0));
         let AgentEntry::Tool { started_ms, ended_ms, status, .. } = &t.entries[0] else { panic!() };
         assert_eq!((*started_ms, *ended_ms, *status), (Some(5.0), Some(9.0), AgentToolStatus::Failed));
+    }
+
+    #[test]
+    fn stop_subagents_stamps_only_what_still_works() {
+        let mut t = Timeline::default();
+        t.subagent("done", &json!({"state": {"state": "idle"}}), 7.0);
+        t.subagent("open", &json!({"state": {"state": "running"}}), 5.0);
+        assert_eq!(t.stop_subagents(9.0), vec![1]);
+        let AgentEntry::Subagent { ended_ms: ended_done, .. } = &t.entries[0] else { panic!() };
+        let AgentEntry::Subagent { status, ended_ms: ended_open, .. } = &t.entries[1] else { panic!() };
+        assert!(matches!(status, AgentSubagentStatus::Cancelled));
+        assert_eq!((*ended_done, *ended_open), (Some(7.0), Some(9.0)));
     }
 
     #[test]
