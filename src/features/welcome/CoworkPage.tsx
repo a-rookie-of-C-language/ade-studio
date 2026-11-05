@@ -1,11 +1,12 @@
 /** Agent-first home: greeting + task composer; tasks rail; placeholders. */
-import { useMemo, type ComponentProps } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import type { AgentStatus } from "@/bindings";
 import { useT } from "@/platform/i18n";
 import { Icon } from "@/ui";
 import { HomeEditor } from "@/features/agents/HomeEditor";
 import { CoworkSession } from "@/features/agents/SessionEditor";
 import { openCoworkTask, openTask, useAgents } from "@/features/agents/store";
+import { HomeTerminalButton, HomeTerminalPanel } from "./HomeTerminal";
 import styles from "./Cowork.module.css";
 
 type IconName = ComponentProps<typeof Icon>["name"];
@@ -15,6 +16,7 @@ export function CoworkHome() {
   const t = useT();
   const coworkTask = useAgents((s) => s.coworkTask);
   const task = useAgents((s) => (coworkTask ? s.tasks.get(coworkTask) : undefined));
+  const [terminalOpen, setTerminalOpen] = useState(false);
   if (coworkTask && task) {
     return (
       <div className={styles.home}>
@@ -30,7 +32,11 @@ export function CoworkHome() {
   }
   return (
     <div className={styles.home}>
+      <div className={styles.topActions}>
+        <HomeTerminalButton open={terminalOpen} onToggle={() => setTerminalOpen((v) => !v)} />
+      </div>
       <HomeEditor heading={<span className={styles.greeting}>{t("cowork.greeting")}</span>} />
+      {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}
     </div>
   );
 }

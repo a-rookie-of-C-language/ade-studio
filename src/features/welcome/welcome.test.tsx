@@ -51,6 +51,30 @@ vi.mock("@/workbench/contributions", async (importOriginal) => {
   return { ...real, notifications: () => ({ notify }) };
 });
 
+// The drawer reuses the terminal runtime; stub it so these tests stay free of xterm and PTYs.
+const termTabs: Array<{ id: string; name: string; customName: null; session: string; group: string }> = [];
+const termNewTab = vi.fn((_cwd: unknown) => {
+  const n = termTabs.length;
+  const tab = { id: `t${n}`, name: "Local", customName: null, session: `s${n}`, group: "g" };
+  termTabs.push(tab);
+  return tab;
+});
+const termSnapshot = () => ({ tabs: termTabs, sessions: {}, selected: {}, activeTab: termTabs[0]?.id ?? null });
+vi.mock("@/features/terminal/loader", () => ({
+  loadTerminalRuntime: async () => ({
+    useTerminals: Object.assign((sel: (s: unknown) => unknown) => sel(termSnapshot()), {
+      getState: () => termSnapshot(),
+    }),
+    startDirectory: (dir: string) => dir,
+    newTab: (cwd: unknown) => termNewTab(cwd),
+    selectTab: vi.fn(),
+    requestCloseTab: vi.fn(),
+    tabTitle: (t: { name: string }) => t.name,
+    getSession: () => undefined,
+    activeSession: () => undefined,
+  }),
+}));
+
 import { registerActions } from "@/platform/actions";
 import { useProject } from "@/platform/project";
 import { ContextMenuHost } from "@/ui";
@@ -111,6 +135,8 @@ beforeEach(() => {
   invokeLocal.mockReset().mockResolvedValue({ trusted: true });
   dialogOpen.mockReset().mockResolvedValue(null);
   notify.mockReset();
+  termTabs.length = 0;
+  termNewTab.mockClear();
   useRecent.setState({ projects: [], loaded: false, home: null, version: null, opening: null });
   useWorkspace.setState({ root: null });
   useProject.setState({ project: null, settings: { appearance: { theme: "light" } } as Settings, opening: false });
@@ -276,6 +302,29 @@ describe("Welcome › Cowork", () => {
     expect(screen.getByRole("button", { name: "Scheduled" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+  });
+
+  it("opens a terminal drawer rooted at the workspace from the top-right button", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    await screen.findByLabelText("Terminal sessions");
+    expect(termNewTab).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
+    expect(screen.getByRole("button", { name: "New Tab" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByLabelText("Terminal sessions")).toBeNull();
+  });
+
+  it("roots new terminal tabs at the picked workspace", async () => {
+    useWorkspace.setState({ root: "/Users/me/repo/acme-api" });
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    await screen.findByLabelText("Terminal sessions");
+    expect(termNewTab).toHaveBeenCalledWith("/Users/me/repo/acme-api");
+    expect(
+      within(screen.getByRole("complementary", { name: "Terminal" })).getByTitle("/Users/me/repo/acme-api"),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New Tab" }));
+    expect(termNewTab).toHaveBeenCalledTimes(2);
   });
 });
 

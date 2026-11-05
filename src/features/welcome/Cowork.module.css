@@ -144,6 +144,16 @@
   justify-content: center;
   overflow-y: auto;
   background: var(--bg-editor);
+  /* The terminal button and drawer overlay this column. */
+  position: relative;
+}
+.topActions {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
 }
 .greeting {
   font-size: 27px;
@@ -223,4 +233,58 @@
   margin: 0;
   max-width: 420px;
   line-height: 20px;
+}
+
+/* ---- Home terminal drawer ---- */
+
+.terminalDrawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 94%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-popup);
+}
+.terminalHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.terminalTitle {
+  font-weight: 600;
+  color: var(--fg-strong);
+}
+.terminalCwd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-size: var(--fs-small);
+}
+.terminalSpacer {
+  flex: 1;
+}
+.terminalStrip {
+  padding: 6px 8px 0;
+}
+.terminalBody {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  margin: 4px 8px 8px;
+}
+.terminalPane {
+  position: absolute;
+  inset: 0;
+}
+.terminalPane.terminalExited {
+  opacity: 0.55;
 }

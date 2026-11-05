@@ -44,6 +44,32 @@ export function clearWorkspace() {
   useWorkspace.setState({ root: null });
 }
 
+/** Where the home terminal runs: the picked workspace, else the default one. */
+export async function resolveHomeCwd(): Promise<string | null> {
+  const picked = useWorkspace.getState().root;
+  if (picked) return picked;
+  if (!isTauri()) return null;
+  const home = await import("@tauri-apps/api/path").then((m) => m.homeDir()).catch(() => null);
+  if (!home) return null;
+  return `${home.replace(/\/+$/, "")}/.openidea/workspace`;
+}
+
+/**
+ * Makes sure the home terminal has a directory to start in (a fresh install
+ * has no default workspace yet). Best effort: a lost race reads as missing.
+ */
+export async function ensureHomeCwd(cwd: string): Promise<boolean> {
+  const exists = await call(commands.fsReadDir(cwd)).then(
+    () => true,
+    () => false,
+  );
+  if (exists) return true;
+  return call(commands.fsCreateDir(cwd)).then(
+    () => true,
+    () => false,
+  );
+}
+
 const desktopOnly = () =>
   notifications().notify({
     level: "warning",
