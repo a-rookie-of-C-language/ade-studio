@@ -6,7 +6,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { Icon, IconButton, Tabs, T, tooltipAttrs, type TabItem } from "@/ui";
-import { isTauri } from "@/platform/ipc";
 import { basename } from "@/platform/project";
 import { loadTerminalRuntime, type TerminalRuntime } from "@/features/terminal/loader";
 import { ensureHomeCwd, resolveHomeCwd } from "./workspace";
@@ -29,12 +28,6 @@ export const useHomeTerminal = create<HomeTerminalState>((set) => ({
 /** Tests only. */
 export function _resetHomeTerminalForTests() {
   useHomeTerminal.setState({ open: false, cwd: null });
-}
-
-/** Top-right button; hidden outside the desktop app (no PTY backend there). */
-export function HomeTerminalButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  if (!isTauri()) return null;
-  return <IconButton icon="terminal" title="Terminal" pressed={open} onClick={onToggle} />;
 }
 
 /** A session pane: attaches the store's xterm session, like the IDE's panes. */

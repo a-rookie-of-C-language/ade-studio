@@ -225,7 +225,13 @@ export function WelcomeView() {
         footer={<GearButton />}
       >
         <ExpandedOnly>
-          <CoworkTasks />
+          <CoworkTasks
+            onNewInProject={(path) => {
+              void selectWorkspace(path).then((ok) => {
+                if (ok) goHome();
+              });
+            }}
+          />
         </ExpandedOnly>
       </Sidebar>
       <section className={styles.content} aria-label={contentLabel} aria-busy={opening || undefined}>
