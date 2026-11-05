@@ -1,13 +1,13 @@
 /**
- * Closing a project returns to the Welcome screen, and a recent project opens from there into the
- * workbench. The backend's project handling is stubbed at the IPC layer; `crates/ide-host/tests`
- * covers opening and closing real projects.
+ * Closing a project returns to the Welcome screen, and a recent project becomes the agent
+ * workspace from there once trusted. The backend's project handling is stubbed at the IPC layer;
+ * `crates/ide-host/tests` covers opening and closing real projects.
  */
 import { doubleShift, expect, ipcCalls, stubDesktop, test } from "./fixtures";
 
 const BILLING = "/dev/billing";
 
-test("Close Project shows the Welcome screen; a recent project opens from it once trusted", async ({
+test("Close Project shows the Welcome screen; a recent project becomes the workspace once trusted", async ({
   workbench: page,
 }) => {
   await stubDesktop(page);
@@ -51,21 +51,26 @@ test("Close Project shows the Welcome screen; a recent project opens from it onc
   await expect(search.getByRole("option", { name: /^Close Project/ }).first()).toBeVisible();
   await page.keyboard.press("Enter");
 
-  const projects = page.getByRole("region", { name: "Projects" });
+  // The agent-first home lands on Cowork; recent projects live under Projects.
+  const nav = page.getByRole("navigation", { name: "Cowork" });
+  await expect(nav).toBeVisible();
   await expect(page.getByRole("tree", { name: "Project" })).toBeHidden();
-  await expect(projects.getByRole("option", { name: /^billing/ })).toBeVisible();
   expect(await ipcCalls(page, "close_project")).toHaveLength(1);
+
+  await nav.getByRole("button", { name: "Projects" }).click();
+  const projects = page.getByRole("region", { name: "Projects" });
+  await expect(projects.getByRole("option", { name: /^billing/ })).toBeVisible();
 
   await projects.getByRole("option", { name: /^billing/ }).click();
   // A project not yet trusted asks first.
   const trust = page.getByRole("dialog", { name: "Trust and Open Project?" });
   await expect(trust).toBeVisible();
-  expect(await ipcCalls(page, "open_project")).toHaveLength(0);
   await trust.getByRole("button", { name: "Trust Project" }).click();
   await expect(trust).toBeHidden();
   expect(await ipcCalls(page, "project_trust_set")).toEqual([{ path: BILLING, trusted: true, folder: false }]);
-  await expect.poll(() => ipcCalls(page, "open_project")).toEqual([{ path: BILLING }]);
-  const tree = page.getByRole("tree", { name: "Project" });
-  await expect(tree.getByRole("treeitem", { name: /^billing/ })).toBeVisible();
-  await expect(tree.getByRole("treeitem", { name: "package.json" })).toBeVisible();
+  // Trusting points the home workspace at the project and returns to Cowork.
+  await expect
+    .poll(() => page.evaluate(() => window.localStorage.getItem("openidea.workspace.root")))
+    .toBe(JSON.stringify(BILLING));
+  await expect(page.getByRole("navigation", { name: "Cowork" })).toBeVisible();
 });

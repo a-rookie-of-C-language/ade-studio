@@ -52,7 +52,7 @@ describe("inlay hints", () => {
     const view = editorWith([hint]);
     const part = view.dom.querySelector<HTMLElement>(".cm-lsp-inlay-part")!;
     expect(part.textContent).toBe("Foo");
-    expect(part.title).toBe("struct Foo");
+    expect(part.dataset.tooltip).toBe("struct Foo");
     expect(view.dom.querySelector(".cm-lsp-inlay")!.textContent).toBe(": Foo");
     part.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
     expect(openFile).not.toHaveBeenCalled();
