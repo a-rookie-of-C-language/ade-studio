@@ -23,7 +23,7 @@ pub use model::*;
 
 use conversation::{Conversation, SavedSubagent, Session};
 use ide_core::{IdeError, IdeResult, IpcPath};
-use ide_jsonrpc::{Framing, Handler, Peer, RpcError, codes};
+use ide_jsonrpc::{Framing, Handler, NoopHandler, Peer, RpcError, codes};
 use ide_vcs::Repo;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -401,6 +401,80 @@ impl AgentManager {
         let home = self.shared.paths.home_dir.clone();
         let found = blocking(move || Ok(skills::discover(&cwd, home.as_deref()))).await?;
         Ok(skills::merge(offered, found))
+    }
+
+    /// The settings `provider` advertises without a task: its session-free model
+    /// discovery lists. `Command` agents list only models (wrapped as a `model`
+    /// option); `Session` agents open a disposable session and return its whole
+    /// `configOptions` (model, mode, effort…).
+    pub async fn models(&self, provider: &str) -> IdeResult<Vec<AgentConfigOption>> {
+        let spec = self.shared.spec(provider).ok_or_else(|| IdeError::invalid(format!("unknown agent {provider}")))?;
+        if !provider::installed(&spec) {
+            return Err(IdeError::unavailable(format!("{} is not installed", spec.name)));
+        }
+        match &spec.model_discovery {
+            provider::ModelDiscovery::None => Ok(Vec::new()),
+            provider::ModelDiscovery::Command { args } => {
+                let command = spec.resolve_command();
+                let args = args.clone();
+                let env = spec.env.clone();
+                let output = blocking(move || run_listing(&command, &args, &env)).await?;
+                let values = parse_model_listing(&output);
+                Ok(if values.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![AgentConfigOption {
+                        id: "model".to_owned(),
+                        name: "Model".to_owned(),
+                        description: None,
+                        category: Some("model".to_owned()),
+                        current: values.first().map(|v| v.value.clone()),
+                        values,
+                        via: AgentConfigVia::Option,
+                    }]
+                })
+            }
+            provider::ModelDiscovery::Session => self.discover_models_in_session(&spec).await,
+        }
+    }
+
+    /// `ModelDiscovery::Session`: spawns the agent's ACP server in a throwaway
+    /// directory, opens `session/new`, reads `configOptions`/`models`, then
+    /// kills the peer. The conversation is discarded.
+    async fn discover_models_in_session(&self, spec: &provider::ProviderSpec) -> IdeResult<Vec<AgentConfigOption>> {
+        let dir = std::env::temp_dir().join(format!("openidea-models-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).map_err(|e| IdeError::internal(e.to_string()))?;
+        let cwd = dir.clone();
+        let spec = spec.clone();
+        let name = spec.name.clone();
+        let connector = self.shared.connector.clone();
+        let result = async move {
+            let on_stderr: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+            let peer = connector(&spec, &cwd, Arc::new(NoopHandler), on_stderr)
+                .map_err(|e| format!("Couldn't start {}: {e}", spec.name))?;
+            let _: Value = peer
+                .request(
+                    "initialize",
+                    json!({
+                        "protocolVersion": 1,
+                        "clientCapabilities": {},
+                        "clientInfo": { "name": "OpenIDEA", "version": env!("CARGO_PKG_VERSION") },
+                    }),
+                    None,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let cwd_s = cwd.to_string_lossy().into_owned();
+            let v: Value = peer
+                .request("session/new", json!({ "cwd": cwd_s, "mcpServers": [] }), None)
+                .await
+                .map_err(|e| e.to_string())?;
+            peer.kill();
+            Ok::<Vec<AgentConfigOption>, String>(config::options_of(&v))
+        }
+        .await;
+        let _ = std::fs::remove_dir_all(&dir);
+        result.map_err(|e| IdeError::unavailable(format!("model discovery failed for {name}: {e}")))
     }
 
     fn task(&self, id: &str) -> IdeResult<Arc<Task>> {
@@ -1600,6 +1674,11 @@ impl Task {
     /// Applies a `session/update` of session `session` (the task's, or one of its subagents').
     fn on_update(self: &Arc<Self>, session: Option<&str>, update: &Value) {
         let kind = update.get("sessionUpdate").and_then(Value::as_str).unwrap_or_default();
+        // Agent-private update kinds that map to nothing useful here
+        // (e.g. OpenCode's question forms): drop before the timeline sees them.
+        if withheld_updates(&self.state.lock().task.provider, kind) {
+            return;
+        }
         // A subagent's title, settings and usage are its own, not the task's.
         if self.state.lock().conversation.owner(session).is_some() {
             if !SESSION_STATE.contains(&kind) && !self.replaying.load(Ordering::Acquire) {
@@ -2003,8 +2082,64 @@ fn builtin_commands(provider: &str) -> &'static [(&'static str, &'static str)] {
     match provider {
         // OpenCode ACP handles `/compact` via session.summarize but omits it from its command list.
         "opencode" => &[("compact", "compact the conversation")],
+        // Claude Code's CLI `/compact`.
+        "claude" | "claude-acp" => &[("compact", "compact the conversation")],
         _ => &[],
     }
+}
+
+/// Whether a `session/update` kind from `provider` is agent-private noise that maps
+/// to nothing useful here: dropped before the timeline sees it.
+fn withheld_updates(provider: &str, kind: &str) -> bool {
+    match provider {
+        // OpenCode 1.x hangs on question forms and waits forever for permission answers;
+        // its `toolCallQuestion` updates are noise here (question tool disabled via env).
+        "opencode" => kind == "toolCallQuestion",
+        _ => false,
+    }
+}
+
+/// Runs the provider's model-listing command and captures its stdout
+/// (`ModelDiscovery::Command`, like OpenCode 1.x's `opencode models --verbose`).
+fn run_listing(command: &str, args: &[String], env: &[(String, String)]) -> IdeResult<String> {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(command);
+    ide_core::process::prepare(&mut cmd);
+    cmd.args(args)
+        .envs(ide_core::process::shell_env())
+        .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().map_err(|e| IdeError::unavailable(format!("`{command}` failed to start: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(IdeError::unavailable(format!(
+            "`{command} {}` exited with {}: {}",
+            args.join(" "),
+            output.status,
+            stderr.trim()
+        )));
+    }
+    String::from_utf8(output.stdout).map_err(|e| IdeError::internal(format!("`{command}` output was not UTF-8: {e}")))
+}
+
+/// Parses `command`'s stdout into model choices. The listing format is one
+/// model per line; `--verbose` variants add columns we ignore (`name`, `id`,
+/// or `id  name` depending on the agent — we keep the whole line as the value
+/// and its first column as the name).
+fn parse_model_listing(stdout: &str) -> Vec<AgentConfigValue> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|line| {
+            let (name, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(a, b)| (a, b.trim()));
+            let (value, description) =
+                if rest.is_empty() { (line.to_owned(), None) } else { (name.to_owned(), Some(rest.to_owned())) };
+            AgentConfigValue { value, name: name.to_owned(), description }
+        })
+        .collect()
 }
 
 fn file_name(path: &Path) -> String {

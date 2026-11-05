@@ -107,6 +107,11 @@ export const commands = {
 	agentSubscribe: (onEvent: Channel<AgentEvent>) => typedError<AgentTask[], IdeError>(__TAURI_INVOKE("agent_subscribe", { onEvent })),
 	agentProviders: () => typedError<AgentProvider[], IdeError>(__TAURI_INVOKE("agent_providers")),
 	/**
+	 *  Session settings (model, mode, effort…) `provider` advertises without a task,
+	 *  so the New Task page shows its pickers before the first session.
+	 */
+	agentModels: (provider: string) => typedError<AgentConfigOption[], IdeError>(__TAURI_INVOKE("agent_models", { provider })),
+	/**
 	 *  Overrides built-in agent `id`'s command with `command` (its agent file keeps the
 	 *  built-in's driver and arguments), or returns it to auto-detection with `None`.
 	 */

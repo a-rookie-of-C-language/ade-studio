@@ -464,6 +464,7 @@ fn install_entry(
         command: exe.to_string_lossy().into_owned(),
         args,
         env,
+        install_dirs: Vec::new(),
         registry: Some(RegistryRef { id: entry.id.clone(), version: entry.version.clone() }),
     };
     agent.write(&file)?;
@@ -814,6 +815,7 @@ mod tests {
             command: "/x".into(),
             args: vec![],
             env: BTreeMap::new(),
+            install_dirs: Vec::new(),
             registry: Some(RegistryRef { id: id.into(), version: version.into() }),
         };
         installed("amp-acp", "0.9.0").write(&p.agent_file("amp-acp")).unwrap();
@@ -920,7 +922,7 @@ mod tests {
         assert_eq!(agent.registry, Some(RegistryRef { id: "demo".into(), version: "1.0.0".into() }));
         let spec = provider::load(Some(&p.agents_dir)).into_iter().find(|s| s.id == "demo").unwrap();
         assert_eq!(spec.source, AgentSource::Registry { version: "1.0.0".into(), update: None });
-        assert!(provider::installed(&spec.command));
+        assert!(provider::installed(&spec));
 
         // A bad checksum fails and leaves the installed version in place.
         let bad = parse(&index("2.0.0", &"0".repeat(64))).unwrap();
@@ -982,6 +984,7 @@ mod tests {
             command: "/data/tools/copilot/1.0.104/node_modules/.bin/copilot".into(),
             args: vec!["--acp".into()],
             env: BTreeMap::new(),
+            install_dirs: Vec::new(),
             registry: Some(RegistryRef { id: "copilot".into(), version: "1.0.104".into() }),
         }
         .write(&p.agent_file("copilot"))

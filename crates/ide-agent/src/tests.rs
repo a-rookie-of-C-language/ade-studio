@@ -221,8 +221,9 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let names = |c: Vec<AgentCommand>| c.into_iter().map(|c| c.name).collect::<Vec<_>>();
 
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
-    // Before any session: only the skills on disk.
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["triage"]);
+    // Before any session: the skills on disk, plus Claude Code's CLI `/compact`
+    // (which it omits from its own command list). Builtins merge first.
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["compact", "triage"]);
     let task = mgr_a
         .create(NewAgentTask {
             project_root: None,
@@ -236,8 +237,8 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
         .await
         .unwrap();
     wait_for(&mgr_a, &task.id, AgentStatus::NeedsInput).await;
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "triage"]);
-    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "compact", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "compact", "triage"]);
     // Other agents get only what they offered.
     assert!(mgr_a.commands("codex", None).await.unwrap().is_empty());
     mgr_a.cancel(&task.id, None).unwrap();
@@ -249,7 +250,7 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let claude = mgr_b.providers().into_iter().find(|p| p.id == "claude").unwrap();
     assert_eq!(claude.config.len(), 2);
     assert!(claude.commands.is_empty());
-    assert!(mgr_b.commands("claude", None).await.unwrap().is_empty());
+    assert_eq!(names(mgr_b.commands("claude", None).await.unwrap()), ["compact"]);
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
     assert_eq!(names(mgr_a.providers().into_iter().find(|p| p.id == "claude").unwrap().commands), ["review"]);
 }
@@ -259,11 +260,14 @@ async fn builtin_commands_only_fill_verified_gaps_and_preserve_advertised_metada
     let tmp = tempfile::tempdir().unwrap();
     let agent = Arc::new(FakeAgent::default());
     let mgr = manager_at(tmp.path(), &tmp.path().join("models.json"), agent);
-    for provider in ["claude", "claude-acp", "opencode2", "codex", "custom"] {
+    for provider in ["opencode2", "codex", "custom"] {
         assert!(mgr.commands(provider, None).await.unwrap().is_empty(), "{provider}");
     }
-    let commands = mgr.commands("opencode", None).await.unwrap();
-    assert_eq!(commands.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["compact"]);
+    // The CLI `/compact` these agents omit from their own command lists.
+    for provider in ["opencode", "claude", "claude-acp"] {
+        let commands = mgr.commands(provider, None).await.unwrap();
+        assert_eq!(commands.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["compact"], "{provider}");
+    }
     let task = mgr
         .create(NewAgentTask {
             project_root: None,
@@ -1352,4 +1356,23 @@ async fn launch_receipt_records_surface_and_replays_operation_id() {
     wait_for(&mgr, &first.id, AgentStatus::Ready).await;
     wait_for(&mgr, &second.id, AgentStatus::Ready).await;
     mgr.shutdown();
+}
+
+#[test]
+fn model_listing_keeps_one_choice_per_line() {
+    let values = parse_model_listing("# header\n\nopenai/gpt-5 400k context\nanthropic/claude-opus\n");
+    assert_eq!(values.len(), 2);
+    assert_eq!(values[0].value, "openai/gpt-5");
+    assert_eq!(values[0].name, "openai/gpt-5");
+    assert_eq!(values[0].description.as_deref(), Some("400k context"));
+    assert_eq!(values[1].value, "anthropic/claude-opus");
+    assert_eq!(values[1].description, None);
+    assert!(parse_model_listing("").is_empty());
+}
+
+#[test]
+fn opencode_question_forms_are_withheld_from_the_timeline() {
+    assert!(withheld_updates("opencode", "toolCallQuestion"));
+    assert!(!withheld_updates("opencode", "agent_message_chunk"));
+    assert!(!withheld_updates("claude", "toolCallQuestion"));
 }
