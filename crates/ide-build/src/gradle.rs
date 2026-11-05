@@ -440,7 +440,9 @@ pub fn load(root: &Path) -> Option<GradleModel> {
 
 /// Loads exactly this build, without searching its child folders.
 pub fn load_build(root: &Path, dir: &Path) -> Option<GradleModel> {
-    let dir = root.join(dir);
+    // Linked settings store `/`-style identities: resolve to native separators
+    // so wrapper/launcher paths match what the platform reports.
+    let dir: PathBuf = root.join(dir).components().collect();
     if !SETTINGS_FILES.iter().chain(BUILD_FILES).any(|name| dir.join(name).is_file()) {
         return None;
     }
