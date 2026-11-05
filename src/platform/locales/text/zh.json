@@ -6284,5 +6284,6 @@
   "Turn {turn}": "第 {turn} 轮",
   "error": "个错误",
   "errors": "个错误",
-  "Timing overview": "时序概览"
+  "Timing overview": "时序概览",
+  "Open Terminal": "打开终端"
 }
