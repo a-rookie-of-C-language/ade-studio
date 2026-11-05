@@ -43,6 +43,7 @@ import {
   costLabel,
   emptyDraft,
   formatTokens,
+  launchLabel,
   limitLabel,
   retryParts,
   usageLabel,
@@ -366,6 +367,7 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
   const work = show?.showWorkTime !== false && entries ? workTime(entries, busy ? now : null) : 0;
   return (
     <span className={styles.meters}>
+      <LaunchEnv task={task} />
       {limits.map((l) => (
         <Limit key={l.window} limit={l} now={now} />
       ))}
@@ -373,6 +375,22 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
         <span {...tooltipAttrs("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>
       )}
       {work >= 1000 && <span {...tooltipAttrs("Time the agent spent on this task")}>{formatDuration(work)}</span>}
+    </span>
+  );
+}
+
+/**
+ * Where the task runs, above the context meter: the agent and the binary and
+ * surface the backend launched, or unknown when it reported nothing (tasks
+ * saved before the launch receipt). Installed state and fallback cause show
+ * only when the backend reports them.
+ */
+function LaunchEnv({ task }: { task: AgentTask }) {
+  const label = launchLabel(task.launch, providerName(task.provider));
+  return (
+    <span className={styles.meter} title={label.detail} aria-label={label.detail}>
+      <Icon name={providerIcon(task.provider)} size={13} />
+      {label.short}
     </span>
   );
 }

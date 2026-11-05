@@ -516,6 +516,12 @@ export async function startTask(
       config: Object.entries(config).map(([id, value]) => ({ id, value })),
       isolation,
       base: isolation === "worktree" ? draft.base : null,
+      // Idempotency key: a retried click replays to the first task instead of
+      // starting a duplicate (the backend returns it on the launch receipt).
+      operationId:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`,
     }),
   );
   // Its events can arrive before this reply: keep the newer state they carried.

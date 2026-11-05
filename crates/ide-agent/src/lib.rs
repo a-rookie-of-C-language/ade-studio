@@ -415,6 +415,20 @@ impl AgentManager {
             .shared
             .spec(&req.provider)
             .ok_or_else(|| IdeError::invalid(format!("unknown agent {}", req.provider)))?;
+        // Idempotent replay: the same `operationId` returns the first task instead of
+        // a duplicate (Orca launch semantics). Only in-memory tasks are scanned; the
+        // receipt is persisted on the task, so reloaded tasks match too.
+        if let Some(op) = req.operation_id.as_deref()
+            && !op.is_empty()
+            && let Some(task) = self
+                .tasks
+                .read()
+                .values()
+                .map(|t| t.state.lock().task.clone())
+                .find(|t| t.launch.as_ref().is_some_and(|l| l.operation_id.as_deref() == Some(op)))
+        {
+            return Ok(task);
+        }
         let prompt = clean(req.prompt).ok_or_else(|| IdeError::invalid("describe the task first"))?;
         let title = title_of(&prompt);
         let root = req.project_root.clone().map(|p| p.0).unwrap_or_else(|| self.shared.paths.project_root.clone());
@@ -449,6 +463,7 @@ impl AgentManager {
             }
         }
         let now = now_ms();
+        let launch = Some(Box::new(provider::launch_receipt(&spec, req.operation_id.clone())));
         let task = AgentTask {
             project_root,
             id: uuid::Uuid::new_v4().simple().to_string(),
@@ -471,6 +486,7 @@ impl AgentManager {
             capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
             resets_ms: None,
             retry: None,
+            launch,
         };
         let file = TaskFile {
             task: task.clone(),

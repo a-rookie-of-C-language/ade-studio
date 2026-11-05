@@ -26,5 +26,11 @@
   "New task in this project": "New task in this project",
   "Model {model}": "Model {model}",
   "Estimated from the last response": "Estimated from the last response",
-  "{name}: {tokens} tokens": "{name}: {tokens} tokens"
+  "{name}: {tokens} tokens": "{name}: {tokens} tokens",
+  "chat": "chat",
+  "terminal": "terminal",
+  "Runs in {surface}": "Runs in {surface}",
+  "Not installed": "Not installed",
+  "Fell back: {reason}": "Fell back: {reason}",
+  "How this task was launched was not reported": "How this task was launched was not reported"
 }

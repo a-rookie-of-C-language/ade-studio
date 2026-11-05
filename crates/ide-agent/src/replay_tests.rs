@@ -62,6 +62,7 @@ async fn create(mgr: &AgentManager, provider: &str, prompt: &str) -> String {
         config: config(provider),
         isolation: Isolation::Local,
         base: None,
+        operation_id: None,
     };
     mgr.create(req).await.unwrap().id
 }
