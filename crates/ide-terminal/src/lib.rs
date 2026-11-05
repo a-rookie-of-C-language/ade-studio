@@ -32,7 +32,8 @@ const KILL_GRACE: Duration = Duration::from_millis(1500);
 #[serde(rename_all = "camelCase")]
 pub struct TerminalOptions {
     pub cwd: ide_core::IpcPath,
-    /// Defaults to the user's login shell (passwd entry, then `$SHELL`; PowerShell or `COMSPEC` on Windows).
+    /// Defaults to the user's login shell (passwd entry, then `$SHELL`; `niu.exe` when installed,
+    /// else PowerShell or `COMSPEC` on Windows).
     pub shell: Option<String>,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
@@ -524,7 +525,7 @@ pub fn available_shells() -> Vec<String> {
     add(PathBuf::from(default_shell()));
     #[cfg(unix)]
     {
-        const NAMES: [&str; 5] = ["zsh", "bash", "fish", "nu", "pwsh"];
+        const NAMES: [&str; 6] = ["zsh", "bash", "fish", "nu", "niu", "pwsh"];
         let listed = std::fs::read_to_string("/etc/shells").unwrap_or_default();
         for name in NAMES {
             for line in listed.lines().map(str::trim).filter(|l| l.starts_with('/')) {
@@ -539,7 +540,7 @@ pub fn available_shells() -> Vec<String> {
     }
     #[cfg(windows)]
     {
-        for exe in ["pwsh.exe", "powershell.exe", "cmd.exe", ide_core::wsl::EXE] {
+        for exe in ["niu.exe", "pwsh.exe", "powershell.exe", "cmd.exe", ide_core::wsl::EXE] {
             if let Some(p) = find_in_path(exe) {
                 add(p);
             }
@@ -598,7 +599,8 @@ fn login_shell() -> Option<String> {
 
 #[cfg(windows)]
 fn default_shell() -> String {
-    for candidate in ["pwsh.exe", "powershell.exe"] {
+    // `niu.exe` first when the user has it installed; otherwise the PowerShell fallback chain.
+    for candidate in ["niu.exe", "pwsh.exe", "powershell.exe"] {
         if let Some(path) = find_in_path(candidate) {
             return path.to_string_lossy().into_owned();
         }
