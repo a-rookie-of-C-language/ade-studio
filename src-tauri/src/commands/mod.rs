@@ -69,6 +69,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         android::android_logcat,
         app::recent_projects,
         app::remove_recent_project,
+        app::touch_recent_project,
         app::recent_project_groups,
         app::set_recent_project_groups,
         app::open_project,

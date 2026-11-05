@@ -17,6 +17,11 @@ export const commands = {
 	androidLogcat: (request: RequestId, serial: string, clear: boolean, onLines: Channel<LogcatLine[]>) => typedError<null, IdeError>(__TAURI_INVOKE("android_logcat", { request, serial, clear, onLines })),
 	recentProjects: () => __TAURI_INVOKE<RecentProject[]>("recent_projects"),
 	removeRecentProject: (path: string) => typedError<null, IdeError>(__TAURI_INVOKE("remove_recent_project", { path })),
+	/**
+	 *  Records `path` in the recent projects without opening it (the agent-first
+	 *  home selects workspace folders instead of opening IDE projects).
+	 */
+	touchRecentProject: (path: string) => typedError<null, IdeError>(__TAURI_INVOKE("touch_recent_project", { path })),
 	/**  The welcome screen's project groups. */
 	recentProjectGroups: () => __TAURI_INVOKE<RecentProjectGroup[]>("recent_project_groups"),
 	/**

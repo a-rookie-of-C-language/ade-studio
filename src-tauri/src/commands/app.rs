@@ -49,6 +49,15 @@ pub fn remove_recent_project(state: State<'_, AppState>, path: PathBuf) -> IdeRe
     state.recent.remove(&path)
 }
 
+/// Records `path` in the recent projects without opening it (the agent-first
+/// home selects workspace folders instead of opening IDE projects).
+#[tauri::command]
+#[specta::specta]
+pub fn touch_recent_project(state: State<'_, AppState>, path: PathBuf) -> IdeResult<()> {
+    state.note_ipc();
+    state.recent.touch(&dunce::canonicalize(path)?, None)
+}
+
 /// The welcome screen's project groups.
 #[tauri::command]
 #[specta::specta]

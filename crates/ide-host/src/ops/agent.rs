@@ -187,11 +187,21 @@ pub fn entries(host: &Host, window: &str, task: String, subagent: Option<String>
 pub async fn create(host: &Host, window: &str, mut request: NewAgentTask) -> IdeResult<AgentTask> {
     let project = host.project_or_default(window)?;
     project.require_trust()?;
+    // The agent-first home has no explicit project: the user picks the workspace
+    // folder itself, so anything on disk goes (trust is checked below).
+    let explicit = host.project(window).is_ok();
     let root = project.root.clone();
     let requested = request.project_root.take();
-    request.project_root = Some(IpcPath(
-        host.blocking(move || validate_project_root(&root, requested.as_ref().map(|p| p.0.as_path()))).await?,
-    ));
+    // Canonicalized once here so the trust check below can skip the window root itself.
+    let window_root = dunce::canonicalize(&root).unwrap_or_else(|_| root.clone());
+    let probe = window_root.clone();
+    let resolved = host
+        .blocking(move || validate_project_root(&probe, requested.as_ref().map(|p| p.0.as_path()), explicit))
+        .await?;
+    if resolved != window_root && !host.trust.trusted(&resolved)? {
+        return Err(IdeError::unavailable("This folder is in Restricted Mode. Trust it to run agents here."));
+    }
+    request.project_root = Some(IpcPath(resolved));
     project.agents.create(request).await
 }
 
@@ -323,7 +333,11 @@ pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_base_text", |c| async move { base_text(&c.host, &c.window, c.arg("task")?, c.arg("path")?).await });
 }
 
-fn validate_project_root(root: &std::path::Path, requested: Option<&std::path::Path>) -> IdeResult<std::path::PathBuf> {
+fn validate_project_root(
+    root: &std::path::Path,
+    requested: Option<&std::path::Path>,
+    explicit: bool,
+) -> IdeResult<std::path::PathBuf> {
     let Some(requested) = requested else {
         return Ok(root.to_path_buf());
     };
@@ -335,6 +349,11 @@ fn validate_project_root(root: &std::path::Path, requested: Option<&std::path::P
     if requested == window_root
         || ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested))
     {
+        return Ok(requested);
+    }
+    // No explicit project (the agent-first home): the user picked this folder as
+    // their workspace, so any folder on disk goes; trust is checked by the caller.
+    if !explicit && requested.is_dir() {
         return Ok(requested);
     }
     Err(IdeError::invalid("Agent project must be the window project or a workspace member"))
@@ -366,13 +385,31 @@ mod tests {
         for dir in [&root, &member, &other, &member.join("child")] {
             std::fs::create_dir_all(dir).unwrap();
         }
-        assert_eq!(validate_project_root(&root, None).unwrap(), root);
-        assert_eq!(validate_project_root(&root, Some(&root)).unwrap(), dunce::canonicalize(&root).unwrap());
-        assert!(validate_project_root(&root, Some(&member)).is_err());
+        assert_eq!(validate_project_root(&root, None, true).unwrap(), root);
+        assert_eq!(validate_project_root(&root, Some(&root), true).unwrap(), dunce::canonicalize(&root).unwrap());
+        assert!(validate_project_root(&root, Some(&member), true).is_err());
         ide_workspace::workspace::Workspace::save(&root, "Workspace", vec![member.clone()], true).unwrap();
-        assert_eq!(validate_project_root(&root, Some(&member)).unwrap(), dunce::canonicalize(&member).unwrap());
+        assert_eq!(validate_project_root(&root, Some(&member), true).unwrap(), dunce::canonicalize(&member).unwrap());
         for rejected in [other, member.join("child"), member.join("../other"), "relative".into()] {
-            assert!(validate_project_root(&root, Some(&rejected)).is_err(), "{rejected:?}");
+            assert!(validate_project_root(&root, Some(&rejected), true).is_err(), "{rejected:?}");
         }
+    }
+
+    #[test]
+    fn agent_roots_allow_any_folder_without_an_explicit_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("workspace");
+        let picked = tmp.path().join("picked");
+        let file = tmp.path().join("file.txt");
+        for dir in [&root, &picked] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(&file, "x").unwrap();
+        // The agent-first home: the user picked this folder as their workspace.
+        assert_eq!(validate_project_root(&root, Some(&picked), false).unwrap(), dunce::canonicalize(&picked).unwrap());
+        // Files, missing folders and relative paths still fail.
+        assert!(validate_project_root(&root, Some(&file), false).is_err());
+        assert!(validate_project_root(&root, Some(&tmp.path().join("missing")), false).is_err());
+        assert!(validate_project_root(&root, Some(std::path::Path::new("relative")), false).is_err());
     }
 }
