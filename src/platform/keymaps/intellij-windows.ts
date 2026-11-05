@@ -148,6 +148,8 @@ export const intellijWindows: Record<string, string[]> = {
   "editor.cloneCaretBelow": ["Ctrl Ctrl+Down"],
   "editor.matchBrace": ["Ctrl+Shift+M"],
   "editor.toggleInsertState": ["Insert"],
+  // IDEA leaves Soft-Wrap unbound; we use VS Code's Alt+Z so the issue's shortcut exists on the default keymap.
+  "editor.toggleSoftWrap": ["Alt+Z"],
   "code.joinLines": ["Ctrl+Shift+J"],
   "code.toggleCase": ["Ctrl+Shift+U"],
   "code.pasteFromHistory": ["Ctrl+Shift+V"],

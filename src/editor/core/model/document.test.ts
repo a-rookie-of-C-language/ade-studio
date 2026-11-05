@@ -122,6 +122,25 @@ describe("DocumentManager + slots", () => {
     expect(backend.docs.get(model.doc)?.text).toBe("0abcdef");
   });
 
+  it("starts with soft wraps off when the setting is off", async () => {
+    const { manager } = setup({ "/p/a.txt": "hello\n" });
+    const model = await manager.acquire("/p/a.txt");
+    expect(model.softWrapOn()).toBe(false);
+    expect(useDocMeta.getState()["/p/a.txt"]?.softWrap).toBe(false);
+  });
+
+  it("toggles soft wrap per file, overriding the setting until the file closes", async () => {
+    const { manager } = setup({ "/p/a.txt": "hello\n" }, { editor: { softWrap: true } });
+    const model = await manager.acquire("/p/a.txt");
+    expect(model.softWrapOn()).toBe(true);
+    expect(useDocMeta.getState()["/p/a.txt"]?.softWrap).toBe(true);
+    model.toggleSoftWrap();
+    expect(model.softWrapOn()).toBe(false);
+    expect(useDocMeta.getState()["/p/a.txt"]?.softWrap).toBe(false);
+    model.toggleSoftWrap();
+    expect(useDocMeta.getState()["/p/a.txt"]?.softWrap).toBe(true);
+  });
+
   it("trims modified lines and adds the final newline on save", async () => {
     const { backend, manager, frame } = setup({ "/p/a.txt": "keep   \nline" });
     const model = await manager.acquire("/p/a.txt");
