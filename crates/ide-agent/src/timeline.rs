@@ -512,6 +512,21 @@ mod tests {
     }
 
     #[test]
+    fn timing_survives_a_save_and_load_round_trip() {
+        let mut t = Timeline::default();
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}),
+            10.0,
+        );
+        t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed"}), 20.0);
+        let saved = serde_json::to_value(&t.entries).unwrap();
+        let loaded: Vec<AgentEntry> = serde_json::from_value(saved).unwrap();
+        assert_eq!(loaded, t.entries);
+        let again = Timeline::from_entries(loaded);
+        assert_eq!(again.tools.get("c"), Some(&0));
+    }
+
+    #[test]
     fn plan_is_one_entry_and_end_turn_settles_open_items() {
         let mut t = Timeline::default();
         let plan =
