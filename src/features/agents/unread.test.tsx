@@ -6,6 +6,7 @@ import { AgentsView } from "./AgentsView";
 import { AgentsStatus } from "./AgentsStatus";
 import { activate } from "./index";
 import * as actions from "@/platform/actions";
+import { useProject } from "@/platform/project";
 import { TASK_DRAG } from "./model";
 import {
   connect,
@@ -100,6 +101,18 @@ beforeEach(async () => {
   disconnect();
   backend.active = null;
   backend.tabs = [];
+  // Workbench tests open sessions in editor tabs: pretend a project is open so
+  // `openTask` does not take the Cowork-home inline path (no project open).
+  useProject.setState({
+    project: {
+      root: "/project",
+      name: "project",
+      trusted: true,
+      isGit: true,
+      settings: {} as never,
+    },
+    lightEdit: false,
+  });
   useAgents.setState({ sessionLocation: "editor" });
   localStorage.clear();
   backend.tasks = [task("one"), task("two", "ready")];
@@ -108,6 +121,7 @@ beforeEach(async () => {
 afterEach(() => {
   visible.splice(0).forEach((hide) => hide());
   disconnect();
+  useProject.setState({ project: null, lightEdit: false });
   vi.restoreAllMocks();
 });
 

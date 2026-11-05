@@ -37,15 +37,17 @@ export function activateSettingsPages(): () => void {
 }
 
 export function activate(): () => void {
-  const sync = (root: string | null | undefined) => {
+  // Cowork home has no explicit project, but the backend falls back to the
+  // default workspace (`~/.openidea/workspace`), so always stay subscribed.
+  const sync = () => {
     disconnect();
-    if (root) void connect().catch((e: unknown) => console.warn("agents unavailable", e));
+    void connect().catch((e: unknown) => console.warn("agents unavailable", e));
   };
-  sync(useProject.getState().project?.root);
+  sync();
   const disposers = [
     activateSettingsPages(),
     useProject.subscribe((s, prev) => {
-      if (s.project?.root !== prev.project?.root || s.project?.trusted !== prev.project?.trusted) sync(s.project?.root);
+      if (s.project?.root !== prev.project?.root || s.project?.trusted !== prev.project?.trusted) sync();
     }),
     registerToolWindow({
       id: TOOL_WINDOW,

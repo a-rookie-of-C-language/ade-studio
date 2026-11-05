@@ -161,12 +161,15 @@
 /* Your message with its actions, shown on hover. */
 .message {
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 .messageMeta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   min-height: 20px;
-  padding-left: 12px;
+  padding-right: 4px;
   font-size: var(--fs-small);
 }
 .messageActions {
@@ -210,11 +213,27 @@
 }
 
 .user {
-  padding: 2px 0 2px 10px;
-  border-left: 2px solid var(--accent);
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(85%, 640px);
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-popup-large);
+  background: var(--bg-elev);
   color: var(--fg-strong);
+  line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.user code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--bg-popup);
+  color: var(--danger);
 }
 
 .editMessage {
@@ -257,9 +276,11 @@
 .markdown :global(code) {
   font-family: var(--font-mono);
   font-size: var(--fs-small);
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
   background: var(--bg-elev);
+  color: var(--danger);
 }
 .markdown :global(pre) {
   margin: 0 0 8px;
@@ -270,7 +291,10 @@
 }
 .markdown :global(pre code) {
   padding: 0;
+  border: 0;
+  border-radius: 0;
   background: none;
+  color: inherit;
 }
 .markdown :global(pre) {
   position: relative;

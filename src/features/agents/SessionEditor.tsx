@@ -82,6 +82,11 @@ export function SessionEditor({ input, docked = false }: { input: EditorInput; d
   return <TaskSession key={id} id={id} docked={docked} />;
 }
 
+/** A task conversation rendered outside editor tabs: the Cowork home when no project is open. */
+export function CoworkSession({ id }: { id: string }) {
+  return <TaskSession key={id} id={id} docked={false} />;
+}
+
 function TaskSession({ id, docked }: { id: string; docked: boolean }) {
   const task = useAgents((s) => s.tasks.get(id));
   const entries = useAgents((s) => s.entries.get(id));
@@ -803,6 +808,19 @@ function Entry({
   }
 }
 
+/** Your message keeps its plain text, except `` `code` `` which renders as a chip like the agent's. */
+function renderUserText(text: string) {
+  const parts = text.split(/(`[^`]*`)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.startsWith("`") && part.endsWith("`") && part.length >= 2 ? (
+      <code key={i}>{part.slice(1, -1)}</code>
+    ) : (
+      <Fragment key={i}>{part}</Fragment>
+    ),
+  );
+}
+
 function UserMessage({
   task,
   entry,
@@ -845,7 +863,7 @@ function UserMessage({
   return (
     <div className={styles.message}>
       <div className={styles.user}>
-        {entry.text}
+        {renderUserText(entry.text)}
         <ImageStrip images={images} />
         {files.length > 0 && (
           <div className={styles.attachments}>

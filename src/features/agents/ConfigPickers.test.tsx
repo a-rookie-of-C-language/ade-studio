@@ -239,6 +239,22 @@ describe("model and effort button", () => {
     expect(onChange).toHaveBeenLastCalledWith("model", "gpt-6-sol");
   });
 
+  it("renders the shooting-star field only at the max effort level", () => {
+    const onChange = vi.fn();
+    // jsdom has no 2d context; keep it quiet and exercise the no-context path.
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    const { rerender } = render(
+      <ConfigPickers config={copilotConfig()} values={{ reasoning_effort: "high" }} onChange={onChange} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const dialog = screen.getByRole("dialog", { name: "Model & effort settings" });
+    expect(within(dialog).getByRole("slider", { name: "Reasoning Effort" })).toHaveAttribute("aria-valuetext", "high");
+    expect(dialog.querySelector("canvas")).not.toBeInTheDocument();
+    rerender(<ConfigPickers config={copilotConfig()} values={{ reasoning_effort: "xhigh" }} onChange={onChange} />);
+    expect(dialog.querySelector("canvas")).toBeInTheDocument();
+    getContext.mockRestore();
+  });
+
   it("keeps a plain model picker when the agent has no effort option", () => {
     render(<ConfigPickers config={copilotConfig(null)} onChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-haspopup", "listbox");

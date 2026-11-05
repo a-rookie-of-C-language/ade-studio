@@ -10,6 +10,7 @@ import type { AgentConfigOption } from "@/bindings";
 import { useTx } from "@/platform/i18n";
 import { Icon, IconButton, Popup, Select, T, Toggle } from "@/ui";
 import type { SelectOption } from "@/ui/Select";
+import EffortStars from "./EffortStars";
 import { mainOptions, modeIcon } from "./composerModel";
 import styles from "./Composer.module.css";
 
@@ -206,6 +207,7 @@ function ModelEffortPicker({
   const anchor = useRef<HTMLButtonElement>(null);
   const modelName = selected(model, modelValue)?.name ?? tx("Default");
   const effortName = selected(effort, effortValue)?.name ?? tx("Default");
+  const effortIsMax = effort.values.length > 1 && effortValue === effort.values[effort.values.length - 1]?.value;
   const summary = `${tx(model.name)}: ${modelName} · ${tx(effort.name)}: ${effortName}`;
   return (
     <>
@@ -247,7 +249,14 @@ function ModelEffortPicker({
         </div>
         <div className={styles.effortHeader}>
           <span className={styles.settingsLabel}>{tx(effort.name)}</span>
-          <span className={styles.effortValue}>{effortName}</span>
+          <span className={clsx(styles.effortValue, effortIsMax && styles.effortValueMax)}>
+            {effortName}
+            {effortIsMax && (
+              <span aria-hidden className={styles.effortShimmerWindow}>
+                <span data-text={effortName} className={styles.effortShimmerCopy} />
+              </span>
+            )}
+          </span>
         </div>
         <EffortSlider option={effort} value={effortValue} onChange={(v) => onChange(effort.id, v)} />
       </Popup>
@@ -273,8 +282,12 @@ function EffortSlider({
   );
   const last = steps.length - 1;
   const fill = last > 0 ? (index / last) * 100 : 100;
+  const max = last > 0 && steps[last]?.value === value;
   return (
-    <div className={styles.effortSlider}>
+    <div
+      className={clsx(styles.effortSlider, max && styles.effortSliderMax)}
+      style={{ "--fill": `${fill}%`, "--fill-num": last > 0 ? index / last : 1 } as CSSProperties}
+    >
       <input
         type="range"
         min={0}
@@ -284,17 +297,22 @@ function EffortSlider({
         aria-label={tx(option.name)}
         aria-valuetext={steps[index]?.name}
         title={steps[index]?.description ?? undefined}
-        style={{ "--fill": `${fill}%` } as CSSProperties}
         onChange={(e) => {
           const next = steps[Number(e.target.value)];
           if (next && next.value !== value) onChange(next.value);
         }}
       />
+      {max && <EffortStars />}
       <div className={styles.effortTicks} aria-hidden>
-        {steps.map((v) => (
-          <span key={v.value} className={clsx(v.value === steps[index]?.value && styles.effortTickActive)} />
+        {steps.map((v, i) => (
+          <span
+            key={v.value}
+            className={clsx(i <= index && styles.effortTickDone)}
+            style={{ transitionDelay: `${Math.min(Math.abs(i - index), 4) * 30}ms` }}
+          />
         ))}
       </div>
+      <span key={index} className={styles.effortPulse} aria-hidden />
     </div>
   );
 }
