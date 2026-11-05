@@ -55,6 +55,7 @@ specta-typescript.workspace = true
 tokio = { workspace = true, features = ["io-std", "net"] }
 futures.workspace = true
 tokio-tungstenite = "0.26"
+crypto_box = "0.9"
 ide-android = { path = "../ide-android" }
 tracing.workspace = true
 tracing-subscriber.workspace = true
