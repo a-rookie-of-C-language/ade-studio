@@ -53,6 +53,7 @@ import { ConfigPickers } from "./ConfigPickers";
 import { findRanges, formatDuration, formatSentAt } from "./conversation";
 import { ImagePreview, imageSrc } from "./ImagePreview";
 import { Markdown } from "./Markdown";
+import { TrajectoryView } from "./TrajectoryView";
 import {
   branchLabel,
   entriesKey,
@@ -134,6 +135,7 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
   const openSubagent = (sub: string) => setPath((p) => [...p, sub]);
   const [finding, setFinding] = useState(false);
   const [findFocus, setFindFocus] = useState(0);
+  const [showTrajectory, setShowTrajectory] = useState(false);
   const [session] = useState<FocusedSession>(() => ({
     openFind: () => {
       setFinding(true);
@@ -168,17 +170,41 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
           docked={docked}
         />
         {view && <SubagentBar task={task} path={path} cards={cards} onNavigate={setPath} />}
+        <div className={styles.viewTabs}>
+          <button
+            type="button"
+            className={styles.viewTab}
+            aria-pressed={!showTrajectory}
+            title={tx("Conversation")}
+            onClick={() => setShowTrajectory(false)}
+          >
+            <T>Conversation</T>
+          </button>
+          <button
+            type="button"
+            className={styles.viewTab}
+            aria-pressed={showTrajectory}
+            title={tx("Trajectory")}
+            onClick={() => setShowTrajectory(true)}
+          >
+            <T>Trajectory</T>
+          </button>
+        </div>
         <PermissionBanner task={task} entries={entries ?? null} />
-        <Stream
-          key={view ?? ""}
-          task={task}
-          entries={viewEntries ?? null}
-          subagent={view ? (cards.at(-1) ?? null) : null}
-          onOpenSubagent={openSubagent}
-          finding={finding}
-          findFocus={findFocus}
-          onCloseFind={() => setFinding(false)}
-        />
+        {showTrajectory ? (
+          <TrajectoryView key={view ?? ""} task={task} entries={viewEntries ?? null} onOpenSubagent={openSubagent} />
+        ) : (
+          <Stream
+            key={view ?? ""}
+            task={task}
+            entries={viewEntries ?? null}
+            subagent={view ? (cards.at(-1) ?? null) : null}
+            onOpenSubagent={openSubagent}
+            finding={finding}
+            findFocus={findFocus}
+            onCloseFind={() => setFinding(false)}
+          />
+        )}
         {view ? (
           <div className={styles.readOnly}>
             <T>Subagents take their instructions from the agent that started them.</T>

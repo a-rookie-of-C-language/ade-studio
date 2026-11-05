@@ -1498,7 +1498,7 @@ impl Task {
                     true
                 }
                 "usage_update" => {
-                    s.task.usage = config::usage_of(update).map(Box::new).or(s.task.usage.take());
+                    s.task.usage = config::usage_of(update).or(s.task.usage.take());
                     true
                 }
                 // The last shown share went stale (model change, compaction): drop

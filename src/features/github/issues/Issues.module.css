@@ -1,0 +1,129 @@
+/*
+ * The issues tab of the Pull Requests tool window. Rows mirror the pull
+ * request list (IntelliJ's `ReviewListCellRenderer`): a 24px first line with
+ * the state icon and title, a 16px grey info line below.
+ */
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Filter row: 0 / 10px like the pull request search panel. */
+.filter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 4px;
+}
+.stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+}
+/* New UI selection: rounded, inset 13px; the row's text 19px from the edges. */
+.list {
+  --list-inset: 13px;
+  flex: 1;
+  min-height: 0;
+}
+.row {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+  margin: 0 -2px;
+  padding: 4px 0 5px;
+}
+.line {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  min-width: 0;
+}
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.left {
+  flex: 0 1 auto;
+}
+.right {
+  flex: none;
+  margin-left: auto;
+  padding-left: 6px;
+}
+.stateOpen {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--gh-review-approved);
+}
+.stateClosed {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--gh-tag-fg);
+}
+.title {
+  flex: 0 1 auto;
+  min-width: 30px;
+  overflow: hidden;
+  color: var(--fg-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comments {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-right: 1px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+.info {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--fs-small);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyLink {
+  color: var(--link);
+  cursor: pointer;
+}
+.emptyLink:hover {
+  text-decoration: underline;
+}
+.error {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0 16px;
+}
+.errorBody {
+  overflow-wrap: anywhere;
+}

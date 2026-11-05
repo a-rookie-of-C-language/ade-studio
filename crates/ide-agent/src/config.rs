@@ -155,8 +155,8 @@ pub(crate) fn commands_of(update: &Value) -> Vec<AgentCommand> {
 }
 
 /// `usage_update`: `{ used, size }`, plus the optional `kind` (`"estimate"` or
-/// `"report"`), `model`, `categories` and token splits the native drivers attach.
-pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
+/// `"report"`), `model` and `categories` the native drivers attach.
+pub(crate) fn usage_of(update: &Value) -> Option<Box<AgentUsage>> {
     let tokens = |key: &str| update.get(key)?.as_f64().map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
     let split = |key: &str| update.get(key).and_then(Value::as_f64).map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
     let cost = update.get("cost").and_then(|c| {
@@ -170,7 +170,7 @@ pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
         _ => AgentContextKind::Report,
     };
     let model = update.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_owned);
-    Some(AgentUsage {
+    Some(Box::new(AgentUsage {
         used: tokens("used")?,
         size: tokens("size").filter(|s| *s > 0)?,
         kind,
@@ -182,7 +182,7 @@ pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
         cache_read_tokens: split("cacheReadTokens"),
         cache_write_tokens: split("cacheWriteTokens"),
         reasoning_tokens: split("reasoningTokens"),
-    })
+    }))
 }
 
 /// The provider's own per-category breakdown (`categories: [{ name, tokens }]`);

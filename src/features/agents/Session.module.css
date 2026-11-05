@@ -159,6 +159,37 @@
   color: var(--fg-subtle);
 }
 
+/* Conversation / Trajectory switch above the stream. */
+.viewTabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.viewTab {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--fg-subtle);
+  font: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.viewTab:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.viewTab[aria-pressed="true"] {
+  background: var(--bg-selected);
+  color: var(--fg-strong);
+}
+
 /* Pending permission: an editor notification banner. A long question (AskUserQuestion) wraps,
    scrolling past a third of the height; the answers follow it, wrapping too. */
 .banner {

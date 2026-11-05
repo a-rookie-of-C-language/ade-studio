@@ -77,7 +77,7 @@ pub struct AgentTask {
     /// Slash commands the agent offers.
     pub commands: Vec<AgentCommand>,
     /// Context window use, when the agent reports it.
-    // Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound on Windows.
+    /// Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
     pub usage: Option<Box<AgentUsage>>,
     /// Messages waiting for the current turn to end, oldest first.
     pub queue: Vec<AgentQueued>,

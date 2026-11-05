@@ -1013,7 +1013,8 @@ fn streamed_text_is_not_sent_twice() {
     // Message-level token counts are an estimate, tagged with the model they were measured for.
     assert_eq!(
         usage[0].update,
-        json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000, "kind": "estimate", "model": "x", "inputTokens": 10, "outputTokens": 5})
+        json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000, "kind": "estimate", "model": "x",
+            "inputTokens": 10, "outputTokens": 5})
     );
 }
 

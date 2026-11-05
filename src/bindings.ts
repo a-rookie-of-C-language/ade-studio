@@ -1643,7 +1643,10 @@ export type AgentTask = {
 	config: AgentConfigOption[],
 	/**  Slash commands the agent offers. */
 	commands: AgentCommand[],
-	/**  Context window use, when the agent reports it. */
+	/**
+	 *  Context window use, when the agent reports it.
+	 *  Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+	 */
 	usage: AgentUsage | null,
 	/**  Messages waiting for the current turn to end, oldest first. */
 	queue: AgentQueued[],
