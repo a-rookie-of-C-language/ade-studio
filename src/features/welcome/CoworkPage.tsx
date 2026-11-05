@@ -1,42 +1,36 @@
-/** Agent-first home: greeting + task composer + ideas; tasks rail; placeholders. */
+/** Agent-first home: greeting + task composer; tasks rail; placeholders. */
 import { useMemo, type ComponentProps } from "react";
 import type { AgentStatus } from "@/bindings";
 import { useT } from "@/platform/i18n";
 import { Icon } from "@/ui";
 import { HomeEditor } from "@/features/agents/HomeEditor";
-import { HOME, focusComposer, openTask, updateComposer, useAgents } from "@/features/agents/store";
+import { CoworkSession } from "@/features/agents/SessionEditor";
+import { openCoworkTask, openTask, useAgents } from "@/features/agents/store";
 import styles from "./Cowork.module.css";
 
 type IconName = ComponentProps<typeof Icon>["name"];
 
-const IDEAS = ["cowork.idea.explain", "cowork.idea.review", "cowork.idea.next"] as const;
-
-/** Center column: greeting, the real task composer, then one-click ideas. */
+/** Center column: greeting and the real task composer, or the open task when one is selected. */
 export function CoworkHome() {
   const t = useT();
+  const coworkTask = useAgents((s) => s.coworkTask);
+  const task = useAgents((s) => (coworkTask ? s.tasks.get(coworkTask) : undefined));
+  if (coworkTask && task) {
+    return (
+      <div className={styles.home}>
+        <div className={styles.sessionWrap}>
+          <button type="button" className={styles.backButton} onClick={() => openCoworkTask(null)}>
+            <Icon name="arrow-left" size={14} />
+            {t("cowork.back")}
+          </button>
+          <CoworkSession id={coworkTask} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={styles.home}>
       <HomeEditor heading={<span className={styles.greeting}>{t("cowork.greeting")}</span>} />
-      <section className={styles.ideas} aria-label={t("cowork.ideas")}>
-        <h2 className={styles.ideasTitle}>{t("cowork.ideas")}</h2>
-        <ul className={styles.ideaList}>
-          {IDEAS.map((key) => (
-            <li key={key}>
-              <button
-                type="button"
-                className={styles.idea}
-                onClick={() => {
-                  updateComposer(HOME, { text: t(key) });
-                  focusComposer(HOME);
-                }}
-              >
-                <Icon name="bulb" size={16} />
-                <span>{t(key)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

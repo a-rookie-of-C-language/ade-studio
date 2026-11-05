@@ -40,7 +40,7 @@ import { handleListKey } from "./ProjectsPage";
 import { customizeView } from "./CustomizePage";
 import { filterRecent, useRecent } from "./recent";
 import { WelcomeView } from "./WelcomeView";
-import { HOME, useAgents } from "@/features/agents/store";
+import { useAgents } from "@/features/agents/store";
 import type { AgentTask } from "@/bindings";
 
 const p = (name: string, path: string, branch: string | null = null): RecentProject => ({
@@ -163,6 +163,7 @@ describe("Welcome › navigation", () => {
 
   it("Customize writes the global settings keys", async () => {
     await renderWelcome();
+    fireEvent.click(screen.getByRole("tab", { name: "Code" }));
     fireEvent.click(screen.getByRole("button", { name: "Customize" }));
     fireEvent.click(screen.getByRole("radio", { name: "Purple" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Sync with OS" }));
@@ -173,18 +174,12 @@ describe("Welcome › navigation", () => {
 });
 
 describe("Welcome › Cowork", () => {
-  it("is the default page with greeting, composer and ideas", async () => {
+  it("is the default page with greeting and composer", async () => {
     await renderWelcome();
     expect(screen.getByRole("tab", { name: "Cowork" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByText("Where should we start?")).toBeTruthy();
-    expect(screen.getByText("Ideas for you")).toBeTruthy();
+    expect(screen.queryByText("Ideas for you")).toBeNull();
     expect(screen.getByRole("button", { name: "New" })).toBeTruthy();
-  });
-
-  it("fills the composer when an idea is picked", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Explain this project to me" }));
-    expect(useAgents.getState().composers.get(HOME)?.text).toBe("Explain this project to me");
   });
 
   it("lists recent tasks in the sidebar", async () => {
@@ -201,12 +196,28 @@ describe("Welcome › Cowork", () => {
     expect(screen.getByRole("button", { name: "Draft release notes" })).toBeTruthy();
   });
 
-  it("shows placeholders for Artifacts and Scheduled", async () => {
+  it("shows the placeholder for Scheduled", async () => {
     await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
-    expect(screen.getByText("Coming soon")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
     expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
+  });
+
+  it("opens the workspace list from Projects and switches workspace from its children", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(screen.getByLabelText("Search projects")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "acme-api" }));
+    await act(async () => {});
+    expect(openProject).toHaveBeenCalledWith("/Users/me/repo/acme-api");
+  });
+
+  it("collapses to an icon rail and back", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scheduled" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
   });
 });
 
