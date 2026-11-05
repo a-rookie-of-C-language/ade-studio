@@ -325,8 +325,9 @@ class ScriptMarker extends GutterMarker {
     const el = document.createElement("button");
     el.type = "button";
     el.className = styles.runMarker ?? "";
-    el.setAttribute("data-tooltip", tx`Run '${this.entry.name}'` ?? "");
-    el.setAttribute("aria-label", el.title);
+    const label = tx`Run '${this.entry.name}'` ?? "";
+    el.setAttribute("data-tooltip", label);
+    el.setAttribute("aria-label", label);
     el.innerHTML = gutterIconMarkup("gutter-run") ?? "";
     el.addEventListener("click", () => {
       const rect = el.getBoundingClientRect();

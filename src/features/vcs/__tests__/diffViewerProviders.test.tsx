@@ -183,7 +183,7 @@ describe("review gutter", () => {
     expect(toggleComments).toHaveBeenCalledWith(1);
     expect(view.dom.querySelectorAll(".cm-reviewRange")).toHaveLength(3);
     const handles = [...view.dom.querySelectorAll<HTMLElement>(".cm-reviewHandle")];
-    expect(handles.map((h) => [h.title, h.dataset.disabled])).toEqual([
+    expect(handles.map((h) => [h.dataset.tooltip, h.dataset.disabled])).toEqual([
       ["fixed", "true"],
       ["fixed", "true"],
     ]);

@@ -357,10 +357,14 @@ fn validate_project_root(
         return Err(IdeError::invalid("Choose an absolute project root"));
     }
     let requested = dunce::canonicalize(requested)?;
-    let window_root = dunce::canonicalize(root)?;
-    if requested == window_root
-        || ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested))
-    {
+    // The home window's default workspace may not exist on disk yet (it is
+    // created on first Start): only match the window root and its members
+    // when the root resolves, otherwise fall through to the home flow below.
+    let window_root = dunce::canonicalize(root).ok();
+    let is_window_root = window_root.as_ref().is_some_and(|w| requested == *w);
+    let is_member = window_root.is_some()
+        && ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested));
+    if is_window_root || is_member {
         return Ok(requested);
     }
     // No explicit project (the agent-first home): the user picked this folder as
