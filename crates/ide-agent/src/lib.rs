@@ -590,6 +590,8 @@ impl AgentManager {
             capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
             resets_ms: None,
             retry: None,
+            // Imported sessions were launched outside the IDE; there is no receipt to report.
+            launch: None,
         };
         let before = blocking(move || Ok(worktree::snapshot(&cwd).unwrap_or_default())).await.unwrap_or_default();
         let file = TaskFile {
