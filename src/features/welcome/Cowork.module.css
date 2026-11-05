@@ -183,6 +183,8 @@
   display: flex;
   align-items: stretch;
   gap: 12px;
+  /* The terminal card floats over this row (covering the context column). */
+  position: relative;
 }
 .backButton {
   display: inline-flex;
@@ -301,12 +303,15 @@
 /* ---- Session terminal card (right quarter of the cowork session) ---- */
 
 .terminalCard {
-  flex: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
   width: 25%;
   min-width: 300px;
   max-width: 440px;
   min-height: 0;
-  align-self: stretch;
   display: flex;
   flex-direction: column;
   overflow: hidden;

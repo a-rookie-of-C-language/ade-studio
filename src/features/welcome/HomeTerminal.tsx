@@ -5,7 +5,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { Icon, IconButton, Tabs, T, type TabItem } from "@/ui";
+import { Icon, IconButton, Tabs, T, tooltipAttrs, type TabItem } from "@/ui";
 import { isTauri } from "@/platform/ipc";
 import { basename } from "@/platform/project";
 import { loadTerminalRuntime, type TerminalRuntime } from "@/features/terminal/loader";
@@ -120,7 +120,7 @@ function LoadedPanel({ rt, card, onClose }: { rt: TerminalRuntime; card?: boolea
           <T>Terminal</T>
         </span>
         {cwd && (
-          <span className={styles.terminalCwd} title={cwd}>
+          <span className={styles.terminalCwd} {...tooltipAttrs(cwd)}>
             {basename(cwd)}
           </span>
         )}

@@ -365,9 +365,9 @@ describe("Welcome › Cowork", () => {
     fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
     await screen.findByLabelText("Terminal sessions");
     expect(termNewTab).toHaveBeenCalledWith("/Users/me/repo/acme-api");
-    expect(
-      within(screen.getByRole("complementary", { name: "Terminal" })).getByTitle("/Users/me/repo/acme-api"),
-    ).toBeTruthy();
+    // The cwd uses the shared tooltip channel (`data-tooltip`), not a native `title`.
+    const cwd = within(screen.getByRole("complementary", { name: "Terminal" })).getByText("acme-api");
+    expect(cwd.getAttribute("data-tooltip")).toBe("/Users/me/repo/acme-api");
     fireEvent.click(screen.getByRole("button", { name: "New Tab" }));
     expect(termNewTab).toHaveBeenCalledTimes(2);
   });

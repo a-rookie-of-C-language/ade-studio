@@ -30,6 +30,7 @@ import {
   copyText,
   fileIconName,
   selectableText,
+  tooltipAttrs,
   useSelectionBoundary,
   showContextMenu,
 } from "@/ui";
@@ -262,11 +263,11 @@ function Header({
     >
       <TaskStatusIcon status={task.status} />
       {!docked && (
-        <span className={styles.title} title={task.title}>
+        <span className={styles.title} {...tooltipAttrs(task.title)}>
           {task.title}
         </span>
       )}
-      <span className={styles.headerDetail} title={task.cwd}>
+      <span className={styles.headerDetail} {...tooltipAttrs(task.cwd)}>
         <Icon name={providerIcon(task.provider)} size={13} className={styles.providerIcon} />
         <span className={styles.headerText}>
           {providerName(task.provider)}
@@ -329,7 +330,6 @@ function Header({
  * the task, each as Settings › Tools › Agents › Chat allows.
  */
 function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | null }) {
-  const tx = useTx();
   const show = useProject((s) => s.settings?.agents);
   const busy = isBusy(task.status);
   const now = useNow(busy ? 1000 : 60_000);
@@ -344,8 +344,10 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
       {limits.map((l) => (
         <Limit key={l.window} limit={l} now={now} />
       ))}
-      {cost && <span title={tx("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>}
-      {work >= 1000 && <span title={tx("Time the agent spent on this task")}>{formatDuration(work)}</span>}
+      {cost && (
+        <span {...tooltipAttrs("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>
+      )}
+      {work >= 1000 && <span {...tooltipAttrs("Time the agent spent on this task")}>{formatDuration(work)}</span>}
     </span>
   );
 }
@@ -354,7 +356,7 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
 function Limit({ limit, now }: { limit: AgentLimit; now: number }) {
   const label = limitLabel(limit, now);
   return (
-    <span className={styles.meter} title={label.detail} aria-label={label.detail}>
+    <span className={styles.meter} {...tooltipAttrs(label.detail)} aria-label={label.detail}>
       <span className={styles.usageBar} aria-hidden>
         <span style={{ width: `${label.percent}%` }} />
       </span>
