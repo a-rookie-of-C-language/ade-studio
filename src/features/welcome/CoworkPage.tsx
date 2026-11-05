@@ -26,9 +26,11 @@ export function CoworkHome() {
             <Icon name="arrow-left" size={14} />
             {t("cowork.back")}
           </button>
-          <CoworkSession id={coworkTask} />
+          <div className={styles.sessionRow}>
+            <CoworkSession id={coworkTask} />
+            {terminalOpen && <HomeTerminalPanel card onClose={() => setTerminalOpen(false)} />}
+          </div>
         </div>
-        {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}
       </div>
     );
   }

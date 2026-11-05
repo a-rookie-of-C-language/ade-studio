@@ -55,7 +55,7 @@ function HomeTerminalPane({ rt, sessionKey }: { rt: TerminalRuntime; sessionKey:
   return <div ref={ref} className={dead ? `${styles.terminalPane} ${styles.terminalExited}` : styles.terminalPane} />;
 }
 
-function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void }) {
+function LoadedPanel({ rt, card, onClose }: { rt: TerminalRuntime; card?: boolean; onClose: () => void }) {
   const { useTerminals, newTab, startDirectory, selectTab, requestCloseTab, tabTitle, activeSession } = rt;
   const tabs = useTerminals((s) => s.tabs);
   const sessions = useTerminals((s) => s.sessions);
@@ -113,7 +113,7 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
   const sessionKey = tabs.find((t) => t.id === activeTab)?.session ?? null;
 
   return (
-    <div className={styles.terminalDrawer} role="complementary" aria-label="Terminal">
+    <div className={card ? styles.terminalCard : styles.terminalDrawer} role="complementary" aria-label="Terminal">
       <div className={styles.terminalHeader}>
         <Icon name="terminal" size={16} />
         <span className={styles.terminalTitle}>
@@ -146,8 +146,12 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
   );
 }
 
-/** The drawer; the runtime (and its xterm chunk) loads on first open. */
-export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
+/**
+ * The home terminal: an overlay drawer by default, or an inline rounded card
+ * (`card`) docked into the cowork session's right quarter. The runtime (and
+ * its xterm chunk) loads on first open.
+ */
+export function HomeTerminalPanel({ card, onClose }: { card?: boolean; onClose: () => void }) {
   const [rt, setRt] = useState<TerminalRuntime | null>(null);
   useEffect(() => {
     let live = true;
@@ -160,7 +164,7 @@ export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
   }, []);
   if (!rt) {
     return (
-      <div className={styles.terminalDrawer} role="complementary" aria-label="Terminal">
+      <div className={card ? styles.terminalCard : styles.terminalDrawer} role="complementary" aria-label="Terminal">
         <div className={styles.terminalHeader}>
           <Icon name="terminal" size={16} />
           <span className={styles.terminalTitle}>
@@ -172,5 +176,5 @@ export function HomeTerminalPanel({ onClose }: { onClose: () => void }) {
       </div>
     );
   }
-  return <LoadedPanel rt={rt} onClose={onClose} />;
+  return <LoadedPanel rt={rt} card={card} onClose={onClose} />;
 }
