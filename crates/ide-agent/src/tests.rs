@@ -841,6 +841,54 @@ async fn usage_cleared_drops_the_stale_share() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn session_stats_sum_usage_retries_and_turn_timing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let agent = Arc::new(FakeAgent::default());
+    let mgr = manager(tmp.path(), agent.clone());
+    let task = mgr
+        .create(NewAgentTask {
+            project_root: None,
+            // Works until cancelled, so the turn stays open for the updates below.
+            prompt: text("wait"),
+            provider: "claude".into(),
+            config: vec![],
+            isolation: Isolation::Local,
+            base: None,
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    let stats = || mgr.task(&task.id).unwrap().state.lock().task.stats.clone();
+    assert_eq!(*stats(), AgentSessionStats::default());
+    // A retry announced before any output counts once output arrives; the first
+    // output also times first-token latency.
+    agent.update("s1", json!({"sessionUpdate": RETRY_UPDATE, "attempt": 1}));
+    agent.say("s1", "working");
+    // Two measured requests add their splits to the session totals; a split-less
+    // report counts for the meter but adds nothing.
+    let first = json!({"sessionUpdate": "usage_update", "used": 10, "size": 1000, "inputTokens": 8,
+        "outputTokens": 2, "cacheReadTokens": 4, "cost": {"amount": 0.01, "currency": "USD"}});
+    let bare = json!({"sessionUpdate": "usage_update", "used": 50, "size": 1000});
+    let second = json!({"sessionUpdate": "usage_update", "used": 12, "size": 1000, "inputTokens": 9,
+        "outputTokens": 3, "cacheReadTokens": 5});
+    agent.update("s1", first);
+    agent.update("s1", bare);
+    agent.update("s1", second);
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    let st = stats();
+    assert_eq!((st.input_tokens, st.output_tokens, st.cache_read_tokens), (17, 5, 9));
+    assert_eq!(st.cost_usd, Some(0.01));
+    assert_eq!(st.retries, 1);
+    assert_eq!(st.ttft_samples, 1);
+    // Stopping the turn counts the request without a failure.
+    mgr.cancel(&task.id, None).unwrap();
+    wait_for(&mgr, &task.id, AgentStatus::Ready).await;
+    let st = stats();
+    assert_eq!((st.requests, st.failures), (1, 0));
+    mgr.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn cursor_approval_switch_resolves_pending_and_survives_restart() {
     let tmp = tempfile::tempdir().unwrap();
     let agent = Arc::new(FakeAgent::default());
