@@ -117,10 +117,11 @@ describe("TrajectoryView", () => {
 
   it("jumps from the overview to a turn", () => {
     renderView();
-    const overview = screen.getByLabelText("Timing overview");
+    const overview = screen.getByLabelText("Sequence overview");
     const spans = within(overview).getAllByRole("button");
     expect(spans.length).toBeGreaterThan(0);
     fireEvent.click(spans[0]!);
+    expect(document.getElementById("traj-record-1")).toBeTruthy();
     expect(document.getElementById("traj-turn-0")).toBeTruthy();
   });
 });
@@ -173,8 +174,56 @@ describe("TrajectoryView records", () => {
     renderView();
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse turn" })[0]!);
     expect(screen.queryByText("read lexer file")).toBeNull();
-    const overview = screen.getByLabelText("Timing overview");
+    const overview = screen.getByLabelText("Sequence overview");
     fireEvent.click(within(overview).getAllByRole("button")[0]!);
     expect(screen.getByText("read lexer file")).toBeTruthy();
+  });
+});
+
+describe("TrajectoryView sequence mode", () => {
+  it("shows every record in the sequence overview and jumps to records", () => {
+    renderView();
+    const overview = screen.getByLabelText("Sequence overview");
+    const spans = within(overview).getAllByRole("button");
+    expect(spans.length).toBeGreaterThan(0);
+    fireEvent.click(spans[0]!);
+    expect(screen.getByText("On it.")).toBeTruthy();
+  });
+
+  it("toggles between sequence and actual timing", () => {
+    renderView();
+    expect(screen.getByLabelText("Sequence overview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show actual timing" }));
+    expect(screen.getByLabelText("Timing overview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show sequence" }));
+    expect(screen.getByLabelText("Sequence overview")).toBeTruthy();
+  });
+
+  it("renders steered follow-ups and extra turn counts", () => {
+    const steered: AgentEntry[] = [
+      { type: "user", text: "go", attachments: [], sentMs: 1000, doneMs: null },
+      { type: "user", text: "also this", attachments: [], sentMs: 1500, doneMs: null, steered: true },
+      {
+        type: "subagent",
+        id: "c",
+        title: null,
+        description: null,
+        status: "done",
+        error: null,
+        prompt: null,
+        reply: null,
+        tools: 0,
+        activity: null,
+        startedMs: 1100,
+        endedMs: 1200,
+        cancellable: false,
+      },
+      { type: "permission", id: 7, title: "Run?", options: [], chosen: null },
+    ];
+    render(<TrajectoryView task={task()} entries={steered} onOpenSubagent={vi.fn()} />);
+    expect(screen.getByText("also this")).toBeTruthy();
+    expect(screen.getByText("Steered")).toBeTruthy();
+    expect(screen.getByText("1 subagent")).toBeTruthy();
+    expect(screen.getByText("1 permission")).toBeTruthy();
   });
 });

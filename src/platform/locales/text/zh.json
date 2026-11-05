@@ -6289,5 +6289,13 @@
   "Collapse turns": "折叠全部轮次",
   "Expand turns": "展开全部轮次",
   "Collapse turn": "折叠本轮",
-  "Expand turn": "展开本轮"
+  "Expand turn": "展开本轮",
+  "Show sequence": "显示序列",
+  "Show actual timing": "显示实际时长",
+  "Sequence overview": "序列概览",
+  "subagent": "个子 agent",
+  "subagents": "个子 agent",
+  "permission": "个权限请求",
+  "permissions": "个权限请求",
+  "Steered": "追问"
 }

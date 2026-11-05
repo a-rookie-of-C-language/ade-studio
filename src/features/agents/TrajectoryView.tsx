@@ -15,6 +15,7 @@ import { isBusy, subagentTitle, subagentWorking, type SubagentEntry } from "./mo
 import {
   buildTrajectory,
   buildTrajectorySpans,
+  buildSequenceSpans,
   matchTrajectoryEntry,
   trajectoryCopyText,
   trajectoryDomain,
@@ -54,6 +55,7 @@ export function TrajectoryView({
   const tx = useTx();
   const [query, setQuery] = useState("");
   const [follow, setFollow] = useState(true);
+  const [mode, setMode] = useState<"sequence" | "time">("sequence");
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
   const listRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -62,6 +64,8 @@ export function TrajectoryView({
   const now = useNow(busy ? 1000 : 60_000);
   const spans = useMemo(() => buildTrajectorySpans(entries ?? [], trajectory.turns), [entries, trajectory.turns]);
   const domain = useMemo(() => trajectoryDomain(spans, now), [spans, now]);
+  const seqSpans = useMemo(() => buildSequenceSpans(entries ?? [], trajectory.turns), [entries, trajectory.turns]);
+  const seqTotal = seqSpans.length > 0 ? seqSpans[seqSpans.length - 1]!.end : 0;
   const q = query.trim();
   const matching = useMemo(() => {
     if (!entries || !q) return null;
@@ -112,12 +116,26 @@ export function TrajectoryView({
           onFollow={setFollow}
           allCollapsed={allCollapsed}
           onToggleAll={toggleAllTurns}
+          mode={mode}
+          onToggleMode={() => setMode((m) => (m === "sequence" ? "time" : "sequence"))}
         />
         <EmptyState title="No matching records" />
       </div>
     );
 
-  const anchorOf = (turn: number) => `traj-turn-${turn}`;
+  const anchorOf = (turn: number) => "traj-turn-" + String(turn);
+  const recordAnchorOf = (index: number) => "traj-record-" + String(index);
+  const goToRecord = (index: number, turn: number | null) => {
+    if (turn != null) {
+      setCollapsed((prev) => {
+        if (!prev.has(turn)) return prev;
+        const next = new Set(prev);
+        next.delete(turn);
+        return next;
+      });
+    }
+    document.getElementById(recordAnchorOf(index))?.scrollIntoView?.({ block: "nearest" });
+  };
   const goToTurn = (turn: number) => {
     // Jumping from the overview unfolds the turn first.
     setCollapsed((prev) => {
@@ -139,8 +157,33 @@ export function TrajectoryView({
         onFollow={setFollow}
         allCollapsed={allCollapsed}
         onToggleAll={toggleAllTurns}
+        mode={mode}
+        onToggleMode={() => setMode((m) => (m === "sequence" ? "time" : "sequence"))}
       />
-      {domain && (
+      {mode === "sequence" && seqTotal > 0 && (
+        <div className={styles.overview} role="group" aria-label={tx("Sequence overview")}>
+          {seqSpans.map((s) => {
+            const left = (s.start / seqTotal) * 100;
+            const width = Math.max(((s.end - s.start) / seqTotal) * 100, 1.2);
+            return (
+              <button
+                key={s.key}
+                type="button"
+                className={clsx(
+                  styles.span,
+                  s.lane === 2 ? styles.seqLane2 : s.lane === 1 ? styles.seqLane1 : styles.seqLane0,
+                  s.isError && styles.spanError,
+                )}
+                style={{ left: left + "%", width: width + "%" }}
+                title={"#" + String(s.index + 1) + " " + s.label}
+                aria-label={"#" + String(s.index + 1) + " " + s.label}
+                onClick={() => goToRecord(s.index, s.turn)}
+              />
+            );
+          })}
+        </div>
+      )}
+      {mode === "time" && domain && (
         <div className={styles.overview} role="group" aria-label={tx("Timing overview")}>
           {spans.map((s) => {
             const left = ((s.startMs - domain.start) / (domain.end - domain.start)) * 100;
@@ -179,13 +222,13 @@ export function TrajectoryView({
       >
         {trajectory.prefaceEnd > 0 && (
           <div className={styles.rows}>
-            {entries
-              .slice(0, trajectory.prefaceEnd)
-              .map((entry, i) =>
-                matching && !matching.has(i) ? null : (
-                  <Row key={i} task={task} entry={entry} index={i} onOpenSubagent={onOpenSubagent} />
-                ),
-              )}
+            {entries.slice(0, trajectory.prefaceEnd).map((entry, i) =>
+              matching && !matching.has(i) ? null : (
+                <div key={i} id={recordAnchorOf(i)} className={styles.recordAnchor}>
+                  <Row task={task} entry={entry} index={i} onOpenSubagent={onOpenSubagent} />
+                </div>
+              ),
+            )}
           </div>
         )}
         {trajectory.turns.map((t) => {
@@ -221,6 +264,16 @@ export function TrajectoryView({
                     {t.counts.errors} {tx(t.counts.errors === 1 ? "error" : "errors")}
                   </span>
                 )}
+                {t.counts.subagents > 0 && (
+                  <span className={styles.turnMeta}>
+                    {t.counts.subagents} {tx(t.counts.subagents === 1 ? "subagent" : "subagents")}
+                  </span>
+                )}
+                {t.counts.permissions > 0 && (
+                  <span className={styles.turnMeta}>
+                    {t.counts.permissions} {tx(t.counts.permissions === 1 ? "permission" : "permissions")}
+                  </span>
+                )}
               </div>
               <div className={styles.turnUser}>
                 {t.text}
@@ -240,7 +293,9 @@ export function TrajectoryView({
                   {entries.slice(t.startIndex + 1, t.endIndex).map((entry, k) => {
                     const index = t.startIndex + 1 + k;
                     return matching && !matching.has(index) ? null : (
-                      <Row key={index} task={task} entry={entry} index={index} onOpenSubagent={onOpenSubagent} />
+                      <div key={index} id={recordAnchorOf(index)} className={styles.recordAnchor}>
+                        <Row task={task} entry={entry} index={index} onOpenSubagent={onOpenSubagent} />
+                      </div>
                     );
                   })}
                 </div>
@@ -266,6 +321,8 @@ function Toolbar({
   onFollow,
   allCollapsed,
   onToggleAll,
+  mode,
+  onToggleMode,
 }: {
   query: string;
   onQuery: (q: string) => void;
@@ -274,6 +331,8 @@ function Toolbar({
   onFollow: (follow: boolean) => void;
   allCollapsed: boolean;
   onToggleAll: () => void;
+  mode: "sequence" | "time";
+  onToggleMode: () => void;
 }) {
   const tx = useTx();
   return (
@@ -285,6 +344,13 @@ function Toolbar({
         placeholder={tx("Search trajectory")}
         className={styles.search}
         trailing={query.trim() ? <span className={styles.count}>{matchCount}</span> : null}
+      />
+      <IconButton
+        icon={mode === "sequence" ? "clock" : "github-timeline"}
+        title={mode === "sequence" ? tx("Show actual timing") : tx("Show sequence")}
+        size="small"
+        pressed={mode === "sequence"}
+        onClick={onToggleMode}
       />
       <IconButton
         icon={allCollapsed ? "expand-all" : "collapse-all"}
@@ -338,7 +404,16 @@ function Row({
   const copy = trajectoryCopyText(entry);
   switch (entry.type) {
     case "user":
-      return null;
+      if (!entry.steered) return null;
+      return (
+        <div className={styles.row}>
+          <RowCopy text={copy} />
+          <div className={styles.messageLabel}>
+            <RecordIndex index={index} /> <T>Steered</T>
+          </div>
+          <div className={styles.messageText}>{entry.text}</div>
+        </div>
+      );
     case "agent":
       return <AgentRow task={task} text={entry.text} index={index} copy={copy} />;
     case "thought":

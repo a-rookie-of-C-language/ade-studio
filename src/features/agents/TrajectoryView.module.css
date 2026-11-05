@@ -344,3 +344,21 @@ details.row > summary.rowHead:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
+
+/* Sequence overview lanes: replies up top, messages mid-ledger, tools at the bottom. */
+.seqLane0 {
+  top: 4px;
+}
+.seqLane1 {
+  top: 17px;
+}
+.seqLane2 {
+  top: 30px;
+}
+.spanError {
+  background: var(--danger);
+}
+.recordAnchor {
+  min-width: 0;
+  scroll-margin-top: 8px;
+}

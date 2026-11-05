@@ -58,5 +58,13 @@
   "Expand turns": "Expand turns",
   "Collapse turn": "Collapse turn",
   "Expand turn": "Expand turn",
-  "Copy": "Copy"
+  "Copy": "Copy",
+  "Show sequence": "Show sequence",
+  "Show actual timing": "Show actual timing",
+  "Sequence overview": "Sequence overview",
+  "subagent": "subagent",
+  "subagents": "subagents",
+  "permission": "permission",
+  "permissions": "permissions",
+  "Steered": "Steered"
 }

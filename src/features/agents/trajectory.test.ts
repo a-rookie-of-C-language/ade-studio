@@ -3,10 +3,13 @@ import type { AgentEntry } from "@/bindings";
 import {
   buildTrajectory,
   buildTrajectorySpans,
+  buildSequenceSpans,
   matchTrajectoryEntry,
   trajectoryCopyText,
   trajectoryDomain,
   trajectoryEntryText,
+  trajectoryIsError,
+  trajectorySpanLabel,
   trajectoryQueryTerms,
   turnOfIndex,
 } from "./trajectory";
@@ -197,5 +200,72 @@ describe("trajectoryCopyText", () => {
   it("copies subagent prompt and reply", () => {
     expect(trajectoryCopyText(subagent("look", "found"))).toBe("look\n\nfound");
     expect(trajectoryCopyText(subagent(null, null))).toBeNull();
+  });
+});
+
+describe("sequence spans", () => {
+  it("gives every record an equal-width span, skipping turn headers", () => {
+    const entries: AgentEntry[] = [
+      user("first", 1000, 2000),
+      { type: "agent", text: "working" },
+      tool("read a"),
+      user("second", 3000, null),
+      { type: "error", message: "boom" },
+    ];
+    const { turns } = buildTrajectory(entries);
+    const spans = buildSequenceSpans(entries, turns);
+    expect(spans.map((s) => s.index)).toEqual([1, 2, 4]);
+    expect(spans.map((s) => [s.start, s.end])).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+    ]);
+    expect(spans.map((s) => s.turn)).toEqual([0, 0, 1]);
+    expect(spans[1]!.lane).toBe(2);
+    expect(spans[2]!.isError).toBe(true);
+  });
+
+  it("keeps steered follow-ups as records", () => {
+    const entries: AgentEntry[] = [
+      user("go", 1000, null),
+      { type: "user", text: "actually also this", attachments: [], sentMs: null, doneMs: null, steered: true },
+    ];
+    const { turns } = buildTrajectory(entries);
+    expect(turns).toHaveLength(1);
+    const spans = buildSequenceSpans(entries, turns);
+    expect(spans.map((s) => s.index)).toEqual([1]);
+    expect(spans[0]!.turn).toBe(0);
+  });
+
+  it("labels spans and flags failures", () => {
+    expect(trajectorySpanLabel(tool("read Cargo.toml"))).toContain("Cargo.toml");
+    expect(trajectoryIsError({ type: "error", message: "x" })).toBe(true);
+    expect(trajectoryIsError(tool("ok"))).toBe(false);
+    const failed: AgentEntry = {
+      type: "tool",
+      id: "bad",
+      title: "bad",
+      kind: "read",
+      status: "failed",
+      locations: [],
+      output: null,
+      diffs: [],
+    };
+    expect(trajectoryIsError(failed)).toBe(true);
+  });
+
+  it("searches tool paths and diffs", () => {
+    const entry: AgentEntry = {
+      type: "tool",
+      id: "run tests",
+      title: "run tests",
+      kind: "execute",
+      status: "completed",
+      locations: ["/repo/src/lexer.ts"],
+      output: null,
+      diffs: [{ path: "src/lexer.ts", added: 3, removed: 1 }],
+    };
+    expect(matchTrajectoryEntry(entry, "lexer")).toBe(true);
+    expect(matchTrajectoryEntry(entry, "lexer missing")).toBe(false);
   });
 });

@@ -152,7 +152,9 @@ export function trajectoryEntryText(entry: AgentEntry): string {
     case "thought":
       return entry.text;
     case "tool":
-      return [entry.title, entry.kind, entry.output ?? ""].join("\n");
+      return [entry.title, entry.kind, ...entry.locations, ...entry.diffs.map((d) => d.path), entry.output ?? ""].join(
+        "\n",
+      );
     case "plan":
       return entry.items.map((i) => i.content).join("\n");
     case "subagent":
@@ -204,4 +206,75 @@ export function trajectoryCopyText(entry: AgentEntry): string | null {
     case "error":
       return entry.message || null;
   }
+}
+
+/** Timeline projection for the overview: equal-width or wall-clock. */
+export type TrajectoryTimelineMode = "sequence" | "time";
+
+export interface TrajectoryTimelineSpan {
+  key: string;
+  /** Ledger index of the record. */
+  index: number;
+  kind: string;
+  label: string;
+  /** Vertical lane: tools sit below replies, mirroring the dsh three-lane layout. */
+  lane: 0 | 1 | 2;
+  /** Owning turn (the latest one started at the record index); null before the first turn. */
+  turn: number | null;
+  start: number;
+  end: number;
+  isError: boolean;
+}
+
+/** Lane of `entry` in sequence mode: tools below, messages in the middle. */
+export function trajectoryLaneFor(entry: AgentEntry): 0 | 1 | 2 {
+  if (entry.type === "tool") return 2;
+  if (entry.type === "message") return 1;
+  return 0;
+}
+
+/** Whether `entry` reads as a failure in the overview. */
+export function trajectoryIsError(entry: AgentEntry): boolean {
+  if (entry.type === "error") return true;
+  if (entry.type === "tool") return entry.status === "failed";
+  if (entry.type === "subagent") return entry.status === "failed";
+  return false;
+}
+
+/** Short label for `entry` in the overview; falls back to its kind. */
+export function trajectorySpanLabel(entry: AgentEntry): string {
+  const first = trajectoryEntryText(entry).split("\n", 1)[0] ?? "";
+  const short = first.trim().slice(0, 80);
+  if (short) return short;
+  if (entry.type === "tool") return entry.title || entry.kind;
+  return entry.type;
+}
+
+/**
+ * Equal-width spans for every ledger record in sequence mode.
+ * User turns own no span (they are the section headers), but steered
+ * follow-ups do: they render as records inside their turn.
+ */
+export function buildSequenceSpans(
+  entries: readonly AgentEntry[],
+  turns: readonly TrajectoryTurn[],
+): TrajectoryTimelineSpan[] {
+  const spans: TrajectoryTimelineSpan[] = [];
+  let pos = 0;
+  entries.forEach((entry, index) => {
+    if (entry.type === "user" && !entry.steered) return;
+    spans.push({
+      key: "record-" + String(index),
+      index,
+      kind: entry.type,
+      label: trajectorySpanLabel(entry),
+      lane: trajectoryLaneFor(entry),
+      turn: turnOfIndex(turns, index),
+      start: pos,
+      end: pos + 1,
+      isError: trajectoryIsError(entry),
+    });
+    pos += 1;
+  });
+  return spans;
 }
