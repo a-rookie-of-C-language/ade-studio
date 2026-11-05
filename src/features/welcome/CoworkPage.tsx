@@ -1,12 +1,12 @@
 /** Agent-first home: greeting + task composer; tasks rail; placeholders. */
-import { useMemo, useState, type ComponentProps } from "react";
+import { useMemo, type ComponentProps } from "react";
 import type { AgentStatus } from "@/bindings";
 import { useT } from "@/platform/i18n";
 import { Icon } from "@/ui";
 import { HomeEditor } from "@/features/agents/HomeEditor";
 import { CoworkSession } from "@/features/agents/SessionEditor";
 import { openCoworkTask, openTask, useAgents } from "@/features/agents/store";
-import { HomeTerminalButton, HomeTerminalPanel } from "./HomeTerminal";
+import { HomeTerminalButton, HomeTerminalPanel, useHomeTerminal } from "./HomeTerminal";
 import styles from "./Cowork.module.css";
 
 type IconName = ComponentProps<typeof Icon>["name"];
@@ -16,10 +16,11 @@ export function CoworkHome() {
   const t = useT();
   const coworkTask = useAgents((s) => s.coworkTask);
   const task = useAgents((s) => (coworkTask ? s.tasks.get(coworkTask) : undefined));
-  const [terminalOpen, setTerminalOpen] = useState(false);
+  const terminalOpen = useHomeTerminal((s) => s.open);
+  const setTerminalOpen = useHomeTerminal((s) => s.setOpen);
   if (coworkTask && task) {
     return (
-      <div className={styles.home}>
+      <div className={`${styles.home} ${styles.homeSession}`}>
         <div className={styles.sessionWrap}>
           <button type="button" className={styles.backButton} onClick={() => openCoworkTask(null)}>
             <Icon name="arrow-left" size={14} />
@@ -27,13 +28,14 @@ export function CoworkHome() {
           </button>
           <CoworkSession id={coworkTask} />
         </div>
+        {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}
       </div>
     );
   }
   return (
     <div className={styles.home}>
       <div className={styles.topActions}>
-        <HomeTerminalButton open={terminalOpen} onToggle={() => setTerminalOpen((v) => !v)} />
+        <HomeTerminalButton open={terminalOpen} onToggle={() => setTerminalOpen(!terminalOpen)} />
       </div>
       <HomeEditor heading={<span className={styles.greeting}>{t("cowork.greeting")}</span>} />
       {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}

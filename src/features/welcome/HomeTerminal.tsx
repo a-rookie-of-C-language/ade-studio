@@ -4,12 +4,32 @@
  * here, so xterm.js stays out of the startup bundle until first use.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { Icon, IconButton, Tabs, T, type TabItem } from "@/ui";
 import { isTauri } from "@/platform/ipc";
 import { basename } from "@/platform/project";
 import { loadTerminalRuntime, type TerminalRuntime } from "@/features/terminal/loader";
 import { ensureHomeCwd, resolveHomeCwd } from "./workspace";
 import styles from "./Cowork.module.css";
+
+interface HomeTerminalState {
+  open: boolean;
+  /** Explicit cwd (e.g. a task's folder); null resolves the agent workspace. */
+  cwd: string | null;
+  setOpen: (open: boolean, cwd?: string | null) => void;
+}
+
+/** Drawer state shared by the home button and the session header's terminal action. */
+export const useHomeTerminal = create<HomeTerminalState>((set) => ({
+  open: false,
+  cwd: null,
+  setOpen: (open, cwd) => set((s) => ({ open, cwd: cwd === undefined ? (open ? s.cwd : null) : cwd })),
+}));
+
+/** Tests only. */
+export function _resetHomeTerminalForTests() {
+  useHomeTerminal.setState({ open: false, cwd: null });
+}
 
 /** Top-right button; hidden outside the desktop app (no PTY backend there). */
 export function HomeTerminalButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
@@ -47,11 +67,12 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
     focusRaf.current = requestAnimationFrame(() => activeSession()?.focus());
   };
 
+  const explicitCwd = useHomeTerminal((s) => s.cwd);
   // First open: resolve the workspace directory and ensure a tab to show.
   useEffect(() => {
     let live = true;
     void (async () => {
-      const dir = await resolveHomeCwd();
+      const dir = explicitCwd ?? (await resolveHomeCwd());
       if (!live || !dir || !(await ensureHomeCwd(dir))) return;
       if (!live) return;
       setCwd(dir);
@@ -62,7 +83,7 @@ function LoadedPanel({ rt, onClose }: { rt: TerminalRuntime; onClose: () => void
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [explicitCwd]);
 
   const openTab = () => {
     if (!cwd) return;

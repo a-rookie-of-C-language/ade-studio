@@ -88,6 +88,7 @@ import { projectInitials } from "@/workbench/projectColor";
 import { handleListKey } from "./ProjectsPage";
 import { filterRecent, useRecent } from "./recent";
 import { openCurrentWorkspaceInIDE, openWorkspaceInIDE, useWorkspace } from "./workspace";
+import { _resetHomeTerminalForTests } from "./HomeTerminal";
 import { WelcomeView } from "./WelcomeView";
 import { useAgents } from "@/features/agents/store";
 import type { AgentTask } from "@/bindings";
@@ -147,6 +148,7 @@ beforeEach(() => {
   useWorkspace.setState({ root: null });
   useProject.setState({ project: null, settings: { appearance: { theme: "light" } } as Settings, opening: false });
   useAgents.setState({ tasks: new Map(), composers: new Map() });
+  _resetHomeTerminalForTests();
 });
 
 afterEach(() => {

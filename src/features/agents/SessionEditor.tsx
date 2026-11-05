@@ -277,7 +277,14 @@ function Header({
         icon="terminal"
         title="Open in Terminal"
         size="small"
-        onClick={() => void executeAction("terminal.openAt", task.cwd)}
+        onClick={() =>
+          void (async () => {
+            // No project is open on the Cowork home: `terminal.openAt` is
+            // gated on `projectOpen` there, so fall back to the home drawer.
+            if (await executeAction("terminal.openAt", task.cwd)) return;
+            await executeAction("welcome.openTerminal", task.cwd);
+          })()
+        }
       />
       {task.status === "archived" && (
         <IconButton

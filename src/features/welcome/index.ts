@@ -6,6 +6,7 @@ import { RecentProjectsPopup, showRecentProjectsPopup } from "./RecentProjectsPo
 import { reopenLastProject, trackSession } from "./session";
 import { WelcomeView } from "./WelcomeView";
 import { openCurrentWorkspaceInIDE, openWorkspaceInIDE } from "./workspace";
+import { useHomeTerminal } from "./HomeTerminal";
 
 export function activate(): () => void {
   const disposers = [
@@ -14,6 +15,14 @@ export function activate(): () => void {
     provideProjectPopup(ProjectPopup),
     registerOverlay({ id: "welcome.recentProjects", component: RecentProjectsPopup }),
     registerActions([
+      {
+        id: "welcome.openTerminal",
+        title: "Open Terminal",
+        category: "Terminal",
+        icon: "terminal",
+        keywords: ["shell", "console"],
+        run: ({ arg }) => useHomeTerminal.getState().setOpen(true, typeof arg === "string" && arg ? arg : null),
+      },
       {
         id: "welcome.openInIDE",
         title: "Open in IDE",
