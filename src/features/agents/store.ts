@@ -7,6 +7,7 @@ import type {
   AgentCommand,
   AgentEntry,
   AgentEvent,
+  ExternalSession,
   AgentImage,
   AgentLimit,
   AgentProvider,
@@ -79,6 +80,10 @@ interface AgentsState {
   homeOpen: boolean;
   /** Task shown inline in the Cowork home when no project is open (Welcome has no editor tabs). */
   coworkTask: string | null;
+  /** Sessions created outside OpenIDEA (another Codex or Claude client), newest first. */
+  external: ExternalSession[];
+  /** Why the external sessions could not be loaded. */
+  externalError: string | null;
 }
 
 const DRAFT_KEY = "openidea.agents.draft.v2";
@@ -134,6 +139,8 @@ export const useAgents = create<AgentsState>(() => ({
   homeOpen: false,
   coworkTask: null,
   scrollPositions: new Map(),
+  external: [],
+  externalError: null,
 }));
 
 export function updateDraft(patch: Partial<Draft>) {
@@ -218,6 +225,7 @@ export async function connect(): Promise<void> {
     changes: new Map(),
     providers,
   });
+  void refreshExternal();
   // Restored tabs of tasks deleted meanwhile close, like editors of deleted files.
   const editors = editorService();
   for (const t of editors.openTabs?.() ?? []) {
@@ -241,7 +249,40 @@ export function disconnect() {
     homeOpen: false,
     coworkTask: null,
     scrollPositions: new Map(),
+    external: [],
+    externalError: null,
   });
+}
+
+/** Lists sessions created outside OpenIDEA (another Codex or Claude client). */
+export async function refreshExternal(provider?: string): Promise<void> {
+  if (!isTauri()) return;
+  const gen = generation;
+  try {
+    const sessions = await call(commands.agentExternalSessions(provider ?? null));
+    if (gen === generation) useAgents.setState({ external: sessions, externalError: null });
+  } catch (e) {
+    if (gen === generation) useAgents.setState({ externalError: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Imports an external session as a task of the project and resumes it under its own
+ * session id. Importing the same session twice returns the first task.
+ */
+export async function importExternal(session: ExternalSession): Promise<AgentTask> {
+  const projectRoot = useProject.getState().project?.root ?? null;
+  const task = await call(
+    commands.agentImportExternal({
+      provider: session.provider,
+      sessionId: session.sessionId,
+      title: session.title,
+      cwd: session.cwd,
+      projectRoot,
+    }),
+  );
+  void refreshExternal();
+  return task;
 }
 
 function onEvent(e: AgentEvent) {

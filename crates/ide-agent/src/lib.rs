@@ -10,6 +10,7 @@
 mod acp;
 mod config;
 mod conversation;
+mod external;
 mod model;
 mod native;
 mod provider;
@@ -243,6 +244,11 @@ struct Task {
     cancel_pending: AtomicBool,
     /// The agent reported something for the current turn.
     turn_started: AtomicBool,
+    /// When the current turn's prompt was sent (ms since the epoch); first output
+    /// of the turn records its first-token latency against it.
+    turn_start_ms: Mutex<Option<f64>>,
+    /// The current turn already produced output.
+    turn_output_seen: AtomicBool,
     /// Turns sent so far: an idle release scheduled before the latest one is void.
     turns: AtomicU64,
     /// Settings already sent this session (`(option, value)`), so a refusal is not retried.
@@ -467,6 +473,7 @@ impl AgentManager {
             config,
             commands: self.shared.known_commands(&spec.id),
             usage: None,
+            stats: Box::default(),
             queue: Vec::new(),
             capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
             resets_ms: None,
@@ -487,6 +494,131 @@ impl AgentManager {
         handle.emit_task();
         handle.persist();
         self.shared.runtime.spawn(async move { handle.run(prompt).await });
+        Ok(task)
+    }
+
+    /// Sessions created outside OpenIDEA (another Codex or Claude client), newest
+    /// first; `provider` narrows to `codex` or `claude`. Read-only: the agents'
+    /// own history on disk is listed, never modified. `imported` marks sessions an
+    /// OpenIDEA task already resumes.
+    pub async fn external_sessions(&self, provider: Option<String>) -> Vec<ExternalSession> {
+        let wanted: Vec<String> = match provider {
+            Some(p) => vec![p],
+            None => vec!["codex".to_owned(), "claude".to_owned()],
+        };
+        let imported: HashSet<String> =
+            self.tasks.read().values().filter_map(|t| t.state.lock().session_id.clone()).collect();
+        let home = self.shared.paths.home_dir.clone();
+        let specs: Vec<(String, Vec<(String, String)>)> =
+            wanted.into_iter().filter_map(|p| self.shared.spec(&p).map(|s| (s.id, s.env))).collect();
+        let mut out: Vec<ExternalSession> = blocking(move || {
+            let mut sessions = Vec::new();
+            for (id, env) in &specs {
+                sessions.extend(external::list(id, home.as_deref(), env));
+            }
+            sessions.sort_by(|a, b| b.updated_ms.total_cmp(&a.updated_ms));
+            sessions.truncate(external::MAX_SESSIONS);
+            Ok(sessions)
+        })
+        .await
+        .unwrap_or_default();
+        for s in &mut out {
+            s.imported = imported.contains(&s.session_id);
+        }
+        out
+    }
+
+    /// Imports an external session as a task of this project and resumes it under
+    /// its own session id. The task starts in the session's directory when it still
+    /// exists, else in the project root; its history loads in the background, so the
+    /// task is `Starting` until the agent replays it (`Ready`) or reports why it
+    /// can't (`Failed`). Importing the same session twice returns the first task.
+    pub async fn import_external(&self, req: ImportExternalTask) -> IdeResult<AgentTask> {
+        if req.session_id.trim().is_empty() {
+            return Err(IdeError::invalid("unknown session"));
+        }
+        let spec = self
+            .shared
+            .spec(&req.provider)
+            .ok_or_else(|| IdeError::invalid(format!("unknown agent {}", req.provider)))?;
+        if !matches!(
+            (spec.id.as_str(), spec.driver),
+            ("codex", provider::Driver::Codex) | ("claude", provider::Driver::Claude)
+        ) {
+            return Err(IdeError::invalid(format!("{} sessions can't be imported", spec.name)));
+        }
+        let home = self.shared.paths.home_dir.clone();
+        let env = spec.env.clone();
+        let provider = spec.id.clone();
+        let session_id = req.session_id.clone();
+        let still_there = blocking(move || Ok(external::exists(&provider, &session_id, home.as_deref(), &env)))
+            .await
+            .unwrap_or(false);
+        if !still_there {
+            return Err(IdeError::invalid("that session is no longer on this machine"));
+        }
+        if let Some(task) =
+            self.tasks.read().values().find(|t| t.state.lock().session_id.as_deref() == Some(req.session_id.as_str()))
+        {
+            return Ok(task.state.lock().task.clone());
+        }
+        let root = req.project_root.clone().map(|p| p.0).unwrap_or_else(|| self.shared.paths.project_root.clone());
+        let cwd = req.cwd.clone().map(|p| p.0).filter(|p| p.is_dir()).unwrap_or_else(|| root.clone());
+        let title = req.title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| "Imported session".into());
+        let config = self.shared.known_config(&spec.id);
+        let now = now_ms();
+        let task = AgentTask {
+            project_root: Some(IpcPath(root)),
+            id: uuid::Uuid::new_v4().simple().to_string(),
+            title,
+            provider: spec.id.clone(),
+            model: model_of(&config),
+            status: AgentStatus::Starting,
+            isolation: Isolation::Local,
+            cwd: IpcPath(cwd.clone()),
+            branch: None,
+            base: None,
+            base_commit: None,
+            error: None,
+            created_ms: now,
+            updated_ms: now,
+            config,
+            commands: self.shared.known_commands(&spec.id),
+            usage: None,
+            stats: Box::default(),
+            queue: Vec::new(),
+            capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
+            resets_ms: None,
+            retry: None,
+        };
+        let before = blocking(move || Ok(worktree::snapshot(&cwd).unwrap_or_default())).await.unwrap_or_default();
+        let file = TaskFile {
+            task: task.clone(),
+            session_id: Some(req.session_id.clone()),
+            entries: Vec::new(),
+            wanted: Vec::new(),
+            before,
+            subagents: Vec::new(),
+            pending_rollback: 0,
+        };
+        let handle = Task::restore(file, self.shared.clone());
+        handle.state.lock().busy = true;
+        self.tasks.write().insert(task.id.clone(), handle.clone());
+        handle.emit_task();
+        handle.persist();
+        // No prompt is sent: loading the session replays its history into the task.
+        self.shared.runtime.spawn(async move {
+            match handle.ensure_session().await {
+                Ok(_) => {
+                    handle.state.lock().busy = false;
+                    handle.set_status(AgentStatus::Ready, None);
+                }
+                Err(e) => {
+                    handle.state.lock().busy = false;
+                    handle.set_status(AgentStatus::Failed, Some(e));
+                }
+            }
+        });
         Ok(task)
     }
 
@@ -662,6 +794,8 @@ impl AgentManager {
                 created_ms: now,
                 updated_ms: now,
                 usage: None,
+                // A fork reads the copied conversation, but its own spend starts over.
+                stats: Box::default(),
                 queue: Vec::new(),
                 resets_ms: None,
                 retry: None,
@@ -924,6 +1058,8 @@ impl Task {
             send_now: AtomicBool::new(false),
             cancel_pending: AtomicBool::new(false),
             turn_started: AtomicBool::new(false),
+            turn_start_ms: Mutex::new(None),
+            turn_output_seen: AtomicBool::new(false),
             turns: AtomicU64::new(0),
             config_sent: Mutex::new(HashSet::new()),
             dirty: Mutex::new(BTreeSet::new()),
@@ -1042,6 +1178,21 @@ impl Task {
             tokio::time::sleep(TURN_GRACE).await;
             let changed = self.state.lock().conversation.end_turn(Some(now_ms()));
             self.mark_dirty(changed);
+            // One turn ran: count the request, its active time and its outcome.
+            let failed = result.is_err();
+            {
+                let end = now_ms();
+                let mut s = self.state.lock();
+                s.task.stats.requests += 1;
+                if let Some(start) = *self.turn_start_ms.lock() {
+                    s.task.stats.active_ms += (end - start).max(0.0) as u64;
+                }
+                if failed {
+                    s.task.stats.failures += 1;
+                }
+            }
+            *self.turn_start_ms.lock() = None;
+            self.emit_task();
             let send_now = self.send_now.swap(false, Ordering::AcqRel);
             let next = {
                 let mut s = self.state.lock();
@@ -1165,6 +1316,8 @@ impl Task {
     async fn turn(self: &Arc<Self>, prompt: &AgentPrompt) -> Result<String, Failure> {
         self.turns.fetch_add(1, Ordering::AcqRel);
         self.turn_started.store(false, Ordering::Release);
+        *self.turn_start_ms.lock() = Some(now_ms());
+        self.turn_output_seen.store(false, Ordering::Release);
         self.state.lock().task.resets_ms = None;
         let attachments = prompt
             .files
@@ -1482,7 +1635,23 @@ impl Task {
                     true
                 }
                 "usage_update" => {
-                    s.task.usage = config::usage_of(update).or(s.task.usage.take());
+                    // Every live report is one measured request: add its splits to the
+                    // session totals. Replays resend history, so they never count.
+                    let usage = config::usage_of(update);
+                    if let Some(u) = &usage
+                        && !self.replaying.load(Ordering::Acquire)
+                    {
+                        let st = &mut s.task.stats;
+                        st.input_tokens += u64::from(u.input_tokens.unwrap_or(0));
+                        st.output_tokens += u64::from(u.output_tokens.unwrap_or(0));
+                        st.cache_read_tokens += u64::from(u.cache_read_tokens.unwrap_or(0));
+                        st.cache_write_tokens += u64::from(u.cache_write_tokens.unwrap_or(0));
+                        st.reasoning_tokens += u64::from(u.reasoning_tokens.unwrap_or(0));
+                        if let Some(cost) = u.cost.as_deref() {
+                            st.cost_usd = Some(cost.amount);
+                        }
+                    }
+                    s.task.usage = usage.or(s.task.usage.take());
                     true
                 }
                 // The last shown share went stale (model change, compaction): drop
@@ -1523,8 +1692,36 @@ impl Task {
     }
 
     fn apply(self: &Arc<Self>, session: Option<&str>, kind: &str, update: &Value) {
+        // The task's own session (its id, or none) — not a subagent's, whose
+        // spend and timing belong to its own card, not the session totals.
+        let own = self.state.lock().conversation.owner(session).is_none();
         // Output again: the retried request went through.
+        if own && self.state.lock().task.retry.is_some() {
+            self.state.lock().task.stats.retries += 1;
+        }
         self.set_retry(None);
+        // First output of the turn: time to first token.
+        if own
+            && matches!(
+                kind,
+                "agent_message_chunk"
+                    | "agent_thought_chunk"
+                    | "session_message"
+                    | "session_message_chunk"
+                    | "tool_call"
+                    | "tool_call_update"
+                    | "plan"
+            )
+            && !self.turn_output_seen.swap(true, Ordering::AcqRel)
+            && let Some(start) = *self.turn_start_ms.lock()
+        {
+            let ttft = now_ms() - start;
+            if ttft >= 0.0 {
+                let mut s = self.state.lock();
+                s.task.stats.ttft_ms += ttft as u64;
+                s.task.stats.ttft_samples += 1;
+            }
+        }
         let applied = self.state.lock().conversation.apply(session, update, now_ms());
         self.mark_dirty(applied);
         // A subagent can start or finish after the turn that started it: saved right away.

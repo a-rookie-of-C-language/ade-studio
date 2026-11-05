@@ -6297,5 +6297,12 @@
   "subagents": "个子 agent",
   "permission": "个权限请求",
   "permissions": "个权限请求",
-  "Steered": "追问"
+  "Steered": "追问",
+  "External sessions": "外部会话",
+  "Refresh external sessions": "刷新外部会话",
+  "Only this project": "仅当前项目",
+  "Import": "导入",
+  "Couldn't import the session": "无法导入该会话",
+  "Cannot load external sessions": "无法加载外部会话",
+  "No external sessions yet": "暂无外部会话"
 }

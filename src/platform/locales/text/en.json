@@ -66,5 +66,12 @@
   "subagents": "subagents",
   "permission": "permission",
   "permissions": "permissions",
-  "Steered": "Steered"
+  "Steered": "Steered",
+  "External sessions": "External sessions",
+  "Refresh external sessions": "Refresh external sessions",
+  "Only this project": "Only this project",
+  "Import": "Import",
+  "Couldn't import the session": "Couldn't import the session",
+  "Cannot load external sessions": "Cannot load external sessions",
+  "No external sessions yet": "No external sessions yet"
 }

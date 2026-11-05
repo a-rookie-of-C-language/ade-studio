@@ -79,6 +79,11 @@ pub struct AgentTask {
     /// Context window use, when the agent reports it.
     /// Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
     pub usage: Option<Box<AgentUsage>>,
+    /// Cumulative session statistics: token totals, request outcomes and timing.
+    /// Saved with the task, so the numbers survive restarts; a fork starts over.
+    /// Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+    #[serde(default)]
+    pub stats: Box<AgentSessionStats>,
     /// Messages waiting for the current turn to end, oldest first.
     pub queue: Vec<AgentQueued>,
     #[serde(default)]
@@ -218,6 +223,51 @@ pub struct AgentCost {
     pub amount: f64,
     /// ISO 4217 code, e.g. `USD`.
     pub currency: String,
+}
+
+/// Cumulative session statistics: what the task spent and how fast it went.
+/// Every `usage_update` the task's own session reports adds its per-request
+/// splits to the totals (like the provider CLIs count API calls); turns add
+/// timing. Rolling the conversation back never refunds the spend.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionStats {
+    /// Completed turns (user requests the agent answered, failed or stopped).
+    #[serde(default)]
+    pub requests: u32,
+    /// Turns that ended in an error.
+    #[serde(default)]
+    pub failures: u32,
+    /// Retried API requests that later produced output.
+    #[serde(default)]
+    pub retries: u32,
+    /// Sum of the per-request input tokens agents reported.
+    #[serde(default)]
+    pub input_tokens: u64,
+    /// Sum of the per-request output tokens agents reported.
+    #[serde(default)]
+    pub output_tokens: u64,
+    /// Tokens served from cache, summed as reported.
+    #[serde(default)]
+    pub cache_read_tokens: u64,
+    /// Tokens written to cache, summed as reported.
+    #[serde(default)]
+    pub cache_write_tokens: u64,
+    /// Reasoning tokens, summed as reported.
+    #[serde(default)]
+    pub reasoning_tokens: u64,
+    /// What the session has cost so far in USD, as last reported.
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
+    /// Sum of completed-turn durations (ms).
+    #[serde(default)]
+    pub active_ms: u64,
+    /// Sum of first-output latencies (ms) over `ttft_samples` turns.
+    #[serde(default)]
+    pub ttft_ms: u64,
+    /// Turns whose first output was timed.
+    #[serde(default)]
+    pub ttft_samples: u32,
 }
 
 /// One usage-limit window of an agent's account.
@@ -490,6 +540,40 @@ pub struct AgentChange {
     pub kind: ide_vcs::ChangeKind,
     pub added: u32,
     pub removed: u32,
+}
+
+/// A session created outside OpenIDEA (another Codex or Claude client) that can be
+/// imported as a task and resumed under its own session id.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ExternalSession {
+    /// `codex` or `claude`.
+    pub provider: String,
+    /// The native session/thread id, reused to resume the conversation.
+    pub session_id: String,
+    pub title: String,
+    /// Directory the session worked in, when its history names one.
+    pub cwd: Option<IpcPath>,
+    /// Last activity (ms since the epoch), newest first.
+    pub updated_ms: f64,
+    /// An OpenIDEA task already resumes this session.
+    pub imported: bool,
+}
+
+/// Import an external session as a task of the project.
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportExternalTask {
+    /// `codex` or `claude`.
+    pub provider: String,
+    /// The native session/thread id to resume.
+    pub session_id: String,
+    pub title: Option<String>,
+    /// Directory the session worked in, when known; the project root otherwise.
+    pub cwd: Option<IpcPath>,
+    /// Validated by the host; defaults to the window project root.
+    #[serde(default)]
+    pub project_root: Option<IpcPath>,
 }
 
 /// Streamed to the window that subscribed (`AgentManager::subscribe`).
