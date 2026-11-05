@@ -306,7 +306,12 @@ impl Timeline {
     /// and records when the turn ended (`done`) on the message that started it.
     pub fn end_turn(&mut self, done: Option<f64>) -> Vec<usize> {
         let mut changed = Vec::new();
-        let started = self.entries.iter().rposition(|e| matches!(e, AgentEntry::User { .. }));
+        // The turn header reads the starter's timestamps; a steered follow-up must not take its place.
+        let started = self
+            .entries
+            .iter()
+            .rposition(|e| matches!(e, AgentEntry::User { steered: false, .. }))
+            .or_else(|| self.entries.iter().rposition(|e| matches!(e, AgentEntry::User { .. })));
         for (i, e) in self.entries.iter_mut().enumerate() {
             match e {
                 AgentEntry::User { done_ms, .. } if Some(i) == started && done.is_some() && done_ms.is_none() => {
@@ -530,6 +535,25 @@ mod tests {
         assert!(matches!(t.entries[2], AgentEntry::User { done_ms: Some(5.0), .. }));
         // Settled once: a later end (a restart) doesn't move it.
         assert_eq!(t.end_turn(Some(9.0)), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn end_turn_answers_the_starter_not_a_steered_follow_up() {
+        let user = |sent: f64, steered: bool| AgentEntry::User {
+            text: "q".into(),
+            attachments: vec![],
+            images: vec![],
+            sent_ms: Some(sent),
+            done_ms: None,
+            steered,
+        };
+        let mut t = Timeline::default();
+        t.push(user(1.0, false));
+        t.push(AgentEntry::Agent { text: "a".into() });
+        t.push(user(2.0, true));
+        assert_eq!(t.end_turn(Some(5.0)), vec![0]);
+        assert!(matches!(t.entries[0], AgentEntry::User { done_ms: Some(5.0), .. }));
+        assert!(matches!(t.entries[2], AgentEntry::User { done_ms: None, steered: true, .. }));
     }
 
     #[test]
