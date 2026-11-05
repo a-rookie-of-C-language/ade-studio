@@ -6254,5 +6254,8 @@
   "Issues at {name}": "{name} 的议题",
   "No open issues in {name}": "{name} 中没有未解决的议题",
   "No closed issues in {name}": "{name} 中没有已关闭的议题",
-  "Can't load issues": "无法加载议题"
+  "Can't load issues": "无法加载议题",
+  "Model {model}": "模型 {model}",
+  "Estimated from the last response": "根据上一次响应估算",
+  "{name}: {tokens} tokens": "{name}：{tokens} 个 token"
 }

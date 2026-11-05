@@ -579,12 +579,13 @@ pub(super) fn plan(params: &Value) -> Value {
 }
 
 /// `thread/tokenUsage/updated` as an ACP `usage_update`: what the last request put in
-/// the context window, out of its size.
+/// the context window, out of its size. The frame names no model, so none is attached:
+/// what the provider reports is shown, nothing is filled in.
 pub(super) fn usage(params: &Value) -> Option<Value> {
     let usage = params.get("tokenUsage")?;
     let used = usage.pointer("/last/totalTokens")?.as_u64()?;
     let size = usage.get("modelContextWindow")?.as_u64().filter(|s| *s > 0)?;
-    Some(json!({ "sessionUpdate": "usage_update", "used": used, "size": size }))
+    Some(json!({ "sessionUpdate": "usage_update", "used": used, "size": size, "kind": "report" }))
 }
 
 /// How a failed turn is reported.

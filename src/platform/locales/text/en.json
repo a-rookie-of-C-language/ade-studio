@@ -17,5 +17,8 @@
   "Issues at {name}": "Issues at {name}",
   "No open issues in {name}": "No open issues in {name}",
   "No closed issues in {name}": "No closed issues in {name}",
-  "Can't load issues": "Can't load issues"
+  "Can't load issues": "Can't load issues",
+  "Model {model}": "Model {model}",
+  "Estimated from the last response": "Estimated from the last response",
+  "{name}: {tokens} tokens": "{name}: {tokens} tokens"
 }

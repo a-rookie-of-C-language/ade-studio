@@ -211,7 +211,15 @@ export function retryParts(r: AgentRetry, now: number): { attempt: string; wait:
 
 export function usageLabel(u: AgentUsage): { short: string; detail: string } {
   const pct = Math.min(100, Math.round((u.used / u.size) * 100));
-  return { short: `${pct}%`, detail: tx`${tokens(u.used)} / ${tokens(u.size)} tokens` };
+  // Estimates wear a `~`: they are summed from message-level token counts, not
+  // the provider's own report. Absent entirely means unknown (nothing reported
+  // yet, or the last reading was invalidated by a compaction or model change).
+  const short = u.kind === "estimate" ? `~${pct}%` : `${pct}%`;
+  const lines = [tx`${tokens(u.used)} / ${tokens(u.size)} tokens`];
+  if (u.model) lines.push(tx`Model ${u.model}`);
+  if (u.kind === "estimate") lines.push(tx`Estimated from the last response`);
+  for (const c of u.categories ?? []) lines.push(tx`${c.name}: ${tokens(c.tokens)} tokens`);
+  return { short, detail: lines.join("\n") };
 }
 
 /** The usage-limit windows agents report, by the name they give them; others show that name. */

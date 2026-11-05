@@ -1010,7 +1010,35 @@ fn streamed_text_is_not_sent_twice() {
     assert_eq!(texts, [("agent_thought_chunk", "hm"), ("agent_message_chunk", "Hel"), ("agent_message_chunk", "lo")]);
     // Usage needs the window, which a result reports.
     let usage = t.on_result(&json!({"modelUsage": {"x": {"contextWindow": 1000}}}));
-    assert_eq!(usage[0].update, json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000}));
+    // Message-level token counts are an estimate, tagged with the model they were measured for.
+    assert_eq!(
+        usage[0].update,
+        json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000, "kind": "estimate", "model": "x"})
+    );
+}
+
+#[test]
+fn usage_clears_once_when_the_model_outruns_its_window() {
+    let mut t = Translator::new("s", PathBuf::from("/w"), false);
+    t.used = Some(15);
+    t.model = Some("x".into());
+    t.on_result(&json!({"modelUsage": {"x": {"contextWindow": 1000}}}));
+    // A second model's window lands (the single-known-window fallback no longer
+    // applies); then the model changes to one with no known window. The last
+    // shown share is stale, so the meter clears to unknown instead of keeping it.
+    t.on_result(&json!({"modelUsage": {"x": {"contextWindow": 1000}, "z": {"contextWindow": 3000}}}));
+    t.model = Some("y".into());
+    let cleared = t.usage_updates();
+    assert_eq!(cleared.len(), 1);
+    assert_eq!(cleared[0].update, json!({"sessionUpdate": "usage_cleared"}));
+    // …but only once: later events stay quiet until a window lands.
+    assert!(t.usage_updates().is_empty());
+    // A result naming the new model's window restores the meter as an estimate.
+    let usage = t.on_result(&json!({"modelUsage": {"y": {"contextWindow": 2000}}}));
+    assert_eq!(
+        usage[0].update,
+        json!({"sessionUpdate": "usage_update", "used": 15, "size": 2000, "kind": "estimate", "model": "y"})
+    );
 }
 
 #[test]

@@ -77,7 +77,8 @@ pub struct AgentTask {
     /// Slash commands the agent offers.
     pub commands: Vec<AgentCommand>,
     /// Context window use, when the agent reports it.
-    pub usage: Option<AgentUsage>,
+    /// Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound.
+    pub usage: Option<Box<AgentUsage>>,
     /// Messages waiting for the current turn to end, oldest first.
     pub queue: Vec<AgentQueued>,
     #[serde(default)]
@@ -155,10 +156,43 @@ pub struct AgentUsage {
     pub used: u32,
     /// Size of the context window.
     pub size: u32,
+    /// Where the numbers come from: the provider's own report, or our estimate
+    /// from its message-level token counts. Absent on tasks saved before this
+    /// was tracked; those read as `Report`.
+    #[serde(default)]
+    pub kind: AgentContextKind,
+    /// The model the numbers were measured for, when the provider names it.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The provider's own per-category breakdown, when it reports one.
+    #[serde(default)]
+    pub categories: Vec<AgentContextCategory>,
     /// What the session has cost so far (ACP `usage_update.cost`), when the agent reports it.
     // Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound on Windows.
     #[serde(default)]
     pub cost: Option<Box<AgentCost>>,
+}
+
+/// Where a context-window reading comes from. `None` (no `AgentUsage` at all)
+/// means unknown: nothing reported yet, or the last reading was invalidated by
+/// a compaction or a model change.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum AgentContextKind {
+    /// The provider's own answer (Codex `tokenUsage`, ACP `usage_update`).
+    #[default]
+    Report,
+    /// Derived from message-level token counts (Claude stream-json `usage`).
+    Estimate,
+}
+
+/// One row of the provider's own context breakdown, as it names and counts it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentContextCategory {
+    /// Display name as the provider renders it.
+    pub name: String,
+    pub tokens: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]

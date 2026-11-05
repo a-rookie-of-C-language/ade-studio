@@ -201,6 +201,24 @@ describe("usage meters", () => {
     expect(usageLabel({ used: 83_100, size: 1_000_000 }).detail).toBe("83.1k / 1M tokens");
   });
 
+  it("marks estimates and shows what the provider reports", () => {
+    // Estimates wear a `~` and say what they are; the provider's own report does not.
+    expect(usageLabel({ used: 24_000, size: 200_000, kind: "estimate", model: "x" })).toEqual({
+      short: "~12%",
+      detail: "24k / 200k tokens\nModel x\nEstimated from the last response",
+    });
+    // The provider's own per-category breakdown, when it reports one.
+    expect(
+      usageLabel({
+        used: 1000,
+        size: 2000,
+        kind: "report",
+        model: "y",
+        categories: [{ name: "Messages", tokens: 600 }],
+      }).detail,
+    ).toBe("1k / 2k tokens\nModel y\nMessages: 600 tokens");
+  });
+
   it("names usage-limit windows and says when they reset", () => {
     const hour = 3_600_000;
     expect(limitLabel({ window: "five_hour", usedPercent: 19.4, resetsMs: 2 * hour + 51 * 60_000 }, 0)).toEqual({
