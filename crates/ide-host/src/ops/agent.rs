@@ -188,8 +188,11 @@ pub async fn create(host: &Host, window: &str, mut request: NewAgentTask) -> Ide
     let project = host.project_or_default(window)?;
     project.require_trust()?;
     // The agent-first home has no explicit project: the user picks the workspace
-    // folder itself, so anything on disk goes (trust is checked below).
-    let explicit = host.project(window).is_ok();
+    // folder itself, so anything on disk goes (trust is checked below). The
+    // default workspace is not an explicit project: `project_or_default` opens
+    // it for the listing/probe calls that run before the first Start, and that
+    // must not flip validation into window-project-only mode.
+    let explicit = host.project(window).is_ok_and(|p| !is_default_project(&p.root));
     let root = project.root.clone();
     let requested = request.project_root.take();
     // Canonicalized once here so the trust check below can skip the window root itself.
@@ -333,6 +336,15 @@ pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_base_text", |c| async move { base_text(&c.host, &c.window, c.arg("task")?, c.arg("path")?).await });
 }
 
+/// Whether `root` is the agent-first home's default workspace
+/// (`~/.openidea/workspace`): app-owned, so hosting it is not an explicit project.
+fn is_default_project(root: &std::path::Path) -> bool {
+    let root = dunce::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let def = Host::default_workspace();
+    let def = dunce::canonicalize(&def).unwrap_or(def);
+    root == def
+}
+
 fn validate_project_root(
     root: &std::path::Path,
     requested: Option<&std::path::Path>,
@@ -411,5 +423,22 @@ mod tests {
         assert!(validate_project_root(&root, Some(&file), false).is_err());
         assert!(validate_project_root(&root, Some(&tmp.path().join("missing")), false).is_err());
         assert!(validate_project_root(&root, Some(std::path::Path::new("relative")), false).is_err());
+    }
+
+    #[test]
+    fn default_workspace_project_is_not_explicit() {
+        // `project_or_default` opens this for the home window before the first
+        // Start; picking another folder must still validate as the home flow.
+        assert!(is_default_project(&Host::default_workspace()));
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!is_default_project(tmp.path()));
+        let picked = tmp.path().join("picked");
+        std::fs::create_dir_all(&picked).unwrap();
+        let explicit = !is_default_project(&Host::default_workspace());
+        assert!(!explicit);
+        assert_eq!(
+            validate_project_root(&Host::default_workspace(), Some(&picked), explicit).unwrap(),
+            dunce::canonicalize(&picked).unwrap()
+        );
     }
 }
