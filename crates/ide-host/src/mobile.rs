@@ -372,8 +372,11 @@ pub async fn serve_mobile_on(listener: TcpListener, state: Arc<MobileState>) -> 
 }
 
 /// First frame (plaintext): `{"type":"e2ee_hello","publicKeyB64":"..."}`.
-/// Answers plaintext `e2ee_ready`, like Orca's mock server; anything else closes
-/// the connection, since v2 has no plaintext protocol to fall back to.
+/// Answers plaintext `e2ee_ready` carrying this server's public key, so a phone
+/// pairing with a typed-in code (no QR to pin) can still derive the shared
+/// secret (TOFU: the UI must warn the network is trusted). QR phones ignore the
+/// advertised key and use the pinned one from the pairing URL instead; anything
+/// else closes the connection, since v2 has no plaintext protocol to fall back to.
 async fn read_hello(
     state: &Arc<MobileState>,
     ws: &mut tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
@@ -392,7 +395,8 @@ async fn read_hello(
         let pub_b64 = hello.get("publicKeyB64").and_then(Value::as_str).unwrap_or("");
         match shared_box(&state.keys.secret, pub_b64) {
             Ok(shared) => {
-                let _ = ws.send(Message::text(r#"{"type":"e2ee_ready"}"#)).await;
+                let ready = serde_json::json!({"type": "e2ee_ready", "publicKeyB64": state.keys.public_b64()});
+                let _ = ws.send(Message::text(ready.to_string())).await;
                 return Ok(Some(shared));
             }
             Err(detail) => {

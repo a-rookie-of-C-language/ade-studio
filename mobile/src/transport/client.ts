@@ -9,7 +9,6 @@ import {
   publicKeyToBase64,
   type KeyPair,
 } from "./e2ee.js";
-import type { PairingOffer } from "./pairing.js";
 
 export const MOBILE_PROTOCOL = 2;
 
@@ -25,6 +24,15 @@ export type WebSocketLike = {
 
 export type RpcError = { code: number | string; message: string };
 export type RpcEvent = { method: string; params: unknown };
+
+/** What the phone knows before dialing. QR offers pin `publicKeyB64`; a typed-in
+ * manual code has no pin, so the client falls back to trust-on-first-use and
+ * must surface that (see `serverKeyPinned`). */
+export type ConnectSpec = {
+  endpoint: string;
+  publicKeyB64?: string;
+  deviceToken?: string;
+};
 
 type Pending = {
   resolve: (v: unknown) => void;
@@ -49,25 +57,33 @@ export class MobileClient {
   private pending = new Map<number, Pending>();
   onEvent: ((e: RpcEvent) => void) | null = null;
   onClose: (() => void) | null = null;
+  /** False when the server key came from the socket (manual code, TOFU). */
+  serverKeyPinned = false;
+  /** The key the session is encrypted under (pinned or advertised). */
+  serverPublicKeyB64 = "";
 
-  /** Open the socket, run the E2EE hello, and leave auth to the caller. */
-  async connect(offer: PairingOffer, keys: KeyPair, open: WsFactory): Promise<void> {
-    const serverPub = publicKeyFromBase64(offer.publicKeyB64);
-    const shared = deriveSharedKey(keys.secretKey, serverPub);
-    const ws = open(offer.endpoint);
+  /** Open the socket, run the E2EE hello, and leave auth to the caller.
+   * A pinned key that disagrees with the server's hello aborts: that is a
+   * MITM (or a rotated server key — re-pair from the desktop). */
+  async connect(spec: ConnectSpec, keys: KeyPair, open: WsFactory): Promise<void> {
+    const ws = open(spec.endpoint);
     this.ws = ws;
-    this.sharedKey = shared;
+    this.serverKeyPinned = false;
+    this.serverPublicKeyB64 = "";
 
-    await new Promise<void>((resolve, reject) => {
+    const advertised = await new Promise<string>((resolve, reject) => {
       const fail = (e: unknown) => reject(e instanceof Error ? e : new Error("websocket open failed"));
       ws.onerror = fail;
       ws.onopen = () => {
         ws.onmessage = (e) => {
           const text = toText(e.data);
           try {
-            const hello = JSON.parse(text) as { type?: string };
-            if (hello.type === "e2ee_ready") resolve();
-            else reject(new Error(`expected e2ee_ready, got: ${text.slice(0, 80)}`));
+            const hello = JSON.parse(text) as { type?: unknown; publicKeyB64?: unknown };
+            if (hello.type !== "e2ee_ready") {
+              reject(new Error(`expected e2ee_ready, got: ${text.slice(0, 80)}`));
+              return;
+            }
+            resolve(typeof hello.publicKeyB64 === "string" ? hello.publicKeyB64 : "");
           } catch (err) {
             reject(err instanceof Error ? err : new Error("bad e2ee_ready frame"));
           }
@@ -75,6 +91,30 @@ export class MobileClient {
         ws.send(JSON.stringify({ type: "e2ee_hello", publicKeyB64: publicKeyToBase64(keys.publicKey) }));
       };
     });
+
+    const pinned = spec.publicKeyB64?.trim() || "";
+    if (pinned && advertised && pinned !== advertised.trim()) {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+      throw new Error("server key mismatch: re-pair from the desktop (possible MITM)");
+    }
+    const effective = pinned || advertised;
+    if (!effective) {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+      throw new Error("server did not advertise a public key");
+    }
+    this.sharedKey = deriveSharedKey(keys.secretKey, publicKeyFromBase64(effective));
+    this.serverKeyPinned = pinned !== "";
+    this.serverPublicKeyB64 = effective;
 
     // Steady-state dispatch: encrypted replies resolve `request()`, bare
     // `{method, params}` frames go to `onEvent` (channel/logcat streams).

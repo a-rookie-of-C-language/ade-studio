@@ -6,7 +6,8 @@ Minimal Expo + mock-server shell against the v2 companion protocol in
 
 ## Protocol (v2)
 
-- Plaintext: `{"type":"e2ee_hello","publicKeyB64":"…"}` → `{"type":"e2ee_ready"}`
+- Plaintext: `{"type":"e2ee_hello","publicKeyB64":"…"}` →
+- `{"type":"e2ee_ready","publicKeyB64":"<server key>"}` (additive; still v2)
 - Then every frame is encrypted: `{id, method, params}` → `{id, result}` or `{id, error}`
 - First encrypted call is `e2ee_auth {deviceToken}`; then
 - `initialize {version: 2, deviceToken}` → `{protocol: 2, …}`; then `ping`,
@@ -14,7 +15,9 @@ Minimal Expo + mock-server shell against the v2 companion protocol in
 - Pairing QR: `openidea://pair?code=<base64url(JSON {v:1, endpoint, deviceToken, publicKeyB64}>)`
 
 The phone pins `publicKeyB64` from the QR before deriving the shared secret,
-so a LAN attacker cannot MITM the hello.
+so a LAN attacker cannot MITM the hello; a pinned key that disagrees with the
+advertised one aborts the connection. Manual 6-digit codes carry no pin, so
+the app trusts the advertised key (TOFU) and shows a warning instead.
 
 ## Run the mock server
 
@@ -41,7 +44,14 @@ cargo run -p ide-host --bin openidea-server -- --mobile --mobile-bind 0.0.0.0:67
 
 ## Expo UI
 
-`app/` holds the Expo Router screens (pair → confirm → projects). They import
+`app/` holds the Expo Router screens (gate → pair → home/projects). They import
 only from `src/transport/*`, so the same code runs against the mock and the
-Rust server. `npx expo start` once the Expo deps are installed (not part of the
-default `pnpm --dir mobile install` yet — coming next).
+Rust server.
+
+```sh
+pnpm --dir mobile start          # Expo dev server: scan with Expo Go (same LAN)
+pnpm --dir mobile android        # or run on an emulator / dev build
+```
+
+Pairing state (endpoint, device token, pinned server key, client identity) lives
+in SecureStore. Deep links (`openidea://pair?code=…`) autofill the pair screen.

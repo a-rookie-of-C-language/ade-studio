@@ -115,7 +115,7 @@ wss.on("connection", (ws) => {
         return;
       }
       sessions.set(ws, { shared: deriveSharedKey(serverKeys.secretKey, clientPub), authed: false });
-      ws.send(JSON.stringify({ type: "e2ee_ready" }));
+      ws.send(JSON.stringify({ type: "e2ee_ready", publicKeyB64: serverPubB64 }));
       return;
     }
     const plain = e2eeDecrypt(text, sess.shared);

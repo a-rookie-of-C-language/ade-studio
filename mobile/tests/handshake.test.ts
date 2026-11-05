@@ -32,7 +32,7 @@ wss.on("connection", (ws: WebSocket) => {
       }
       const clientPub = new Uint8Array(Buffer.from(hello.publicKeyB64, "base64"));
       sessions.set(ws, { shared: deriveSharedKey(serverKeys.secretKey, clientPub), authed: false });
-      ws.send(JSON.stringify({ type: "e2ee_ready" }));
+      ws.send(JSON.stringify({ type: "e2ee_ready", publicKeyB64: publicKeyToBase64(serverKeys.publicKey) }));
       return;
     }
     const plain = e2eeDecrypt(text, sess.shared);
@@ -89,7 +89,7 @@ describe("v2 handshake", () => {
     const keys = generateKeyPair();
     const client = new MobileClient();
     await client.connect(
-      { v: 1, endpoint, deviceToken: TOKEN, publicKeyB64: publicKeyToBase64(serverKeys.publicKey) },
+      { endpoint, deviceToken: TOKEN, publicKeyB64: publicKeyToBase64(serverKeys.publicKey) },
       keys,
       openWs,
     );
@@ -104,11 +104,32 @@ describe("v2 handshake", () => {
     const endpoint = await address();
     const client = new MobileClient();
     await client.connect(
-      { v: 1, endpoint, deviceToken: "nope", publicKeyB64: publicKeyToBase64(serverKeys.publicKey) },
+      { endpoint, deviceToken: "nope", publicKeyB64: publicKeyToBase64(serverKeys.publicKey) },
       generateKeyPair(),
       openWs,
     );
     await expect(client.auth("nope")).rejects.toThrow();
+    client.close();
+  });
+
+  it("aborts on a pinned-key mismatch (MITM)", async () => {
+    const endpoint = await address();
+    const client = new MobileClient();
+    const stranger = publicKeyToBase64(generateKeyPair().publicKey);
+    await expect(client.connect({ endpoint, publicKeyB64: stranger }, generateKeyPair(), openWs)).rejects.toThrow(
+      /mismatch/,
+    );
+    expect(client.connected).toBe(false);
+  });
+
+  it("manual flow trusts the advertised key and flags it", async () => {
+    const endpoint = await address();
+    const keys = generateKeyPair();
+    const client = new MobileClient();
+    await client.connect({ endpoint }, keys, openWs);
+    expect(client.serverKeyPinned).toBe(false);
+    await client.auth(TOKEN);
+    expect(await client.ping()).toBe(true);
     client.close();
   });
 });

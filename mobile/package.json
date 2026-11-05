@@ -3,16 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "expo-router/entry",
   "scripts": {
     "mock-server": "tsx scripts/mock-server.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
+    "expo": "^55.0.31",
+    "expo-crypto": "^55.0.19",
+    "expo-router": "^55.0.18",
+    "expo-secure-store": "^55.0.18",
+    "expo-status-bar": "^55.0.6",
+    "react": "19.2.8",
+    "react-native": "^0.83.10",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/react": "~19.2.18",
     "@types/ws": "^8.18.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
