@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { commands, isTauri, type RunConfig } from "@/platform/ipc";
 import { useTx, useTxTemplate } from "@/platform/i18n";
-import { Checkbox, Dialog, IconButton, Input, T } from "@/ui";
+import { Checkbox, Dialog, IconButton, Input, T, tooltipAttrs } from "@/ui";
 import { parseEnv } from "./configs";
 import styles from "./Run.module.css";
 
@@ -213,7 +213,7 @@ export function EnvDialog({
                 key={k}
                 role="row"
                 className={clsx(styles.envGridRow, styles.envSystemRow, overridden.has(k) && styles.envOverridden)}
-                title={`${k}=${v}`}
+                {...tooltipAttrs(`${k}=${v}`)}
               >
                 <span className={styles.envCell}>{k}</span>
                 <span className={styles.envCell}>{v}</span>

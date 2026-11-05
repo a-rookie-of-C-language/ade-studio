@@ -3,7 +3,7 @@
  * (the label's colour, as the timeline and create form show them) and branch chips.
  */
 import clsx from "clsx";
-import { Icon } from "@/ui";
+import { Icon, tooltipAttrs } from "@/ui";
 import type { GHLabel, GHPullRequestState } from "../api/types";
 import { stateTagText } from "../data/model";
 import styles from "./ui.module.css";
@@ -39,7 +39,7 @@ export function LabelChip({ label, className }: { label: Pick<GHLabel, "name" | 
     <span
       className={clsx(styles.labelChip, className)}
       style={{ background: labelColor(label), color: labelForeground(label.color) }}
-      title={label.name}
+      {...tooltipAttrs(label.name)}
     >
       {label.name}
     </span>
@@ -54,7 +54,7 @@ export function LabelSwatch({ label }: { label: Pick<GHLabel, "color"> }) {
 /** A branch name with the branch icon (`current`: the checked-out branch's icon). */
 export function BranchChip({ name, current, className }: { name: string; current?: boolean; className?: string }) {
   return (
-    <span className={clsx(styles.branchChip, className)} title={name}>
+    <span className={clsx(styles.branchChip, className)} {...tooltipAttrs(name)}>
       <Icon name={current ? "current-branch-label" : "branch-label"} size={16} />
       <span>{name}</span>
     </span>

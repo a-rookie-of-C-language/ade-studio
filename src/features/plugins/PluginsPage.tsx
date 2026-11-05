@@ -23,6 +23,7 @@ import {
   showContextMenu,
   type MenuItem,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { RISK_LABEL, sortByRisk } from "./consent";
 import { itemsOf, uiPoint } from "./projection";
@@ -131,7 +132,7 @@ function InstalledRow({ plugin, selected, onSelect }: { plugin: PluginInfo; sele
         className={styles.rowMain}
         aria-current={selected || undefined}
         onClick={onSelect}
-        title={plugin.description || plugin.name}
+        {...tooltipAttrs(plugin.description || plugin.name)}
       >
         <PluginIcon />
         <span className={styles.rowText}>
@@ -199,7 +200,7 @@ function CatalogRow({ entry, selected, onSelect }: { entry: CatalogPlugin; selec
         className={styles.rowMain}
         aria-current={selected || undefined}
         onClick={onSelect}
-        title={entry.description || entry.name}
+        {...tooltipAttrs(entry.description || entry.name)}
       >
         <PluginIcon />
         <span className={styles.rowText}>
@@ -338,7 +339,7 @@ function InstalledDetails({ plugin }: { plugin: PluginInfo }) {
         <dt>
           <T>Location</T>
         </dt>
-        <dd className={styles.mono} title={plugin.path}>
+        <dd className={styles.mono} {...tooltipAttrs(plugin.path)}>
           {plugin.path}
         </dd>
         <dt>
@@ -484,7 +485,7 @@ function CatalogDetails({ entry }: { entry: CatalogPlugin }) {
         <dt>
           <T>Source</T>
         </dt>
-        <dd className={styles.mono} title={entry.path}>
+        <dd className={styles.mono} {...tooltipAttrs(entry.path)}>
           {entry.path}
         </dd>
         <dt>
@@ -679,7 +680,7 @@ function MarketRow({ entry, selected, onSelect }: { entry: MarketPlugin; selecte
         className={styles.rowMain}
         aria-current={selected || undefined}
         onClick={onSelect}
-        title={entry.description || entry.name}
+        {...tooltipAttrs(entry.description || entry.name)}
       >
         <PluginIcon />
         <span className={styles.rowText}>
@@ -847,7 +848,7 @@ export function PluginsPage() {
             },
           ]}
         />
-        <span title={tx("The plugin system is a preview: its API and the plugins may still change.")}>
+        <span {...tooltipAttrs(tx("The plugin system is a preview: its API and the plugins may still change."))}>
           <Badge tone="accent">
             <T>Preview</T>
           </Badge>

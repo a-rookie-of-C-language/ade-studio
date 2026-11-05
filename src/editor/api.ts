@@ -283,7 +283,7 @@ export class LaneMarker extends GutterMarker {
     const el = document.createElement("div");
     el.className = this.kind === "deleted" ? "cm-openidea-laneDeleted" : "cm-openidea-laneBar";
     el.style.setProperty("--lane-color", this.color);
-    if (this.title) el.title = this.title;
+    if (this.title) el.setAttribute("data-tooltip", this.title ?? "");
     return el;
   }
 }

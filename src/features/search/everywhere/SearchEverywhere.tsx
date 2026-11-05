@@ -24,6 +24,7 @@ import {
   type RowSelection,
   type MenuItem,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { useFileDecoration } from "@/workbench/contributions";
 import { highlightTokens, languageForPath, type CodeToken } from "@/editor/lsp/markdown";
@@ -514,7 +515,7 @@ function SearchEverywhereDialog() {
             type="button"
             className={styles.magnifier}
             aria-label={tx("Search history")}
-            title={tx`Search history (${formatBinding("Alt+Up")} / ${formatBinding("Alt+Down")})`}
+            {...tooltipAttrs(tx`Search history (${formatBinding("Alt+Up")} / ${formatBinding("Alt+Down")})`)}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => openHistory(e.currentTarget)}
           >

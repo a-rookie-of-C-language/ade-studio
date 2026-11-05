@@ -25,6 +25,7 @@
 .text {
   min-width: 0;
   overflow-wrap: anywhere;
+  white-space: pre-line;
 }
 .shortcut {
   font-family: var(--font-keys);

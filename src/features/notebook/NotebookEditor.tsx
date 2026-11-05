@@ -12,7 +12,7 @@ import type { NotebookCell } from "@/bindings";
 import { tx } from "@/platform/i18n";
 import { useMarkdownPreviewFontSize } from "@/platform/languageSettings";
 import { useProject } from "@/platform/project";
-import { Button, Dialog, EmptyState, IconButton, Select, Spinner } from "@/ui";
+import { Button, Dialog, EmptyState, IconButton, Select, Spinner, tooltipAttrs } from "@/ui";
 import type { EditorInput } from "@/workbench/contributions";
 import { CellEditor } from "./CellEditor";
 import { CellOutputs, MarkdownCell } from "./OutputView";
@@ -157,7 +157,7 @@ function NotebookDocument({ session }: { session: NotebookSession }) {
           disabled={disabled || state.running}
           onClick={() => invoke(session.detectEnvironments())}
         />
-        <span className={styles.kernel} role="status" title={state.error ?? undefined}>
+        <span className={styles.kernel} role="status" {...tooltipAttrs(state.error ?? undefined)}>
           {state.running && <Spinner size={12} />}
           {tx(state.running ? "busy" : state.kernel)}
         </span>

@@ -8,6 +8,7 @@ import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import type { GHPRReviewerState } from "../api/types";
 import styles from "./ui.module.css";
+import { tooltipAttrs } from "@/ui";
 
 /** `Avatar.Sizes`. */
 export const AVATAR_SIZE = {
@@ -74,7 +75,7 @@ export function Avatar({ url, name, size = AVATAR_SIZE.BASE, ring, title, classN
     <span
       className={clsx(styles.avatar, ring && styles.ringed, className)}
       style={style}
-      title={title === null ? undefined : (title ?? name)}
+      {...tooltipAttrs(title === null ? undefined : (title ?? name))}
       data-avatar={name}
     >
       {showImage ? (
@@ -114,7 +115,7 @@ export function AvatarStack({
     <span
       className={clsx(styles.stack, className)}
       style={{ "--overlap": `${Math.round(size / 3)}px` } as CSSProperties}
-      title={title ?? undefined}
+      {...tooltipAttrs(title ?? undefined)}
     >
       {shown.map((a, i) => (
         <Avatar

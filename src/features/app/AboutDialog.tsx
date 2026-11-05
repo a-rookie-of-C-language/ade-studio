@@ -4,7 +4,7 @@ import { executeAction } from "@/platform/actions";
 import { t as translate, useT } from "@/platform/i18n";
 import { commands, isTauri, type AppInfo, type BuildInfo } from "@/platform/ipc";
 import clsx from "clsx";
-import { Dialog, IconButton, selectableText } from "@/ui";
+import { Dialog, IconButton, selectableText, tooltipAttrs } from "@/ui";
 import logo from "../../../src-tauri/icons/128x128.png";
 import { buildInfo, guessOs } from "./host";
 import styles from "./app.module.css";
@@ -96,7 +96,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
               .map(([k, v]) => (
                 <div key={k} className={styles.fact}>
                   <dt>{k}:</dt>
-                  <dd title={v}>{v}</dd>
+                  <dd {...tooltipAttrs(v)}>{v}</dd>
                 </div>
               ))}
           </dl>

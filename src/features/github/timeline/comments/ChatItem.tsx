@@ -12,6 +12,7 @@ import { Avatar, AVATAR_SIZE } from "../../ui/Avatar";
 import { fullDateTime, prettyDate } from "../../ui/prettyDate";
 import { presentableName } from "../model";
 import styles from "./comments.module.css";
+import { tooltipAttrs } from "@/ui";
 
 /** FULL (timeline items), FULL_SECONDARY (thread replies in the timeline), COMPACT (diff inlays). */
 export type ChatItemVariant = "full" | "secondary" | "compact";
@@ -79,7 +80,7 @@ export function ChatItem({
               <span>
                 <AuthorLink actor={a} />
                 {date && (
-                  <span className={styles.date} title={fullDateTime(date)}>
+                  <span className={styles.date} {...tooltipAttrs(fullDateTime(date))}>
                     &nbsp;{prettyDate(date)}
                   </span>
                 )}

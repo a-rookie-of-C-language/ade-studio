@@ -40,7 +40,7 @@ function button(className: string, title: string, icon: string, press: (e: Mouse
   const b = document.createElement("button");
   b.type = "button";
   b.className = className;
-  b.title = title;
+  b.setAttribute("data-tooltip", title ?? "");
   b.setAttribute("aria-label", title);
   b.innerHTML = iconMarkup(icon, 14) ?? "";
   b.addEventListener("mousedown", (e) => {

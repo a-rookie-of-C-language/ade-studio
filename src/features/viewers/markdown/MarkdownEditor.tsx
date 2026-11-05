@@ -138,7 +138,7 @@ function MarkdownPreview({ path, sync }: { path: string; sync: boolean }) {
       const target = resolveLink(path, src);
       if (target?.kind !== "file") {
         img.classList.add(styles.blocked!);
-        img.title = "Remote images are not loaded";
+        img.setAttribute("data-tooltip", "Remote images are not loaded");
         return;
       }
       imageUrl(target.path).then(

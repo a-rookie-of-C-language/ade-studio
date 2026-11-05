@@ -166,7 +166,7 @@ class RunMarker extends GutterMarker {
   override toDOM(): Node {
     const el = document.createElement("div");
     el.className = styles.runMarker ?? "";
-    el.title = `${targetTitle(this.target)} '${label(this.target)}'`;
+    el.setAttribute("data-tooltip", `${targetTitle(this.target)} '${label(this.target)}'`);
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", el.title);
     el.innerHTML = gutterIconMarkup(markerIcon(this.target.kind, this.state)) ?? "";

@@ -32,6 +32,7 @@ import {
   type TabItem,
   type TreeHandle,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { editorService } from "@/workbench/contributions";
 import { useToolWindowLayout } from "@/workbench/toolwindows/store";
@@ -608,7 +609,7 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
                   n.type === "group" && n.changelist && !n.active && styles.inactiveList,
                 )}
                 style={n.type === "file" && n.kind ? { color: KIND_COLOR[n.kind] } : undefined}
-                title={n.type === "file" && n.kind ? tx(KIND_LABEL[n.kind]) : undefined}
+                {...tooltipAttrs(n.type === "file" && n.kind ? tx(KIND_LABEL[n.kind]) : undefined)}
               >
                 {nodeText(n)}
               </span>
@@ -668,7 +669,10 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
                 {label}
                 {n.type === "group" && <span className={styles.detail}>{fileCount(n.files.length)}</span>}
                 {n.type === "file" && n.files[0] && isPartiallyStaged(n.files[0]) && (
-                  <span className={styles.partial} title={tx("Partially staged: only staged hunks are committed")}>
+                  <span
+                    className={styles.partial}
+                    {...tooltipAttrs(tx("Partially staged: only staged hunks are committed"))}
+                  >
                     <T>partial</T>
                   </span>
                 )}
@@ -830,7 +834,7 @@ export function CommitMessageField({ included, runner }: { included: number; run
         />
         <span className={styles.grow} />
         {tooLong && (
-          <span className={clsx(styles.lineLen, styles.lineLenWarn)} title={tx("Subject line length")}>
+          <span className={clsx(styles.lineLen, styles.lineLenWarn)} {...tooltipAttrs(tx("Subject line length"))}>
             {first.length}/{cfg.subjectLimit}
           </span>
         )}
@@ -1045,7 +1049,7 @@ export function StashesPanel() {
         renderItem={(s) => {
           const { branch, text } = stashLabel(s.message);
           return (
-            <span className={styles.stashRow} title={`stash@{${s.index}}: ${s.message}`}>
+            <span className={styles.stashRow} {...tooltipAttrs(`stash@{${s.index}}: ${s.message}`)}>
               <span className={styles.stashMessage}>
                 {repos.length > 1 && s.repo ? `${repoName(s.repo)} · ` : ""}
                 {text}

@@ -16,12 +16,13 @@ use std::sync::{LazyLock, Mutex};
 
 /// Streams the project's agent events to this window; returns every task.
 pub fn subscribe(host: &Host, window: &str, on_event: Emit<AgentEvent>) -> IdeResult<Vec<AgentTask>> {
-    Ok(host.project(window)?.agents.subscribe(on_event))
+    Ok(host.project_or_default(window)?.agents.subscribe(on_event))
 }
 
 pub fn providers(host: &Host, window: &str) -> IdeResult<Vec<AgentProvider>> {
-    host.require_trust(window)?;
-    let mut providers = host.project(window)?.agents.providers();
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    let mut providers = project.agents.providers();
     ide_agent::registry::mark_updates(&registry_paths(host), &mut providers);
     Ok(providers)
 }
@@ -29,8 +30,9 @@ pub fn providers(host: &Host, window: &str) -> IdeResult<Vec<AgentProvider>> {
 /// Overrides built-in agent `id`'s command with `command` (its agent file keeps the
 /// built-in's driver and arguments), or returns it to auto-detection with `None`.
 pub fn set_command(host: &Host, window: &str, id: String, command: Option<String>) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_builtin_command(&id, command)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_builtin_command(&id, command)
 }
 
 /// Environment variables built-in agent `id` starts with; empty clears them.
@@ -40,8 +42,9 @@ pub fn set_env(
     id: String,
     env: std::collections::BTreeMap<String, String>,
 ) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_builtin_env(&id, env)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_builtin_env(&id, env)
 }
 
 /// Where ACP Registry agents are saved (`<config>/agents`, like the user's own) and installed.
@@ -173,99 +176,122 @@ pub async fn commands(
     provider: String,
     task: Option<String>,
 ) -> IdeResult<Vec<AgentCommand>> {
-    host.project(window)?.agents.commands(&provider, task.as_deref()).await
+    host.project_or_default(window)?.agents.commands(&provider, task.as_deref()).await
 }
 
 /// Entries of `task`'s conversation, or of its subagent `subagent`'s.
 pub fn entries(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<Vec<AgentEntry>> {
-    host.project(window)?.agents.entries(&task, subagent)
+    host.project_or_default(window)?.agents.entries(&task, subagent)
 }
 
 pub async fn create(host: &Host, window: &str, mut request: NewAgentTask) -> IdeResult<AgentTask> {
-    host.require_trust(window)?;
-    let project = host.project(window)?;
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    // The agent-first home has no explicit project: the user picks the workspace
+    // folder itself, so anything on disk goes (trust is checked below). The
+    // default workspace is not an explicit project: `project_or_default` opens
+    // it for the listing/probe calls that run before the first Start, and that
+    // must not flip validation into window-project-only mode.
+    let explicit = host.project(window).is_ok_and(|p| !is_default_project(&p.root));
     let root = project.root.clone();
     let requested = request.project_root.take();
-    request.project_root = Some(IpcPath(
-        host.blocking(move || validate_project_root(&root, requested.as_ref().map(|p| p.0.as_path()))).await?,
-    ));
+    // Canonicalized once here so the trust check below can skip the window root itself.
+    let window_root = dunce::canonicalize(&root).unwrap_or_else(|_| root.clone());
+    let probe = window_root.clone();
+    let resolved = host
+        .blocking(move || validate_project_root(&probe, requested.as_ref().map(|p| p.0.as_path()), explicit))
+        .await?;
+    if resolved != window_root && !host.trust.trusted(&resolved)? {
+        return Err(IdeError::unavailable("This folder is in Restricted Mode. Trust it to run agents here."));
+    }
+    request.project_root = Some(IpcPath(resolved));
     project.agents.create(request).await
 }
 
 /// Sends a message; while the agent works it is queued, or with `now` it interrupts the turn.
 pub async fn prompt(host: &Host, window: &str, task: String, prompt: AgentPrompt, now: bool) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.prompt(&task, prompt, now).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.prompt(&task, prompt, now).await
 }
 
 /// Drops a queued message and returns it (to edit it).
 pub fn unqueue(host: &Host, window: &str, task: String, queued: String) -> IdeResult<AgentQueued> {
-    host.project(window)?.agents.unqueue(&task, &queued)
+    host.project_or_default(window)?.agents.unqueue(&task, &queued)
 }
 
 /// Sends a queued message now, interrupting the current turn.
 pub fn send_queued_now(host: &Host, window: &str, task: String, queued: String) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.send_queued_now(&task, &queued)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.send_queued_now(&task, &queued)
 }
 
 /// Changes a session setting (model, mode, thinking effort…).
 pub async fn set_config(host: &Host, window: &str, task: String, option: String, value: String) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.set_config(&task, &option, value).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.set_config(&task, &option, value).await
 }
 
 /// Copies the task's conversation into a new task, up to its first `turns` turns (all when `None`).
 pub async fn fork(host: &Host, window: &str, task: String, turns: Option<u32>) -> IdeResult<AgentTask> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.fork(&task, turns).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.fork(&task, turns).await
 }
 
 /// Drops the task's turns after its first `turns`; returns the message of the first dropped one.
 pub async fn rollback(host: &Host, window: &str, task: String, turns: u32) -> IdeResult<Option<AgentPrompt>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.rollback(&task, turns).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.rollback(&task, turns).await
 }
 
 /// What the agent reports about itself when it starts, without opening a session.
 pub async fn probe(host: &Host, window: &str, provider: String, refresh: bool) -> IdeResult<AgentProbe> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.probe(&provider, refresh).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.probe(&provider, refresh).await
 }
 
 /// Stops the task's current turn, or with `subagent` only that subagent's work.
 pub fn cancel(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<()> {
-    host.project(window)?.agents.cancel(&task, subagent)
+    host.project_or_default(window)?.agents.cancel(&task, subagent)
 }
 
 /// Answers a permission request; `option: None` cancels it.
 pub fn respond(host: &Host, window: &str, task: String, permission: u32, option: Option<String>) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.respond(&task, permission, option)
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.respond(&task, permission, option)
 }
 
 pub fn archive(host: &Host, window: &str, task: String) -> IdeResult<()> {
-    host.project(window)?.agents.archive(&task)
+    host.project_or_default(window)?.agents.archive(&task)
 }
 
 pub fn unarchive(host: &Host, window: &str, task: String) -> IdeResult<()> {
-    host.project(window)?.agents.unarchive(&task)
+    host.project_or_default(window)?.agents.unarchive(&task)
 }
 
 pub async fn delete(host: &Host, window: &str, task: String, remove_worktree: bool) -> IdeResult<()> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.delete(&task, remove_worktree).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.delete(&task, remove_worktree).await
 }
 
 pub async fn changes(host: &Host, window: &str, task: String) -> IdeResult<Vec<AgentChange>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.changes(&task).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.changes(&task).await
 }
 
 /// Content of `path` when the task started (left side of its diff).
 pub async fn base_text(host: &Host, window: &str, task: String, path: IpcPath) -> IdeResult<Option<String>> {
-    host.require_trust(window)?;
-    host.project(window)?.agents.base_text(&task, path.into_path_buf()).await
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.base_text(&task, path.into_path_buf()).await
 }
 
 /// Commands of this module the remote server answers.
@@ -310,7 +336,20 @@ pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_base_text", |c| async move { base_text(&c.host, &c.window, c.arg("task")?, c.arg("path")?).await });
 }
 
-fn validate_project_root(root: &std::path::Path, requested: Option<&std::path::Path>) -> IdeResult<std::path::PathBuf> {
+/// Whether `root` is the agent-first home's default workspace
+/// (`~/.openidea/workspace`): app-owned, so hosting it is not an explicit project.
+fn is_default_project(root: &std::path::Path) -> bool {
+    let root = dunce::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let def = Host::default_workspace();
+    let def = dunce::canonicalize(&def).unwrap_or(def);
+    root == def
+}
+
+fn validate_project_root(
+    root: &std::path::Path,
+    requested: Option<&std::path::Path>,
+    explicit: bool,
+) -> IdeResult<std::path::PathBuf> {
     let Some(requested) = requested else {
         return Ok(root.to_path_buf());
     };
@@ -322,6 +361,11 @@ fn validate_project_root(root: &std::path::Path, requested: Option<&std::path::P
     if requested == window_root
         || ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested))
     {
+        return Ok(requested);
+    }
+    // No explicit project (the agent-first home): the user picked this folder as
+    // their workspace, so any folder on disk goes; trust is checked by the caller.
+    if !explicit && requested.is_dir() {
         return Ok(requested);
     }
     Err(IdeError::invalid("Agent project must be the window project or a workspace member"))
@@ -353,13 +397,48 @@ mod tests {
         for dir in [&root, &member, &other, &member.join("child")] {
             std::fs::create_dir_all(dir).unwrap();
         }
-        assert_eq!(validate_project_root(&root, None).unwrap(), root);
-        assert_eq!(validate_project_root(&root, Some(&root)).unwrap(), dunce::canonicalize(&root).unwrap());
-        assert!(validate_project_root(&root, Some(&member)).is_err());
+        assert_eq!(validate_project_root(&root, None, true).unwrap(), root);
+        assert_eq!(validate_project_root(&root, Some(&root), true).unwrap(), dunce::canonicalize(&root).unwrap());
+        assert!(validate_project_root(&root, Some(&member), true).is_err());
         ide_workspace::workspace::Workspace::save(&root, "Workspace", vec![member.clone()], true).unwrap();
-        assert_eq!(validate_project_root(&root, Some(&member)).unwrap(), dunce::canonicalize(&member).unwrap());
+        assert_eq!(validate_project_root(&root, Some(&member), true).unwrap(), dunce::canonicalize(&member).unwrap());
         for rejected in [other, member.join("child"), member.join("../other"), "relative".into()] {
-            assert!(validate_project_root(&root, Some(&rejected)).is_err(), "{rejected:?}");
+            assert!(validate_project_root(&root, Some(&rejected), true).is_err(), "{rejected:?}");
         }
+    }
+
+    #[test]
+    fn agent_roots_allow_any_folder_without_an_explicit_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("workspace");
+        let picked = tmp.path().join("picked");
+        let file = tmp.path().join("file.txt");
+        for dir in [&root, &picked] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::write(&file, "x").unwrap();
+        // The agent-first home: the user picked this folder as their workspace.
+        assert_eq!(validate_project_root(&root, Some(&picked), false).unwrap(), dunce::canonicalize(&picked).unwrap());
+        // Files, missing folders and relative paths still fail.
+        assert!(validate_project_root(&root, Some(&file), false).is_err());
+        assert!(validate_project_root(&root, Some(&tmp.path().join("missing")), false).is_err());
+        assert!(validate_project_root(&root, Some(std::path::Path::new("relative")), false).is_err());
+    }
+
+    #[test]
+    fn default_workspace_project_is_not_explicit() {
+        // `project_or_default` opens this for the home window before the first
+        // Start; picking another folder must still validate as the home flow.
+        assert!(is_default_project(&Host::default_workspace()));
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(!is_default_project(tmp.path()));
+        let picked = tmp.path().join("picked");
+        std::fs::create_dir_all(&picked).unwrap();
+        let explicit = !is_default_project(&Host::default_workspace());
+        assert!(!explicit);
+        assert_eq!(
+            validate_project_root(&Host::default_workspace(), Some(&picked), explicit).unwrap(),
+            dunce::canonicalize(&picked).unwrap()
+        );
     }
 }

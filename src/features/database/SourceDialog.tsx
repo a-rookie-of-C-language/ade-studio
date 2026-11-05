@@ -21,7 +21,7 @@ import { executeAction } from "@/platform/actions";
 import { tx, useTx, useTxTemplate } from "@/platform/i18n";
 import { sshLabel as configLabel } from "@/platform/remoteSettings";
 import { useWorkflowSettings } from "@/platform/workflowSettings";
-import { Button, Checkbox, Dialog, IconButton, Input, Select, Tabs, T, type SelectOption } from "@/ui";
+import { Button, Checkbox, Dialog, IconButton, Input, Select, Tabs, T, type SelectOption, tooltipAttrs } from "@/ui";
 import {
   colorVar,
   connectRemedy,
@@ -1070,7 +1070,7 @@ export function SourceDialog({
             )}
           />
           {/* IDEA's Make Global: stored with the IDE and listed in every project. */}
-          <span title={tx("Available in all projects")}>
+          <span {...tooltipAttrs(tx("Available in all projects"))}>
             <Checkbox checked={!!s.global} onChange={(global) => set({ global })} label="Global" />
           </span>
         </div>

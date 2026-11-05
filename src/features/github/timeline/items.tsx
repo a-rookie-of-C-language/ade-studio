@@ -40,6 +40,7 @@ import {
 } from "./model";
 import cstyles from "./comments/comments.module.css";
 import styles from "./Timeline.module.css";
+import { tooltipAttrs } from "@/ui";
 
 /** A web link (opens the browser). */
 export function WebLink({ url, children }: { url: string; children: ReactNode }) {
@@ -295,7 +296,7 @@ function CommitsItem({ commits, prAuthor }: { commits: TimelineCommit[]; prAutho
                     {actorLink(actor)}
                     {author?.date && (
                       <>
-                        &nbsp;<span title={fullDateTime(author.date)}>{prettyDate(author.date)}</span>
+                        &nbsp;<span {...tooltipAttrs(fullDateTime(author.date))}>{prettyDate(author.date)}</span>
                       </>
                     )}
                   </p>

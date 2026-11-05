@@ -34,7 +34,7 @@ export function arrowButton(dir: "a-to-b" | "b-to-a", run: (chunkIndex: number) 
   btn.className = `cm-diffArrow cm-diffArrow-${dir}`;
   const label = dir === "a-to-b" ? "Apply change to the right (Replace ›››)" : "Apply change to the left (‹‹‹ Replace)";
   btn.setAttribute("aria-label", label);
-  btn.title = label;
+  btn.setAttribute("data-tooltip", label ?? "");
   btn.innerHTML = iconMarkup(dir === "a-to-b" ? "chevron-right" : "chevron-left", 12) ?? "";
   btn.addEventListener("mousedown", (e) => {
     // Handled here rather than by MergeView's own (one-directional) revert handler.
@@ -80,7 +80,7 @@ class RevertWidget extends WidgetType {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "cm-diffHoverRevert";
-    btn.title = "Revert this change";
+    btn.setAttribute("data-tooltip", "Revert this change");
     btn.setAttribute("aria-label", "Revert this change");
     btn.innerHTML = `${iconMarkup("revert", 12) ?? ""}<span>Revert</span>`;
     btn.addEventListener("mousedown", (e) => {

@@ -24,7 +24,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={clsx(styles.button, styles[variant], size === "small" && styles.small, className)}
-      title={tx(title)}
+      {...tooltipAttrs(tx(title))}
       {...rest}
     >
       {icon && <Icon name={icon} size={14} />}

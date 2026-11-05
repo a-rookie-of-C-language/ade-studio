@@ -728,7 +728,10 @@ function sortToggle(view: EditorView): HTMLElement {
   button.textContent = tx("Sort by name");
   const on = editorPrefs().completion.sortAlphabetically;
   button.setAttribute("aria-pressed", String(on));
-  button.title = tx(on ? "Sort suggestions by relevance" : "Sort suggestions alphabetically");
+  button.setAttribute(
+    "data-tooltip",
+    tx(on ? "Sort suggestions by relevance" : "Sort suggestions alphabetically") ?? "",
+  );
   // Keep the editor focused so the lookup survives the click.
   button.addEventListener("mousedown", (e) => e.preventDefault());
   button.addEventListener("click", () => void toggleSortByName(view).catch(() => {}));

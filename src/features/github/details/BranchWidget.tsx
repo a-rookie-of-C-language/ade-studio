@@ -7,7 +7,7 @@
  */
 import { useRef, useState } from "react";
 import clsx from "clsx";
-import { Icon, List, Popup } from "@/ui";
+import { Icon, List, Popup, tooltipAttrs } from "@/ui";
 import { useTx } from "@/platform/i18n";
 import type { GHPullRequest } from "../api/types";
 import { checkoutPullRequest, openInWorktree } from "../data/local";
@@ -56,7 +56,7 @@ export function BranchWidget({
       <button
         type="button"
         className={clsx(styles.link, styles.dropdownLink, styles.branchLink)}
-        title={source}
+        {...tooltipAttrs(source)}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(true)}

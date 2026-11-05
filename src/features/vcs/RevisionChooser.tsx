@@ -1,6 +1,6 @@
 /** Chooser for revision actions, including a selection spanning multiple repositories. */
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Dialog, HighlightedText, Icon, List, SearchField, fuzzyMatch, listNavigate } from "@/ui";
+import { Dialog, HighlightedText, Icon, List, SearchField, fuzzyMatch, listNavigate, tooltipAttrs } from "@/ui";
 import { sortLocal, sortRemote } from "./branches";
 import { openDialog } from "./dialogs";
 import { call, commands } from "@/platform/ipc";
@@ -190,7 +190,7 @@ function Chooser({
           onActiveChange={setActive}
           onActivate={(i) => onDone(i)}
           isSection={(i) => !!i.section}
-          renderSection={(i) => <span title={i.detail}>{i.rev}</span>}
+          renderSection={(i) => <span {...tooltipAttrs(i.detail)}>{i.rev}</span>}
           focusable={false}
           hoverSelects
           rowHeight={24}

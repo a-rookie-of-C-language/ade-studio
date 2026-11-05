@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { call, commands, type DebugSessionId, type Variable } from "@/platform/ipc";
-import { Icon, Tree, acquirePopup, showContextMenu, type MenuItem, type TreeHandle } from "@/ui";
+import { Icon, Tree, acquirePopup, showContextMenu, type MenuItem, type TreeHandle, tooltipAttrs } from "@/ui";
 import { activeEditor } from "@/editor/api";
 import { notifications } from "@/workbench/contributions";
 import { addFieldWatchpoint } from "../breakpoints/special";
@@ -382,7 +382,7 @@ function VarEditRow({
         autoComplete="off"
         aria-label={`New value of ${node.name}`}
         aria-invalid={!!error || undefined}
-        title={error ?? undefined}
+        {...tooltipAttrs(error ?? undefined)}
         onFocus={(e) => e.currentTarget.select()}
         onChange={(e) => onChange(e.target.value)}
         onClick={(e) => e.stopPropagation()}

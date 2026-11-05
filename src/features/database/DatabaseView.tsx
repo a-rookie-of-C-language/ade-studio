@@ -422,18 +422,18 @@ export function DatabaseView() {
               <span
                 className={tint ? `${styles.nodeRow} ${styles.tinted}` : styles.nodeRow}
                 style={tint ? ({ "--db-tint": tint } as CSSProperties) : undefined}
-                title={n.kind === "source" && n.source.comment ? n.source.comment : undefined}
+                {...tooltipAttrs(n.kind === "source" && n.source.comment ? n.source.comment : undefined)}
               >
                 {i && (
                   <span className={styles.nodeIcon}>
                     <Icon name={i} size={16} />
                     {/* IDEA: a green dot on the data source icon while connected. */}
-                    {live && <span className={styles.connectedDot} title={tx("Connected")} />}
+                    {live && <span className={styles.connectedDot} {...tooltipAttrs(tx("Connected"))} />}
                   </span>
                 )}
                 <span className={labelClass}>{label(n)}</span>
                 {n.kind === "source" && n.source.global && (
-                  <span className={styles.treeDetail} title={tx("Available in all projects")}>
+                  <span className={styles.treeDetail} {...tooltipAttrs(tx("Available in all projects"))}>
                     {tx("global")}
                   </span>
                 )}

@@ -2,7 +2,18 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
 import { executeAction } from "@/platform/actions";
 import { shortcutLabel } from "@/platform/keymap";
-import { HighlightedText, Icon, IconButton, List, Popup, SearchField, fuzzyMatch, listNavigate, T } from "@/ui";
+import {
+  HighlightedText,
+  Icon,
+  IconButton,
+  List,
+  Popup,
+  SearchField,
+  fuzzyMatch,
+  listNavigate,
+  T,
+  tooltipAttrs,
+} from "@/ui";
 import type { RunConfig } from "@/platform/ipc";
 import { useWorkflowSettings } from "@/platform/workflowSettings";
 import { useDebugRunSessions } from "@/workbench/contributions";
@@ -308,7 +319,7 @@ function ConfigChooser() {
             const c = r.config;
             const running = selectedTarget(c.id, sessions, debugSessions);
             return (
-              <span className={styles.chooserRow} title={commandLine(c)}>
+              <span className={styles.chooserRow} {...tooltipAttrs(commandLine(c))}>
                 <span className={clsx(styles.chooserIcon, running && styles.chooserRunning)}>
                   <Icon
                     name={configIcon(c)}

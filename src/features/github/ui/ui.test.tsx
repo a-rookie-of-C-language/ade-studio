@@ -44,7 +44,7 @@ describe("Avatar", () => {
     fireEvent.error(img);
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toBe("O");
-    expect(container.querySelector("[title='octocat']")).toBeTruthy();
+    expect(container.querySelector("[data-tooltip='octocat']")).toBeTruthy();
   });
 
   it("rings reviewer avatars in their state colour and stacks at most two", () => {
@@ -74,7 +74,7 @@ describe("chips", () => {
     render(<LabelChip label={{ name: "bug", color: "d73a4a" }} />);
     expect(screen.getByText("bug").getAttribute("style")).toContain("background");
     render(<BranchChip name="feature/x" />);
-    expect(screen.getByTitle("feature/x")).toBeTruthy();
+    expect(screen.getByText("feature/x").closest("[data-tooltip]")).toHaveAttribute("data-tooltip", "feature/x");
   });
 });
 

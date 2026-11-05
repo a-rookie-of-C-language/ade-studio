@@ -36,7 +36,7 @@ function button(label: string, onClick: () => void): HTMLButtonElement {
   b.type = "button";
   b.className = "cm-openidea-inspection-button";
   b.setAttribute("aria-label", label);
-  b.title = label;
+  b.setAttribute("data-tooltip", label ?? "");
   b.addEventListener("mousedown", (e) => e.preventDefault());
   b.addEventListener("click", onClick);
   return b;

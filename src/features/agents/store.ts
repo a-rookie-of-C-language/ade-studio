@@ -77,6 +77,8 @@ interface AgentsState {
   sessionLocation: SessionLocation;
   lastTask: string | null;
   homeOpen: boolean;
+  /** Task shown inline in the Cowork home when no project is open (Welcome has no editor tabs). */
+  coworkTask: string | null;
 }
 
 const DRAFT_KEY = "openidea.agents.draft.v2";
@@ -130,6 +132,7 @@ export const useAgents = create<AgentsState>(() => ({
   sessionLocation: load<unknown>(SESSION_LOCATION_KEY, null) === "toolWindow" ? "toolWindow" : "editor",
   lastTask: null,
   homeOpen: false,
+  coworkTask: null,
   scrollPositions: new Map(),
 }));
 
@@ -236,6 +239,7 @@ export function disconnect() {
     docked: null,
     lastTask: null,
     homeOpen: false,
+    coworkTask: null,
     scrollPositions: new Map(),
   });
 }
@@ -262,7 +266,13 @@ function onEvent(e: AgentEvent) {
       composers.delete(e.id);
       const unread = new Set(s.unread);
       unread.delete(e.id);
-      useAgents.setState({ tasks, composers, unread, ...(s.docked === e.id ? { docked: null } : {}) });
+      useAgents.setState({
+        tasks,
+        composers,
+        unread,
+        ...(s.docked === e.id ? { docked: null } : {}),
+        ...(s.coworkTask === e.id ? { coworkTask: null } : {}),
+      });
       void editorService().closeInput?.(sessionKey(e.id));
       break;
     }
@@ -386,9 +396,21 @@ export function useAgentCommands(
   return current ? found.list : offered;
 }
 
+/** Shows `task` inline in the Cowork home (`null` returns to the composer). */
+export function openCoworkTask(task: string | null) {
+  useAgents.setState({ coworkTask: task, lastTask: task, homeOpen: false, docked: null });
+}
+
 export function openTask(task: string) {
   if (useAgents.getState().sessionLocation === "toolWindow") {
     showDockedTask(task);
+    return;
+  }
+  // Welcome shows no editor tabs: opening into the hidden editor would look like
+  // nothing happened, so Cowork keeps the conversation in its center column.
+  const { project, lightEdit } = useProject.getState();
+  if (!project && !lightEdit) {
+    openCoworkTask(task);
     return;
   }
   useAgents.setState({ lastTask: task, homeOpen: false });
@@ -504,6 +526,12 @@ export async function startTask(
   updateDraft({ projectRoot });
   remember(composer.text.trim());
   updateComposer(HOME, emptyDraft());
+  // Welcome shows no editor tabs: keep the new conversation in the Cowork center column.
+  const { project, lightEdit } = useProject.getState();
+  if (!project && !lightEdit) {
+    useAgents.setState({ coworkTask: task.id, lastTask: task.id, homeOpen: false });
+    return;
+  }
   if ((await editorService().closeInput?.(HOME_KEY)) !== false) openTask(task.id);
 }
 

@@ -257,7 +257,7 @@ class SpringMarker extends GutterMarker {
   override toDOM(): Node {
     const el = document.createElement("div");
     el.className = styles.runMarker ?? "";
-    el.title = this.mark.title;
+    el.setAttribute("data-tooltip", this.mark.title ?? "");
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", this.mark.title);
     el.innerHTML = gutterIconMarkup("file-http") ?? "";

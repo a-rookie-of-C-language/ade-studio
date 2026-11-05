@@ -1,114 +1,95 @@
-/** Welcome › Projects: search, Open / Clone Repository, and the recent projects list. */
+/** Welcome › Projects: the agent workspace picker (search, open a folder, recent workspaces). */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { executeAction, useActions } from "@/platform/actions";
-import { shortcutLabel } from "@/platform/keymap";
-import { useProject } from "@/platform/project";
-import { useRemoteProgress } from "@/platform/remote";
-import { stageLabel } from "@/features/remote-dev/model";
+import { executeAction } from "@/platform/actions";
 import {
   Button,
   HighlightedText,
   Icon,
   IconButton,
-  Kbd,
   SearchField,
-  Spinner,
   isPopupOpen,
   listNavigate,
   showContextMenu,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { askRemoveRecent, groupMenu, ProjectBadge, recentMenu } from "./RecentList";
-import { openRecent, recentRows, setGroupExpanded, useRecent, type RecentMatch, type RecentRow } from "./recent";
+import { recentRows, setGroupExpanded, useRecent, type RecentMatch, type RecentRow } from "./recent";
+import { clearWorkspace, openWorkspaceDialog, selectWorkspace, useWorkspace } from "./workspace";
 import type { RecentProjectGroup } from "@/platform/ipc";
 import styles from "./Welcome.module.css";
 import { tx } from "@/platform/i18n";
 
-function HeaderButtons() {
-  const canClone = useActions((s) => s.actions.has("vcs.clone"));
-  const canRemote = useActions((s) => s.actions.has("remote.connect"));
-  const opening = useProject((s) => s.opening);
-  const openKey = shortcutLabel("file.openProject");
+function HeaderButtons({ onPick }: { onPick?: () => void }) {
   return (
     <div className={styles.headerButtons}>
       <Button
-        disabled={opening}
-        onClick={() => void executeAction("file.openProject")}
-        title={openKey ? tx`Open (${openKey})` : "Open"}
+        onClick={() =>
+          void openWorkspaceDialog().then((ok) => {
+            if (ok) onPick?.();
+          })
+        }
       >
         <T>Open</T>
       </Button>
-      {canClone && (
-        <Button onClick={() => void executeAction("vcs.clone")}>
-          <T>Clone Repository</T>
-        </Button>
-      )}
-      {canRemote && (
-        <Button disabled={opening} onClick={() => void executeAction("remote.connect")}>
-          <T>Remote Development</T>
-        </Button>
-      )}
     </div>
   );
 }
 
-/** Shown when there are no recent projects (IntelliJ's empty welcome). */
-function Landing() {
-  const canClone = useActions((s) => s.actions.has("vcs.clone"));
-  const canRemote = useActions((s) => s.actions.has("remote.connect"));
-  const opening = useProject((s) => s.opening);
-  const shortcut = shortcutLabel("file.openProject");
+/** Shown when there are no recent workspaces yet. */
+function Landing({ onPick }: { onPick?: () => void }) {
   return (
     <div className={styles.landing}>
       <div className={styles.landingTitle}>
         <T>Welcome to OpenIDEA</T>
       </div>
-      <p className={styles.landingText}>
-        {canClone
-          ? tx("Open a folder from disk or clone a repository from version control.")
-          : tx("Open a folder from disk.")}
-        <br />
-        <T>You can also drop a folder onto this window.</T>
-      </p>
+      <p className={styles.landingText}>{tx("Open a folder from disk to use it as your agent workspace.")}</p>
       <div className={styles.landingActions}>
         <button
           type="button"
           className={styles.landingAction}
-          disabled={opening}
-          onClick={() => void executeAction("file.openProject")}
+          onClick={() =>
+            void openWorkspaceDialog().then((ok) => {
+              if (ok) onPick?.();
+            })
+          }
         >
           <span className={styles.landingIcon}>
             <Icon name="folder-open" size={20} />
           </span>
           <T>Open</T>
         </button>
-        {canClone && (
-          <button type="button" className={styles.landingAction} onClick={() => void executeAction("vcs.clone")}>
-            <span className={styles.landingIcon}>
-              <Icon name="branch" size={20} />
-            </span>
-            <T>Clone Repository</T>
-          </button>
-        )}
-        {canRemote && (
-          <button
-            type="button"
-            className={styles.landingAction}
-            disabled={opening}
-            onClick={() => void executeAction("remote.connect")}
-          >
-            <span className={styles.landingIcon}>
-              <Icon name="terminal" size={20} />
-            </span>
-            <T>Remote Development</T>
-          </button>
-        )}
       </div>
-      {shortcut && (
-        <div className={styles.landingHint}>
-          <T>Open a folder</T> <Kbd>{shortcut}</Kbd>
-        </div>
+    </div>
+  );
+}
+
+/** Pinned row for the default workspace (`~/.openidea/workspace`). */
+function DefaultRow({ current, onPick }: { current: boolean; onPick?: () => void }) {
+  return (
+    <div
+      role="option"
+      aria-selected={current}
+      {...tooltipAttrs("~/.openidea/workspace")}
+      className={clsx(styles.project, current && styles.projectSelected)}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => {
+        clearWorkspace();
+        onPick?.();
+      }}
+    >
+      <Icon name="folder" size={16} />
+      <span className={styles.projectText}>
+        <span className={styles.projectName}>
+          <T>Default workspace</T>
+        </span>
+        <span className={styles.projectPath}>~/.openidea/workspace</span>
+      </span>
+      {current && (
+        <span className={styles.currentBadge}>
+          <T>Current</T>
+        </span>
       )}
     </div>
   );
@@ -178,6 +159,7 @@ function ProjectRow({
   id,
   selected,
   nested,
+  current,
   onSelect,
   onOpen,
 }: {
@@ -186,15 +168,11 @@ function ProjectRow({
   selected: boolean;
   /** Listed under a group. */
   nested?: boolean;
+  /** The agent workspace points here. */
+  current?: boolean;
   onSelect: () => void;
   onOpen: () => void;
 }) {
-  const opening = useRecent((s) => s.opening === m.project.path);
-  // Opening a remote project: which stage of connecting it is at.
-  const progress = useRemoteProgress((s) => (opening ? s.progress : null));
-  const stage = progress
-    ? tx(stageLabel(progress.stage)) + (progress.fraction == null ? "" : ` ${Math.round(progress.fraction * 100)}%`)
-    : null;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView?.({ block: "nearest" });
@@ -205,7 +183,7 @@ function ProjectRow({
       id={id}
       role="option"
       aria-selected={selected}
-      title={m.project.path}
+      {...tooltipAttrs(m.project.path)}
       className={clsx(styles.project, nested && styles.projectNested, selected && styles.projectSelected)}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => {
@@ -221,13 +199,7 @@ function ProjectRow({
       <ProjectBadge name={m.project.name} className={styles.projectBadge} />
       <span className={styles.projectText}>
         <HighlightedText className={styles.projectName} text={m.project.name} indices={m.nameMatch} tone="strong" />
-        {stage ? (
-          <span className={styles.projectPath} role="status">
-            {stage}
-          </span>
-        ) : (
-          <HighlightedText className={styles.projectPath} text={m.displayPath} indices={m.pathMatch} />
-        )}
+        <HighlightedText className={styles.projectPath} text={m.displayPath} indices={m.pathMatch} />
         {m.project.branch && (
           <span className={styles.projectBranch}>
             <Icon name="branch" size={14} />
@@ -235,24 +207,36 @@ function ProjectRow({
           </span>
         )}
       </span>
-      {opening ? (
-        <Spinner size={14} className={styles.projectSpinner} />
-      ) : (
-        <IconButton
-          icon="more"
-          title="Project actions"
-          aria-haspopup="menu"
-          iconSize={16}
-          className={styles.projectMore}
-          tabIndex={-1}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect();
-            const r = e.currentTarget.getBoundingClientRect();
-            showContextMenu({ x: r.left, y: r.bottom + 2 }, recentMenu(m.project));
-          }}
-        />
+      {current && (
+        <span className={styles.currentBadge}>
+          <T>Current</T>
+        </span>
       )}
+      <IconButton
+        icon="open-in-tool-window"
+        title="Open in IDE"
+        iconSize={16}
+        className={styles.projectMore}
+        tabIndex={-1}
+        onClick={(e) => {
+          e.stopPropagation();
+          void executeAction("welcome.openInIDE", m.project.path);
+        }}
+      />
+      <IconButton
+        icon="more"
+        title="Project actions"
+        aria-haspopup="menu"
+        iconSize={16}
+        className={styles.projectMore}
+        tabIndex={-1}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+          const r = e.currentTarget.getBoundingClientRect();
+          showContextMenu({ x: r.left, y: r.bottom + 2 }, recentMenu(m.project));
+        }}
+      />
     </div>
   );
 }
@@ -271,20 +255,26 @@ export function handleListKey<T>(
   return next === null ? null : { kind: "move", index: next };
 }
 
-export function ProjectsPage() {
+export function ProjectsPage({ onPick }: { onPick?: () => void }) {
   const projects = useRecent((s) => s.projects);
   const groups = useRecent((s) => s.groups);
   const loaded = useRecent((s) => s.loaded);
   const home = useRecent((s) => s.home);
+  const wsRoot = useWorkspace((s) => s.root);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
   const baseId = useId();
   const items = useMemo(() => recentRows(projects, groups, query, home), [projects, groups, query, home]);
   const current = Math.max(0, Math.min(active, items.length - 1));
+  // A row click points the home workspace there and goes back to the composer.
+  const pick = (path: string) =>
+    void selectWorkspace(path).then((ok) => {
+      if (ok) onPick?.();
+    });
 
   if (!loaded) return null;
-  if (projects.length === 0) return <Landing />;
+  if (projects.length === 0) return <Landing onPick={onPick} />;
 
   const optionId = (i: number) => `${baseId}-p${i}`;
 
@@ -324,7 +314,7 @@ export function ProjectsPage() {
       }
       return;
     }
-    if (r.kind === "open") void openRecent(match.m.project);
+    if (r.kind === "open") pick(match.m.project.path);
     else if (r.kind === "remove") void askRemoveRecent(match.m.project);
     else {
       const el = document.getElementById(optionId(current))?.getBoundingClientRect();
@@ -352,8 +342,9 @@ export function ProjectsPage() {
           onKeyDown={onKeyDown}
           className={styles.search}
         />
-        <HeaderButtons />
+        <HeaderButtons onPick={onPick} />
       </div>
+      {!query && <DefaultRow current={wsRoot === null} onPick={onPick} />}
       <div
         id={`${baseId}-list`}
         role="listbox"
@@ -379,8 +370,9 @@ export function ProjectsPage() {
               id={optionId(i)}
               selected={i === current}
               nested={row.group !== null}
+              current={wsRoot === row.m.project.path}
               onSelect={() => setActive(i)}
-              onOpen={() => void openRecent(row.m.project)}
+              onOpen={() => pick(row.m.project.path)}
             />
           ),
         )}

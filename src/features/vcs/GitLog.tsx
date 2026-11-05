@@ -45,6 +45,7 @@ import {
   T,
   copyText,
   lazyComponent,
+  tooltipAttrs,
 } from "@/ui";
 import { hasPrimaryModifier } from "@/platform/keymap";
 import { laneColor, reachableFrom, type GraphRow, type GraphSegment } from "./graph";
@@ -1889,7 +1890,7 @@ const CommitRow = memo(function CommitRow({
       }}
     >
       {opts.showRepository && commitRepo(c) && useVcs.getState().roots.length > 1 && (
-        <span className={styles.colRepository} title={commitRepo(c)!}>
+        <span className={styles.colRepository} {...tooltipAttrs(commitRepo(c)!)}>
           {repoName(commitRepo(c)!)}
         </span>
       )}
@@ -1947,7 +1948,7 @@ const CommitRow = memo(function CommitRow({
             column.id === "hash" && styles.hash,
           )}
           style={{ width: opts.columnWidths[column.id] ?? column.width ?? 120 }}
-          title={column.id === "author" ? `${c.author} <${c.email}>` : undefined}
+          {...tooltipAttrs(column.id === "author" ? `${c.author} <${c.email}>` : undefined)}
         >
           {column.render(c)}
         </span>
@@ -2133,7 +2134,11 @@ export function RefLabels({
   return (
     <span className={clsx(styles.refs, left && styles.refsLeft)}>
       {labels.map((l) => (
-        <span key={`${l.kind}:${l.title}`} className={clsx(styles.ref, REF_KIND_CLASS[l.kind])} title={l.title}>
+        <span
+          key={`${l.kind}:${l.title}`}
+          className={clsx(styles.ref, REF_KIND_CLASS[l.kind])}
+          {...tooltipAttrs(l.title)}
+        >
           {l.text}
         </span>
       ))}
@@ -2543,7 +2548,7 @@ function CommitMessage({ commit, compact = false }: { commit: Commit; compact?: 
         <button
           type="button"
           className={clsx(styles.linkButton, styles.hash)}
-          title={tx("Copy revision number")}
+          {...tooltipAttrs(tx("Copy revision number"))}
           onClick={() => void navigator.clipboard?.writeText(commit.id)}
         >
           {commit.shortId}
@@ -2591,7 +2596,7 @@ function CommitMessage({ commit, compact = false }: { commit: Commit; compact?: 
           </div>
           <div
             className={styles.meta}
-            title={[details.signer, details.key, details.fingerprint].filter(Boolean).join("\n")}
+            {...tooltipAttrs([details.signer, details.key, details.fingerprint].filter(Boolean).join("\n"))}
           >
             {tx("Signature")}: {signatureLabel(details.signature)}
             {details.signer ? ` · ${details.signer}` : ""}
@@ -2632,7 +2637,11 @@ function signatureLabel(code: string) {
 function CommitSignature({ commit }: { commit: Commit }) {
   const { details, error } = useCommitDetails(commit);
   return (
-    <span title={details ? [details.signer, details.key, details.fingerprint].filter(Boolean).join("\n") : undefined}>
+    <span
+      {...tooltipAttrs(
+        details ? [details.signer, details.key, details.fingerprint].filter(Boolean).join("\n") : undefined,
+      )}
+    >
       {details ? signatureLabel(details.signature) : error ? tx("Could not verify") : tx("Loading…")}
     </span>
   );
@@ -2708,7 +2717,7 @@ function ChangedFileRow({ node, flat = false }: { node: FileTreeNode<ChangedFile
   const f = node.file;
   const kind: EffectiveKind = f.kind === "untracked" ? "added" : f.kind;
   return (
-    <span className={styles.fileRow} title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
+    <span className={styles.fileRow} {...tooltipAttrs(f.oldPath ? `${f.oldPath} → ${f.path}` : f.path)}>
       <Icon name={fileIconName(node.name)} size={16} className={styles.fileIcon} />
       <span className={styles.fileName} style={{ color: KIND_COLOR[kind] }}>
         {node.name}

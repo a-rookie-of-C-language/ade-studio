@@ -78,7 +78,7 @@ export function runToCursorInlay(ctx: EditorDocContext): Extension {
         const b = document.createElement("button");
         b.type = "button";
         b.className = styles.runToCursor!;
-        b.title = label;
+        b.setAttribute("data-tooltip", label ?? "");
         b.setAttribute("aria-label", label);
         b.append(iconNode(atExecution ? "resume" : "run-to-cursor", 14));
         b.addEventListener("mousedown", (e) => e.preventDefault());

@@ -15,6 +15,7 @@ import {
   fileIconName,
   showContextMenu,
   type MenuItem,
+  tooltipAttrs,
 } from "@/ui";
 import { resolveServer, serverLabel } from "./model";
 import {
@@ -146,7 +147,7 @@ export function RemoteHostView() {
         />
       </div>
       {tree.root && (
-        <div className={styles.rootPath} title={tree.root}>
+        <div className={styles.rootPath} {...tooltipAttrs(tree.root)}>
           {tree.root}
         </div>
       )}

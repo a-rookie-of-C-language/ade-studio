@@ -7,7 +7,7 @@
 import { useEditorRegistry } from "@/editor/api";
 import { basename, useProject } from "@/platform/project";
 import { useT } from "@/platform/i18n";
-import { ProgressBar } from "@/ui";
+import { ProgressBar, tooltipAttrs } from "@/ui";
 import projectMark from "../../src-tauri/icons/source/openidea-mark.svg";
 import { useDistractionFree } from "./distractionFree";
 import { EditorArea } from "./EditorArea";
@@ -53,7 +53,7 @@ function ProjectOpening({ path }: { path: string }) {
         </div>
         <ProgressBar className={styles.openingProgress} aria-label={label} />
         <div className={styles.openingTitle}>{label}</div>
-        <div className={styles.openingPath} title={path}>
+        <div className={styles.openingPath} {...tooltipAttrs(path)}>
           {path}
         </div>
       </div>

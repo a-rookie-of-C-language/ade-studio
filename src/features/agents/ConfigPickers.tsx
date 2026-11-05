@@ -8,8 +8,9 @@ import { useRef, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import type { AgentConfigOption } from "@/bindings";
 import { useTx } from "@/platform/i18n";
-import { Icon, IconButton, Popup, Select, T, Toggle } from "@/ui";
+import { Icon, IconButton, Popup, Select, T, Toggle, tooltipAttrs } from "@/ui";
 import type { SelectOption } from "@/ui/Select";
+import EffortStars from "./EffortStars";
 import { mainOptions, modeIcon } from "./composerModel";
 import styles from "./Composer.module.css";
 
@@ -206,6 +207,7 @@ function ModelEffortPicker({
   const anchor = useRef<HTMLButtonElement>(null);
   const modelName = selected(model, modelValue)?.name ?? tx("Default");
   const effortName = selected(effort, effortValue)?.name ?? tx("Default");
+  const effortIsMax = effort.values.length > 1 && effortValue === effort.values[effort.values.length - 1]?.value;
   const summary = `${tx(model.name)}: ${modelName} · ${tx(effort.name)}: ${effortName}`;
   return (
     <>
@@ -216,7 +218,7 @@ function ModelEffortPicker({
         aria-label={tx(model.name)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={summary}
+        {...tooltipAttrs(summary)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={styles.chipValue}>{modelName}</span>
@@ -247,7 +249,14 @@ function ModelEffortPicker({
         </div>
         <div className={styles.effortHeader}>
           <span className={styles.settingsLabel}>{tx(effort.name)}</span>
-          <span className={styles.effortValue}>{effortName}</span>
+          <span className={clsx(styles.effortValue, effortIsMax && styles.effortValueMax)}>
+            {effortName}
+            {effortIsMax && (
+              <span aria-hidden className={styles.effortShimmerWindow}>
+                <span data-text={effortName} className={styles.effortShimmerCopy} />
+              </span>
+            )}
+          </span>
         </div>
         <EffortSlider option={effort} value={effortValue} onChange={(v) => onChange(effort.id, v)} />
       </Popup>
@@ -273,8 +282,12 @@ function EffortSlider({
   );
   const last = steps.length - 1;
   const fill = last > 0 ? (index / last) * 100 : 100;
+  const max = last > 0 && steps[last]?.value === value;
   return (
-    <div className={styles.effortSlider}>
+    <div
+      className={clsx(styles.effortSlider, max && styles.effortSliderMax)}
+      style={{ "--fill": `${fill}%`, "--fill-num": last > 0 ? index / last : 1 } as CSSProperties}
+    >
       <input
         type="range"
         min={0}
@@ -283,18 +296,23 @@ function EffortSlider({
         value={index}
         aria-label={tx(option.name)}
         aria-valuetext={steps[index]?.name}
-        title={steps[index]?.description ?? undefined}
-        style={{ "--fill": `${fill}%` } as CSSProperties}
+        {...tooltipAttrs(steps[index]?.description ?? undefined)}
         onChange={(e) => {
           const next = steps[Number(e.target.value)];
           if (next && next.value !== value) onChange(next.value);
         }}
       />
+      {max && <EffortStars />}
       <div className={styles.effortTicks} aria-hidden>
-        {steps.map((v) => (
-          <span key={v.value} className={clsx(v.value === steps[index]?.value && styles.effortTickActive)} />
+        {steps.map((v, i) => (
+          <span
+            key={v.value}
+            className={clsx(i <= index && styles.effortTickDone)}
+            style={{ transitionDelay: `${Math.min(Math.abs(i - index), 4) * 30}ms` }}
+          />
         ))}
       </div>
+      <span key={index} className={styles.effortPulse} aria-hidden />
     </div>
   );
 }
@@ -329,7 +347,7 @@ function ModePicker({
         aria-label={tx(mode.name)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={summary}
+        {...tooltipAttrs(summary)}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name={on ? "unlock" : modeIcon(current?.value ?? "")} size={14} />
@@ -351,7 +369,7 @@ function ModePicker({
               type="button"
               role="option"
               aria-selected={v.value === current?.value}
-              title={v.description ?? undefined}
+              {...tooltipAttrs(v.description ?? undefined)}
               className={styles.modeOption}
               onClick={() => {
                 onChange(mode.id, v.value);
@@ -365,7 +383,7 @@ function ModePicker({
           ))}
         </div>
         <div className={styles.modeFooter}>
-          <span title={allowAll.description ?? undefined}>{tx(allowAll.name)}</span>
+          <span {...tooltipAttrs(allowAll.description ?? undefined)}>{tx(allowAll.name)}</span>
           <Toggle
             checked={on}
             aria-label={tx(allowAll.name)}

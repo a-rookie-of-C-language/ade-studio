@@ -13,7 +13,7 @@ import {
 import clsx from "clsx";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useWorkflowSettings } from "@/platform/workflowSettings";
-import { Icon, showContextMenu } from "@/ui";
+import { Icon, showContextMenu, tooltipAttrs } from "@/ui";
 import { spanStyle } from "@/ui/ansi";
 import ansi from "@/ui/ansi.module.css";
 import type { ConsoleLine, ConsoleModel } from "./console";
@@ -478,7 +478,7 @@ export function ConsoleView({
       <button
         type="button"
         className={styles.foldToggle}
-        title={tx("Collapse folded lines")}
+        {...tooltipAttrs(tx("Collapse folded lines"))}
         aria-label={tx("Collapse folded lines")}
         onClick={() => toggleFold(fold.id)}
       >
@@ -488,7 +488,7 @@ export function ConsoleView({
       <button
         type="button"
         className={styles.fold}
-        title={tx("Expand folded lines")}
+        {...tooltipAttrs(tx("Expand folded lines"))}
         onClick={() => toggleFold(fold.id)}
       >
         {`${attached ? " " : ""}${fold.count === 1 ? tx`<${fold.count} internal line>` : tx`<${fold.count} internal lines>`}`}

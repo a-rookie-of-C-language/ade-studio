@@ -6,7 +6,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import type { Profile } from "@/platform/ipc";
-import { EmptyState, IconButton, Input, Tabs, Tree, T } from "@/ui";
+import { EmptyState, IconButton, Input, Tabs, Tree, T, tooltipAttrs } from "@/ui";
 import { editorService } from "@/workbench/contributions";
 import { colorSlot, flameLayout, formatWeight, frameLocation, matchingFrames, share } from "./model";
 import { activeSnapshot, closeSnapshot, useProfiler, type ProfilerTab } from "./store";
@@ -91,7 +91,9 @@ function FlameGraph({ profile, query }: { profile: Profile; query: string }) {
                     matches && (matches.has(node.frame) ? styles.match : styles.dim),
                   )}
                   style={{ left: r.x * width, width: Math.max(w - 1, 1), bottom: r.depth * ROW }}
-                  title={`${frame.name}${location ? ` (${location})` : ""}\nTotal: ${formatWeight(node.total ?? 0, unit)} (${share(node.total ?? 0, total)})\nSelf: ${formatWeight(node.selfWeight ?? 0, unit)}`}
+                  {...tooltipAttrs(
+                    `${frame.name}${location ? ` (${location})` : ""}\nTotal: ${formatWeight(node.total ?? 0, unit)} (${share(node.total ?? 0, total)})\nSelf: ${formatWeight(node.selfWeight ?? 0, unit)}`,
+                  )}
                   onClick={() => setFocus(r.node)}
                   onDoubleClick={() => openFrame(profile, node.frame)}
                 >

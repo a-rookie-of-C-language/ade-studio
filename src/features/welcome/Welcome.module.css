@@ -21,13 +21,6 @@
   gap: 12px;
   padding: 0 6px 8px;
 }
-.tagline {
-  margin: 0 0 20px;
-  padding: 0 6px;
-  color: var(--fg-muted);
-  font-size: var(--fs-tiny);
-  line-height: 15px;
-}
 .logo {
   flex: none;
   width: 32px;
@@ -234,10 +227,16 @@
 .projectMore:focus-visible {
   visibility: visible;
 }
-.projectSpinner {
+.currentBadge {
   flex: none;
   align-self: center;
-  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-small);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: var(--fs-tiny);
+  line-height: 18px;
+  white-space: nowrap;
 }
 
 /* Shared project avatar (welcome rows and the Recent Projects popup). */

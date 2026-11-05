@@ -582,9 +582,20 @@ pub(super) fn plan(params: &Value) -> Value {
 /// the context window, out of its size.
 pub(super) fn usage(params: &Value) -> Option<Value> {
     let usage = params.get("tokenUsage")?;
-    let used = usage.pointer("/last/totalTokens")?.as_u64()?;
+    let last = usage.get("last")?;
+    let used = last.get("totalTokens")?.as_u64()?;
     let size = usage.get("modelContextWindow")?.as_u64().filter(|s| *s > 0)?;
-    Some(json!({ "sessionUpdate": "usage_update", "used": used, "size": size }))
+    let mut update = json!({ "sessionUpdate": "usage_update", "used": used, "size": size });
+    // Pass through the splits the SDK reports, so the UI shows what exists and nothing more.
+    let mut split = |last: &Value, sdk: &str, out: &str| {
+        last.get(sdk).and_then(Value::as_u64).map(|n| update[out] = json!(n.min(u64::from(u32::MAX))))
+    };
+    split(last, "inputTokens", "inputTokens");
+    split(last, "outputTokens", "outputTokens");
+    split(last, "cachedInputTokens", "cacheReadTokens");
+    split(last, "cacheWriteInputTokens", "cacheWriteTokens");
+    split(last, "reasoningOutputTokens", "reasoningTokens");
+    Some(update)
 }
 
 /// How a failed turn is reported.

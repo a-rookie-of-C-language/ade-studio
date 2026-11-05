@@ -4,7 +4,7 @@
  */
 import { executeAction } from "@/platform/actions";
 import { tx } from "@/platform/i18n";
-import { Icon } from "@/ui";
+import { Icon, tooltipAttrs } from "@/ui";
 import type { IconName } from "@/ui/icons";
 import { controlLabel, controlOperation, inProgress } from "./operations";
 import { useVcs } from "./store";
@@ -15,7 +15,7 @@ function Button(props: { label: string; icon: IconName; tone: "go" | "abort"; di
     <button
       type="button"
       className={styles[props.tone]}
-      title={props.label}
+      {...tooltipAttrs(props.label)}
       aria-label={props.label}
       disabled={props.disabled}
       onClick={props.run}

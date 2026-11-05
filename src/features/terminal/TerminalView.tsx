@@ -44,6 +44,7 @@ import {
   type TerminalTab,
 } from "./store";
 import { TerminalFindBar } from "./FindBar";
+import { TerminalStatusBar } from "./StatusBar";
 import styles from "./Terminal.module.css";
 
 const TAB_PREFIX = "openidea-terminal";
@@ -235,6 +236,7 @@ function TabGroup({ group, corners }: { group: string; corners: Corners | null }
           </div>
         ))}
       </div>
+      {active && <TerminalStatusBar sessionKey={active.session} />}
     </div>
   );
 }

@@ -104,7 +104,7 @@ function enhance(root: HTMLElement, cwd: string): () => void {
     copy.type = "button";
     copy.className = styles.codeCopy!;
     const label = tx("Copy Code");
-    copy.title = label;
+    copy.setAttribute("data-tooltip", label ?? "");
     copy.setAttribute("aria-label", label);
     copy.appendChild(iconNode("copy", 14));
     copy.dataset.copy = text;
@@ -120,7 +120,7 @@ function enhance(root: HTMLElement, cwd: string): () => void {
       code.dataset.path = link.path;
       if (link.line !== undefined) code.dataset.line = String(link.line);
       if (link.col !== undefined) code.dataset.col = String(link.col);
-      code.title = tx`Open ${link.path}`;
+      code.setAttribute("data-tooltip", tx`Open ${link.path}` ?? "");
     });
   });
   return () => {

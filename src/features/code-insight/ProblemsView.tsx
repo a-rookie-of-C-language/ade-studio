@@ -27,6 +27,7 @@ import {
   type TreeHandle,
   type TreeRowState,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { previewText } from "./ipc";
 import {
@@ -315,7 +316,7 @@ export function ProblemsView() {
     }
     const d = n.d;
     return (
-      <span className={styles.row} title={d.message}>
+      <span className={styles.row} {...tooltipAttrs(d.message)}>
         <Icon name={SEVERITY_ICON[d.severity]} size={14} className={styles[`sev-${d.severity}`]} />
         <span className={clsx(styles.message, d.deprecated && styles.deprecated)}>{d.message.split("\n")[0]}</span>
         <span className={styles.position}>:{d.range.start.line + 1}</span>

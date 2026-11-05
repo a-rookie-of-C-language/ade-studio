@@ -147,6 +147,73 @@
   width: 220px;
 }
 
+/* Status strip under the tabs' terminals: shell + directory, the running program, or the exit code. */
+.statusBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 10px;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-tiny);
+  color: var(--fg-subtle);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.statusText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.dotIdle {
+  background: var(--fg-faint);
+}
+.dotBusy {
+  background: var(--accent);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+.dotDone {
+  background: var(--success);
+}
+.dotBad {
+  background: var(--danger);
+}
+
+@keyframes status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dotBusy {
+    animation: none;
+  }
+}
+
+.code {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+.codeBad {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
 /* Find bar (⌘F) */
 .find {
   flex: none;

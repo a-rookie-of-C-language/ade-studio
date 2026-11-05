@@ -1010,7 +1010,10 @@ fn streamed_text_is_not_sent_twice() {
     assert_eq!(texts, [("agent_thought_chunk", "hm"), ("agent_message_chunk", "Hel"), ("agent_message_chunk", "lo")]);
     // Usage needs the window, which a result reports.
     let usage = t.on_result(&json!({"modelUsage": {"x": {"contextWindow": 1000}}}));
-    assert_eq!(usage[0].update, json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000}));
+    assert_eq!(
+        usage[0].update,
+        json!({"sessionUpdate": "usage_update", "used": 15, "size": 1000, "inputTokens": 10, "outputTokens": 5})
+    );
 }
 
 #[test]

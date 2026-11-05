@@ -74,7 +74,7 @@ class InlayWidget extends WidgetType {
       for (const part of parts) {
         const span = document.createElement("span");
         span.textContent = part.value;
-        if (part.tooltip) span.title = part.tooltip;
+        if (part.tooltip) span.setAttribute("data-tooltip", part.tooltip ?? "");
         if (part.location) {
           span.className = "cm-lsp-inlay-part";
           const loc = part.location;
@@ -108,7 +108,7 @@ class InlayWidget extends WidgetType {
         void gotoTargets(view, "typeDefinition", offset);
       });
     }
-    if (this.hint.tooltip) el.title = this.hint.tooltip;
+    if (this.hint.tooltip) el.setAttribute("data-tooltip", this.hint.tooltip ?? "");
     el.setAttribute("aria-hidden", "true");
     el.addEventListener("contextmenu", (e) => {
       e.preventDefault();

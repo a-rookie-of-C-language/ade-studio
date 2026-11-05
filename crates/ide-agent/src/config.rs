@@ -152,13 +152,23 @@ pub(crate) fn commands_of(update: &Value) -> Vec<AgentCommand> {
 /// `usage_update`: `{ used, size }`.
 pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
     let tokens = |key: &str| update.get(key)?.as_f64().map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
+    let split = |key: &str| update.get(key).and_then(Value::as_f64).map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
     let cost = update.get("cost").and_then(|c| {
         Some(Box::new(AgentCost {
             amount: c.get("amount")?.as_f64().filter(|a| a.is_finite() && *a >= 0.0)?,
             currency: c.get("currency")?.as_str().filter(|c| !c.is_empty())?.to_owned(),
         }))
     });
-    Some(AgentUsage { used: tokens("used")?, size: tokens("size").filter(|s| *s > 0)?, cost })
+    Some(AgentUsage {
+        used: tokens("used")?,
+        size: tokens("size").filter(|s| *s > 0)?,
+        cost,
+        input_tokens: split("inputTokens"),
+        output_tokens: split("outputTokens"),
+        cache_read_tokens: split("cacheReadTokens"),
+        cache_write_tokens: split("cacheWriteTokens"),
+        reasoning_tokens: split("reasoningTokens"),
+    })
 }
 
 /// The usage-limit windows a [`crate::LIMITS_UPDATE`] carries; malformed entries are skipped.
@@ -277,6 +287,16 @@ mod tests {
         assert_eq!((cmds[1].name.as_str(), cmds[1].hint.as_ref()), ("init", None));
         let u = usage_of(&json!({"used": 1200, "size": 200000, "cost": {"amount": 0.42, "currency": "USD"}})).unwrap();
         assert_eq!((u.used, u.size), (1200, 200000));
+        assert_eq!(
+            (u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens, u.reasoning_tokens),
+            (None, None, None, None, None),
+            "absent splits stay absent"
+        );
+        let u = usage_of(&json!({"used": 1200, "size": 200000, "inputTokens": 1000, "outputTokens": 200, "cacheReadTokens": 50, "cacheWriteTokens": 60, "reasoningTokens": 70})).unwrap();
+        assert_eq!(
+            (u.input_tokens, u.output_tokens, u.cache_read_tokens, u.cache_write_tokens, u.reasoning_tokens),
+            (Some(1000), Some(200), Some(50), Some(60), Some(70))
+        );
         assert!(usage_of(&json!({"used": 1, "size": 0})).is_none());
     }
 }

@@ -7,7 +7,7 @@ import { initializeRemoteTrustMigration } from "@/platform/remote";
 import { provideProjectTrustPrompt, type ProjectTrustScope } from "@/platform/projectTrust";
 import { invokeLocal } from "@/platform/tauriCore";
 import { registerOverlay, registerSettingsPage, registerWorkbenchBanner } from "@/workbench/contributions";
-import { Button, Checkbox, Dialog, T } from "@/ui";
+import { Button, Checkbox, Dialog, T, tooltipAttrs } from "@/ui";
 import styles from "./trust.module.css";
 
 const usePrompt = create<{
@@ -26,7 +26,7 @@ const usePrompt = create<{
 function PathLine({ path }: { path: string }) {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return (
-    <span className={styles.pathLine} title={path}>
+    <span className={styles.pathLine} {...tooltipAttrs(path)}>
       <span className={styles.pathHead}>{path.slice(0, Math.max(cut, 0))}</span>
       <span className={styles.pathTail}>{path.slice(Math.max(cut, 0))}</span>
     </span>
