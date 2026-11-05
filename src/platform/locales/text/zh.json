@@ -6304,5 +6304,15 @@
   "Import": "导入",
   "Couldn't import the session": "无法导入该会话",
   "Cannot load external sessions": "无法加载外部会话",
-  "No external sessions yet": "暂无外部会话"
+  "No external sessions yet": "暂无外部会话",
+  "Inspect record": "检查记录",
+  "Record {num}": "第 {num} 条记录",
+  "Started": "开始",
+  "Ended": "结束",
+  "Duration": "用时",
+  "Locations": "位置",
+  "Tool calls": "工具调用",
+  "Latest activity": "最新动态",
+  "Attachments": "附件",
+  "Choice": "所选"
 }

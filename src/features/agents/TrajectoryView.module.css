@@ -368,3 +368,110 @@ details.row > summary.rowHead:hover {
   min-width: 0;
   scroll-margin-top: 8px;
 }
+
+/* The record number doubles as the inspector toggle. */
+button.rowIndex {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+button.rowIndex:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.rowIndexSelected {
+  color: var(--fg-strong);
+  text-decoration: underline;
+}
+
+/* The inspected record keeps a highlight while its detail is open. */
+.recordSelected {
+  background: var(--bg-hover);
+  border-radius: var(--radius-row);
+}
+
+/* Record inspector: full detail behind the selected record. */
+.inspector {
+  flex: none;
+  max-height: 44%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.inspectorHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inspectorTitle {
+  font-weight: 600;
+  color: var(--fg-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspectorSpacer {
+  flex: 1;
+}
+
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fact {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.fact dt {
+  flex: none;
+  min-width: 88px;
+  color: var(--fg-subtle);
+  font-size: var(--fs-small);
+}
+
+.fact dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--fg-secondary);
+  font-size: var(--fs-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.factValue {
+  font-family: var(--font-mono);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sectionTitle {
+  color: var(--fg-muted);
+  font-size: var(--fs-small);
+}
+
+.pending {
+  color: var(--fg-subtle);
+  font-size: var(--fs-small);
+}

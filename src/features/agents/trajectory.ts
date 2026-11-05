@@ -297,3 +297,174 @@ export function buildSequenceSpans(
   });
   return spans;
 }
+
+/** One labeled fact of a ledger record in the inspector; the view localizes `key`. */
+export interface TrajectoryInspectorFact {
+  key: "kind" | "locations" | "changes" | "calls" | "activity" | "error" | "attachments" | "choice" | "options";
+  value: string;
+}
+
+/** One text section of a ledger record in the inspector. */
+export interface TrajectoryInspectorText {
+  /** The view maps the key to a section title ("text" renders untitled). */
+  key: "text" | "output" | "prompt" | "reply";
+  /** How the view renders it. */
+  format: "plain" | "pre" | "markdown";
+  text: string;
+}
+
+/** The full detail behind one ledger record for the inspector. */
+export interface TrajectoryInspector {
+  kind: AgentEntry["type"];
+  /** Headline (tool title, subagent title, permission title); empty when the record speaks for itself. */
+  title: string;
+  /** Raw status code; null when the record has none. */
+  status: string | null;
+  startMs: number | null;
+  /** Null while the record is still running. */
+  endMs: number | null;
+  durationMs: number | null;
+  facts: TrajectoryInspectorFact[];
+  texts: TrajectoryInspectorText[];
+}
+
+const inspectorDuration = (startMs: number | null, endMs: number | null): number | null =>
+  startMs != null && endMs != null && endMs > startMs ? endMs - startMs : null;
+
+/**
+ * Full detail behind one ledger record for the inspector.
+ * Keys and status codes stay unlocalized (the view maps keys to labels);
+ * a permission without a `choice` fact is still waiting for an answer.
+ */
+export function describeTrajectoryRecord(entry: AgentEntry): TrajectoryInspector {
+  switch (entry.type) {
+    case "user":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: entry.sentMs ?? null,
+        endMs: entry.doneMs ?? null,
+        durationMs: inspectorDuration(entry.sentMs ?? null, entry.doneMs ?? null),
+        facts: entry.attachments.length > 0 ? [{ key: "attachments", value: entry.attachments.join("\n") }] : [],
+        texts: entry.text ? [{ key: "text", format: "plain", text: entry.text }] : [],
+      };
+    case "agent":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: "markdown", text: entry.text }] : [],
+      };
+    case "thought":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: "plain", text: entry.text }] : [],
+      };
+    case "tool": {
+      const facts: TrajectoryInspectorFact[] = [{ key: "kind", value: entry.kind }];
+      if (entry.locations.length > 0) facts.push({ key: "locations", value: entry.locations.join("\n") });
+      if (entry.diffs.length > 0)
+        facts.push({
+          key: "changes",
+          value: entry.diffs.map((d) => `+${d.added} -${d.removed} ${d.path}`).join("\n"),
+        });
+      return {
+        kind: entry.type,
+        title: entry.title || entry.kind,
+        status: entry.status,
+        startMs: entry.startedMs ?? null,
+        endMs: entry.endedMs ?? null,
+        durationMs: inspectorDuration(entry.startedMs ?? null, entry.endedMs ?? null),
+        facts,
+        texts: entry.output ? [{ key: "output", format: "pre", text: entry.output }] : [],
+      };
+    }
+    case "plan":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts:
+          entry.items.length > 0
+            ? [
+                {
+                  key: "text",
+                  format: "plain",
+                  text: entry.items.map((i) => `[${i.status}] ${i.content}`).join("\n"),
+                },
+              ]
+            : [],
+      };
+    case "subagent": {
+      const facts: TrajectoryInspectorFact[] = [];
+      if (entry.tools > 0) facts.push({ key: "calls", value: String(entry.tools) });
+      if (entry.activity) facts.push({ key: "activity", value: entry.activity });
+      if (entry.error) facts.push({ key: "error", value: entry.error });
+      const texts: TrajectoryInspectorText[] = [];
+      if (entry.prompt) texts.push({ key: "prompt", format: "plain", text: entry.prompt });
+      if (entry.reply) texts.push({ key: "reply", format: "markdown", text: entry.reply });
+      return {
+        kind: entry.type,
+        title: entry.title ?? entry.description ?? "",
+        status: entry.status,
+        startMs: entry.startedMs,
+        endMs: entry.endedMs,
+        durationMs: inspectorDuration(entry.startedMs, entry.endedMs),
+        facts,
+        texts,
+      };
+    }
+    case "message":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: entry.text ? [{ key: "text", format: entry.incoming ? "plain" : "markdown", text: entry.text }] : [],
+      };
+    case "permission": {
+      const facts: TrajectoryInspectorFact[] = [];
+      if (entry.chosen) facts.push({ key: "choice", value: entry.chosen });
+      if (entry.options.length > 0) facts.push({ key: "options", value: entry.options.map((o) => o.name).join("\n") });
+      return {
+        kind: entry.type,
+        title: entry.title,
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts,
+        texts: [],
+      };
+    }
+    case "error":
+      return {
+        kind: entry.type,
+        title: "",
+        status: null,
+        startMs: null,
+        endMs: null,
+        durationMs: null,
+        facts: [],
+        texts: [{ key: "text", format: "plain", text: entry.message }],
+      };
+  }
+}
