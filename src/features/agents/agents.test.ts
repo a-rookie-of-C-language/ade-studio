@@ -6,6 +6,7 @@ import {
   bypassDefaults,
   canSend,
   completionAt,
+  formatTokens,
   isPathQuery,
   resolveTyped,
   imageFromDataUrl,
@@ -199,6 +200,16 @@ describe("agent composer", () => {
 describe("usage meters", () => {
   it("formats token counts", () => {
     expect(usageLabel({ used: 83_100, size: 1_000_000 }).detail).toBe("83.1k / 1M tokens");
+  });
+
+  it("formats the context breakdown counts", () => {
+    expect(formatTokens(850)).toBe("850");
+    expect(formatTokens(24_000)).toBe("24k");
+    expect(formatTokens(1_000_000)).toBe("1M");
+    // Splits never change the total: the header still shows only used / size.
+    expect(usageLabel({ used: 24_000, size: 200_000, inputTokens: 20_000, outputTokens: 4_000 }).detail).toBe(
+      "24k / 200k tokens",
+    );
   });
 
   it("names usage-limit windows and says when they reset", () => {

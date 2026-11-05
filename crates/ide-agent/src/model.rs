@@ -77,7 +77,8 @@ pub struct AgentTask {
     /// Slash commands the agent offers.
     pub commands: Vec<AgentCommand>,
     /// Context window use, when the agent reports it.
-    pub usage: Option<AgentUsage>,
+    // Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound on Windows.
+    pub usage: Option<Box<AgentUsage>>,
     /// Messages waiting for the current turn to end, oldest first.
     pub queue: Vec<AgentQueued>,
     #[serde(default)]
@@ -159,6 +160,23 @@ pub struct AgentUsage {
     // Boxed so that `AgentEvent::Task` stays within clippy's `large_enum_variant` bound on Windows.
     #[serde(default)]
     pub cost: Option<Box<AgentCost>>,
+    /// Tokens the last request sent, when the agent reports the split.
+    #[serde(default)]
+    pub input_tokens: Option<u32>,
+    /// Tokens the last request produced, when reported.
+    #[serde(default)]
+    pub output_tokens: Option<u32>,
+    /// Tokens served from cache, when reported (Codex `cachedInputTokens`,
+    /// Claude `cache_read_input_tokens`).
+    #[serde(default)]
+    pub cache_read_tokens: Option<u32>,
+    /// Tokens written to cache, when reported (Codex `cacheWriteInputTokens`,
+    /// Claude `cache_creation_input_tokens`).
+    #[serde(default)]
+    pub cache_write_tokens: Option<u32>,
+    /// Reasoning tokens, when reported (Codex `reasoningOutputTokens`).
+    #[serde(default)]
+    pub reasoning_tokens: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]

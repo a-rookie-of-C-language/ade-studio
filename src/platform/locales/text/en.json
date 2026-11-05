@@ -4,5 +4,15 @@
   "WSL distribution:": "WSL distribution:",
   "WSL distribution": "WSL distribution",
   "Project runs on {label}": "Project runs on {label}",
-  "Forwarding ports is not supported in a WSL project yet": "Forwarding ports is not supported in a WSL project yet"
+  "Forwarding ports is not supported in a WSL project yet": "Forwarding ports is not supported in a WSL project yet",
+  "Context": "Context",
+  "Used": "Used",
+  "used": "used",
+  "Free space": "Free space",
+  "Input": "Input",
+  "Output": "Output",
+  "Cache read": "Cache read",
+  "Cache write": "Cache write",
+  "Reasoning": "Reasoning",
+  "Compact session": "Compact session"
 }

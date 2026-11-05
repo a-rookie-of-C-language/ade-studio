@@ -6242,5 +6242,15 @@
   "Project folder not found": "找不到项目文件夹",
   "Cannot select workspace": "无法选择工作区",
   "Folder is in Restricted Mode": "该文件夹处于受限模式",
-  "Trust this folder to run agents in it.": "信任此文件夹以在其中运行 agent。"
+  "Trust this folder to run agents in it.": "信任此文件夹以在其中运行 agent。",
+  "Context": "上下文",
+  "Used": "已用",
+  "used": "已用",
+  "Free space": "可用空间",
+  "Input": "输入",
+  "Output": "输出",
+  "Cache read": "缓存读取",
+  "Cache write": "缓存写入",
+  "Reasoning": "推理",
+  "Compact session": "压缩会话"
 }

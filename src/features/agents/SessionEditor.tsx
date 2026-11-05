@@ -21,6 +21,7 @@ import {
   EmptyState,
   Icon,
   IconButton,
+  Popup,
   SearchField,
   Spinner,
   T,
@@ -37,7 +38,16 @@ import { isImeKey } from "@/platform/ime";
 import { TaskStatusIcon } from "./AgentsView";
 import { Composer } from "./Composer";
 import { SubmitButton } from "./SubmitButton";
-import { canSend, costLabel, emptyDraft, limitLabel, retryParts, usageLabel, workTime } from "./composerModel";
+import {
+  canSend,
+  costLabel,
+  emptyDraft,
+  formatTokens,
+  limitLabel,
+  retryParts,
+  usageLabel,
+  workTime,
+} from "./composerModel";
 import { ConfigPickers } from "./ConfigPickers";
 import { findRanges, formatDuration, formatSentAt } from "./conversation";
 import { ImagePreview, imageSrc } from "./ImagePreview";
@@ -57,6 +67,7 @@ import {
 } from "./model";
 import {
   cancelTask,
+  focusComposer,
   loadEntries,
   markVisible,
   refreshChanges,
@@ -70,6 +81,7 @@ import {
   sendMessage,
   sendQueuedNow,
   setTaskConfig,
+  updateComposer,
   useAgentCommands,
   useAgents,
 } from "./store";
@@ -174,6 +186,7 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
           <SessionComposer task={task} entries={entries ?? null} onOpenSubagent={openSubagent} />
         )}
       </div>
+      {!docked && <div className={styles.sidecar} data-reserved="right-quarter" />}
       {changesOpen && (
         <ChangesPane
           task={task}
@@ -327,7 +340,7 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
   const work = show?.showWorkTime !== false && entries ? workTime(entries, busy ? now : null) : 0;
   return (
     <span className={styles.meters}>
-      {usage && <Usage usage={usage} />}
+      {usage && <Usage task={task} />}
       {limits.map((l) => (
         <Limit key={l.window} limit={l} now={now} />
       ))}
@@ -350,16 +363,120 @@ function Limit({ limit, now }: { limit: AgentLimit; now: number }) {
   );
 }
 
-/** Context window use: "12%", the numbers in the tooltip. */
-function Usage({ usage }: { usage: AgentUsage }) {
+/**
+ * Context window use: "12%" in the session header; opening it shows what the
+ * agent reported (total plus the splits it sent) and the free space derived
+ * from them. Absent splits stay absent: nothing is estimated.
+ */
+function Usage({ task }: { task: AgentTask }) {
+  const usage = task.usage as AgentUsage;
   const label = usageLabel(usage);
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLButtonElement>(null);
+  const free = Math.max(0, usage.size - usage.used);
+  const canCompact = task.commands.some((c) => c.name === "compact");
+  const compact = () => {
+    updateComposer(task.id, { text: "/compact" });
+    focusComposer(task.id);
+    setOpen(false);
+  };
   return (
-    <span className={styles.meter} title={label.detail} aria-label={`Context ${label.short}, ${label.detail}`}>
-      <span className={styles.usageBar} aria-hidden>
-        <span style={{ width: label.short }} />
-      </span>
-      {label.short}
-    </span>
+    <>
+      <button
+        ref={anchor}
+        type="button"
+        className={styles.usageButton}
+        title={label.detail}
+        aria-label={`Context ${label.short}, ${label.detail}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className={styles.usageBar} aria-hidden>
+          <span style={{ width: label.short }} />
+        </span>
+        {label.short}
+      </button>
+      <Popup
+        open={open}
+        anchor={anchor}
+        onClose={() => setOpen(false)}
+        aria-label={tx("Context")}
+        className={styles.usagePopup}
+      >
+        <div className={styles.usageHead}>
+          <span className={styles.usageTitle}>
+            <T>Context</T>
+          </span>
+          <span className={styles.usageTotal}>
+            {label.short} <T>used</T>
+          </span>
+        </div>
+        <div className={styles.usageNumbers}>{label.detail}</div>
+        <div className={styles.usageBarLarge} aria-hidden>
+          <span style={{ width: label.short }} />
+        </div>
+        <div className={styles.usageRows}>
+          <div className={styles.usageRow}>
+            <span>
+              <T>Used</T>
+            </span>
+            <span>{formatTokens(usage.used)}</span>
+          </div>
+          <div className={styles.usageRow}>
+            <span>
+              <T>Free space</T>
+            </span>
+            <span>{formatTokens(free)}</span>
+          </div>
+          {usage.inputTokens != null && (
+            <div className={styles.usageRow}>
+              <span>
+                <T>Input</T>
+              </span>
+              <span>{formatTokens(usage.inputTokens)}</span>
+            </div>
+          )}
+          {usage.outputTokens != null && (
+            <div className={styles.usageRow}>
+              <span>
+                <T>Output</T>
+              </span>
+              <span>{formatTokens(usage.outputTokens)}</span>
+            </div>
+          )}
+          {usage.cacheReadTokens != null && (
+            <div className={styles.usageRow}>
+              <span>
+                <T>Cache read</T>
+              </span>
+              <span>{formatTokens(usage.cacheReadTokens)}</span>
+            </div>
+          )}
+          {usage.cacheWriteTokens != null && (
+            <div className={styles.usageRow}>
+              <span>
+                <T>Cache write</T>
+              </span>
+              <span>{formatTokens(usage.cacheWriteTokens)}</span>
+            </div>
+          )}
+          {usage.reasoningTokens != null && (
+            <div className={styles.usageRow}>
+              <span>
+                <T>Reasoning</T>
+              </span>
+              <span>{formatTokens(usage.reasoningTokens)}</span>
+            </div>
+          )}
+        </div>
+        {canCompact && (
+          <Button size="small" onClick={compact}>
+            <T>Compact session</T>
+          </Button>
+        )}
+      </Popup>
+    </>
   );
 }
 

@@ -368,4 +368,37 @@ describe("meters in the task header", () => {
     expect(screen.queryByText("5h 19%")).toBeNull();
     expect(screen.getByText("$0.42")).toBeInTheDocument();
   });
+
+  it("opens the context breakdown with only the splits the agent reported", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      usage: { used: 150_000, size: 200_000, inputTokens: 96_000, outputTokens: 5_000, cacheReadTokens: 27_000 },
+      commands: [],
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    fireEvent.click(screen.getByRole("button", { name: /Context 75%/ }));
+    expect(screen.getByText("Free space")).toBeInTheDocument();
+    expect(screen.getByText("Input")).toBeInTheDocument();
+    expect(screen.getByText("Output")).toBeInTheDocument();
+    expect(screen.getByText("Cache read")).toBeInTheDocument();
+    expect(screen.queryByText("Cache write")).toBeNull();
+    expect(screen.queryByText("Reasoning")).toBeNull();
+    expect(screen.queryByText("Compact session")).toBeNull();
+  });
+
+  it("offers Compact session when the agent reports a compact command", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      usage: { used: 150_000, size: 200_000 },
+      commands: [{ name: "compact", description: "Free up context", hint: null }],
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    fireEvent.click(screen.getByRole("button", { name: /Context 75%/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Compact session" }));
+    expect(useAgents.getState().composers.get("A")?.text).toBe("/compact");
+  });
 });
