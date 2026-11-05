@@ -48,8 +48,14 @@ const STDERR_LINES: usize = 20;
 /// (`session/load`): the next message starts it again where it left off.
 const IDLE_RELEASE: Duration = Duration::from_secs(5 * 60);
 /// Updates of a session's state rather than its conversation.
-const SESSION_STATE: [&str; 5] =
-    ["session_info_update", "config_option_update", "current_mode_update", "available_commands_update", "usage_update"];
+const SESSION_STATE: [&str; 6] = [
+    "session_info_update",
+    "config_option_update",
+    "current_mode_update",
+    "available_commands_update",
+    "usage_update",
+    "usage_cleared",
+];
 /// A native agent's own update: it is about to retry a failed API request (see [`AgentRetry`]).
 pub(crate) const RETRY_UPDATE: &str = "openidea_retry";
 /// A native agent's own update: the usage limits of its account (see [`AgentLimit`]).
@@ -1479,6 +1485,12 @@ impl Task {
                     s.task.usage = config::usage_of(update).or(s.task.usage.take());
                     true
                 }
+                // The last shown share went stale (model change, compaction): drop
+                // it so the meter reads unknown instead of a stale percentage.
+                "usage_cleared" => {
+                    s.task.usage = None;
+                    true
+                }
                 _ => false,
             }
         };
@@ -1488,7 +1500,7 @@ impl Task {
                 (s.task.config.clone(), s.task.commands.clone())
             };
             self.shared.remember(&provider, Some(&config), Some(&commands));
-            if kind != "usage_update" {
+            if kind != "usage_update" && kind != "usage_cleared" {
                 self.persist();
             }
             self.emit_task();

@@ -812,6 +812,35 @@ fn usage_limits_and_cost_skip_what_is_malformed() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn usage_cleared_drops_the_stale_share() {
+    let tmp = tempfile::tempdir().unwrap();
+    let agent = Arc::new(FakeAgent::default());
+    let mgr = manager(tmp.path(), agent.clone());
+    let task = mgr
+        .create(NewAgentTask {
+            project_root: None,
+            prompt: text("again"),
+            provider: "claude".into(),
+            config: vec![],
+            isolation: Isolation::Local,
+            base: None,
+        })
+        .await
+        .unwrap();
+    // Let the fake agent connect before feeding it session updates.
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    agent.update("s1", json!({"sessionUpdate": "usage_update", "used": 50, "size": 1000}));
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    let used = || mgr.task(&task.id).unwrap().state.lock().task.usage.clone();
+    assert_eq!(used().as_ref().map(|u| (u.used, u.size)), Some((50, 1000)));
+    // A compaction or model change invalidates the last share: the meter reads
+    // unknown instead of keeping the stale percentage.
+    agent.update("s1", json!({"sessionUpdate": "usage_cleared"}));
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    assert!(used().is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn cursor_approval_switch_resolves_pending_and_survives_restart() {
     let tmp = tempfile::tempdir().unwrap();
     let agent = Arc::new(FakeAgent::default());

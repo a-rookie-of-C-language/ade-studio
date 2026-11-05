@@ -6245,5 +6245,8 @@
   "Connect a device over USB, or start an emulator. Logcat uses the Android SDK's adb.": "通过 USB 连接设备，或启动模拟器。Logcat 使用 Android SDK 的 adb。",
   "No lines match the filter": "没有符合过滤条件的日志行",
   "Streaming": "正在接收",
-  "Idle": "空闲"
+  "Idle": "空闲",
+  "Model {model}": "模型 {model}",
+  "Estimated from the last response": "根据上一次响应估算",
+  "{name}: {tokens} tokens": "{name}：{tokens} 个 token"
 }

@@ -2,9 +2,14 @@
 //! the agent reports them over ACP.
 
 use crate::model::{
-    AgentCommand, AgentConfigOption, AgentConfigValue, AgentConfigVia, AgentCost, AgentLimit, AgentUsage,
+    AgentCommand, AgentConfigOption, AgentConfigValue, AgentConfigVia, AgentContextCategory, AgentContextKind,
+    AgentCost, AgentLimit, AgentUsage,
 };
 use serde_json::{Value, json};
+
+/// A provider can never break the meter with a flood of categories.
+const MAX_CONTEXT_CATEGORIES: usize = 64;
+const MAX_CONTEXT_CATEGORY_NAME_CHARS: usize = 80;
 
 /// Cursor exposes execution modes over ACP, but leaves approval policy to its client.
 pub(crate) const CURSOR_APPROVAL: &str = "openidea.cursor.approval";
@@ -149,8 +154,9 @@ pub(crate) fn commands_of(update: &Value) -> Vec<AgentCommand> {
         .collect()
 }
 
-/// `usage_update`: `{ used, size }`.
-pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
+/// `usage_update`: `{ used, size }`, plus the optional `kind` (`"estimate"` or
+/// `"report"`), `model` and `categories` the native drivers attach.
+pub(crate) fn usage_of(update: &Value) -> Option<Box<AgentUsage>> {
     let tokens = |key: &str| update.get(key)?.as_f64().map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32);
     let cost = update.get("cost").and_then(|c| {
         Some(Box::new(AgentCost {
@@ -158,7 +164,45 @@ pub(crate) fn usage_of(update: &Value) -> Option<AgentUsage> {
             currency: c.get("currency")?.as_str().filter(|c| !c.is_empty())?.to_owned(),
         }))
     });
-    Some(AgentUsage { used: tokens("used")?, size: tokens("size").filter(|s| *s > 0)?, cost })
+    let kind = match update.get("kind").and_then(Value::as_str) {
+        Some("estimate") => AgentContextKind::Estimate,
+        _ => AgentContextKind::Report,
+    };
+    let model = update.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_owned);
+    Some(Box::new(AgentUsage {
+        used: tokens("used")?,
+        size: tokens("size").filter(|s| *s > 0)?,
+        kind,
+        model,
+        categories: categories_of(update),
+        cost,
+    }))
+}
+
+/// The provider's own per-category breakdown (`categories: [{ name, tokens }]`);
+/// malformed rows are skipped, so a provider can never break the meter.
+fn categories_of(update: &Value) -> Vec<AgentContextCategory> {
+    update
+        .get("categories")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .take(MAX_CONTEXT_CATEGORIES)
+        .filter_map(|c| {
+            Some(AgentContextCategory {
+                name: c
+                    .get("name")?
+                    .as_str()?
+                    .chars()
+                    .take(MAX_CONTEXT_CATEGORY_NAME_CHARS)
+                    .collect::<String>()
+                    .trim()
+                    .to_owned(),
+                tokens: c.get("tokens")?.as_f64().map(|n| n.clamp(0.0, f64::from(u32::MAX)) as u32)?,
+            })
+        })
+        .filter(|c| !c.name.is_empty())
+        .collect()
 }
 
 /// The usage-limit windows a [`crate::LIMITS_UPDATE`] carries; malformed entries are skipped.
@@ -278,5 +322,14 @@ mod tests {
         let u = usage_of(&json!({"used": 1200, "size": 200000, "cost": {"amount": 0.42, "currency": "USD"}})).unwrap();
         assert_eq!((u.used, u.size), (1200, 200000));
         assert!(usage_of(&json!({"used": 1, "size": 0})).is_none());
+        // Provenance rides along when the driver attaches it; malformed rows never break the meter.
+        let e = usage_of(&json!({"used": 15, "size": 1000, "kind": "estimate", "model": "x",
+                "categories": [{"name": "Messages", "tokens": 12}, {"name": "", "tokens": 1}, {"tokens": 2}]}))
+        .unwrap();
+        assert_eq!(e.kind, AgentContextKind::Estimate);
+        assert_eq!(e.model.as_deref(), Some("x"));
+        assert_eq!(e.categories.iter().map(|c| (c.name.as_str(), c.tokens)).collect::<Vec<_>>(), [("Messages", 12)]);
+        let r = usage_of(&json!({"used": 20, "size": 1000, "kind": "report"})).unwrap();
+        assert_eq!((r.kind, r.model, r.categories.len()), (AgentContextKind::Report, None, 0));
     }
 }
