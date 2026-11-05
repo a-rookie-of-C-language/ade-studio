@@ -59,15 +59,30 @@ pub struct ChannelMessage {
     pub data: Value,
 }
 
+/// Sends one channel value to a mobile WebSocket client (id, data).
+pub type MobileChannelSender = Arc<dyn Fn(u64, Value) + Send + Sync>;
+
 /// One `invoke`: its arguments and a way to stream values back.
 pub struct Call {
     pub host: Arc<Host>,
     pub window: String,
     pub args: Value,
     peer: Arc<OnceLock<Peer>>,
+    mobile: Option<MobileChannelSender>,
 }
 
 impl Call {
+    /// A call whose channel values go to `mobile` (WebSocket) instead of stdio.
+    pub fn new(
+        host: Arc<Host>,
+        window: String,
+        args: Value,
+        peer: Arc<OnceLock<Peer>>,
+        mobile: Option<MobileChannelSender>,
+    ) -> Self {
+        Self { host, window, args, peer, mobile }
+    }
+
     /// Argument `name` (missing = `null`, so `Option`s may be omitted).
     pub fn arg<T: DeserializeOwned>(&self, name: &str) -> IdeResult<T> {
         let v = self.args.get(name).cloned().unwrap_or(Value::Null);
@@ -88,6 +103,12 @@ impl Call {
             .and_then(|v| v.get("$channel"))
             .and_then(Value::as_u64)
             .ok_or_else(|| IdeError::invalid(format!("argument {name}: expected a channel")))?;
+        if let Some(mobile) = self.mobile.clone() {
+            return Ok(Arc::new(move |data: T| match serde_json::to_value(&data) {
+                Ok(data) => mobile(id, data),
+                Err(e) => tracing::warn!("channel {id}: {e}"),
+            }));
+        }
         let peer = self.peer.clone();
         Ok(Arc::new(move |data: T| {
             let Some(peer) = peer.get() else { return };
@@ -135,6 +156,15 @@ impl Dispatcher {
         let mut out: Vec<_> = self.handlers.keys().copied().collect();
         out.sort_unstable();
         out
+    }
+
+    /// Runs one command by name (mobile WebSocket path shares this with stdio).
+    pub async fn invoke(&self, call: Call, cmd: &str) -> IdeResult<Value> {
+        let Some(handler) = self.handlers.get(cmd).cloned() else {
+            return Err(IdeError::invalid(format!("command {cmd} is not available remotely")));
+        };
+        call.host.authorize_command(&call.window, cmd)?;
+        handler(call).await
     }
 
     /// The commands of the core remote slice: project, files, documents, search,
@@ -337,7 +367,7 @@ impl Handler for ServerHandler {
                     return Err((codes::METHOD_NOT_FOUND, format!("command {} is not available remotely", call.cmd)));
                 };
                 self.host.authorize_command(&call.window, &call.cmd).map_err(error_reply)?;
-                let c = Call { host: self.host.clone(), window: call.window, args: call.args, peer: self.peer.clone() };
+                let c = Call::new(self.host.clone(), call.window, call.args, self.peer.clone(), None);
                 // Requests run on blocking-capable threads: wait for the command here.
                 self.host.runtime.block_on(handler(c)).map_err(error_reply)
             }
