@@ -429,6 +429,9 @@ mod tests {
     fn default_workspace_project_is_not_explicit() {
         // `project_or_default` opens this for the home window before the first
         // Start; picking another folder must still validate as the home flow.
+        // The app creates the dir on startup (`ensure_default_project`), so the
+        // test does the same: fresh machines (CI) have no `~/.openidea/workspace`.
+        std::fs::create_dir_all(Host::default_workspace()).unwrap();
         assert!(is_default_project(&Host::default_workspace()));
         let tmp = tempfile::tempdir().unwrap();
         assert!(!is_default_project(tmp.path()));
