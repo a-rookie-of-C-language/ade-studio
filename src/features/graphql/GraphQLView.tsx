@@ -10,7 +10,7 @@ import { highlightInto } from "@/editor/lsp/markdown";
 import { formatMessage, useTx } from "@/platform/i18n";
 import { openExternalUrl } from "@/platform/openUrl";
 import { basename, relativeDir, useProject } from "@/platform/project";
-import { EmptyState, Icon, IconButton, Spinner, Tabs, Tree, fileIconName, T } from "@/ui";
+import { EmptyState, Icon, IconButton, Spinner, Tabs, Tree, fileIconName, T, tooltipAttrs } from "@/ui";
 import { editorService } from "@/workbench/contributions";
 import {
   childNodes,
@@ -322,7 +322,7 @@ function QueryResultView() {
   const size = formatSize(result.size ?? result.body?.length ?? 0);
   return (
     <div className={styles.result}>
-      <div className={styles.resultHeader} title={`${result.endpoint.name} - ${result.endpoint.url}`}>
+      <div className={styles.resultHeader} {...tooltipAttrs(`${result.endpoint.name} - ${result.endpoint.url}`)}>
         {running ? (
           <Spinner size={12} />
         ) : failed ? (

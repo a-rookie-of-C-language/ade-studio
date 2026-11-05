@@ -120,7 +120,7 @@ class GhostWidget extends WidgetType {
     const el = document.createElement("span");
     el.className = "cm-inline-ghost";
     el.textContent = this.text;
-    if (this.label) el.title = `Suggestion ${this.label}`;
+    if (this.label) el.setAttribute("data-tooltip", `Suggestion ${this.label}`);
     el.setAttribute("aria-hidden", "true");
     return el;
   }

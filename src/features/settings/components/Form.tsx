@@ -5,7 +5,7 @@
  */
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
-import { Checkbox, IconButton, Input, Select as UiSelect, type SelectOption, T } from "@/ui";
+import { Checkbox, IconButton, Input, Select as UiSelect, type SelectOption, T, tooltipAttrs } from "@/ui";
 import { tx, useTx } from "@/platform/i18n";
 import { highlightIndices } from "../model/pages";
 import { HEX_COLOR } from "../model/schema";
@@ -215,7 +215,7 @@ export function ColorSwatches({ value, presets, onChange, allowCustom = true, ..
             role="radio"
             aria-checked={on}
             aria-label={p.label}
-            title={`${p.label} (${p.value})`}
+            {...tooltipAttrs(`${p.label} (${p.value})`)}
             className={clsx(styles.swatch, on && styles.swatchOn)}
             onClick={() => onChange(p.value)}
           >
@@ -227,7 +227,7 @@ export function ColorSwatches({ value, presets, onChange, allowCustom = true, ..
         <>
           <label
             className={clsx(styles.swatch, styles.custom, !isPreset && styles.swatchOn)}
-            title={tx("Custom colour")}
+            {...tooltipAttrs(tx("Custom colour"))}
             aria-checked={!isPreset}
             role="radio"
           >

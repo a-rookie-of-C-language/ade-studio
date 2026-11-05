@@ -61,7 +61,7 @@ class Marker extends GutterMarker {
   override toDOM(): Node {
     const el = document.createElement("div");
     el.className = styles.marker ?? "";
-    el.title = targetTitle(this.target, this.path);
+    el.setAttribute("data-tooltip", targetTitle(this.target, this.path) ?? "");
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", el.title);
     el.innerHTML = gutterIconMarkup(this.target.kind === "composeAll" ? "gutter-run-all" : "gutter-run") ?? "";

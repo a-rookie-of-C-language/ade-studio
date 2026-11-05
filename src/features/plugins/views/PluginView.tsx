@@ -28,6 +28,7 @@ import {
   Tree,
   showContextMenu,
   type MenuItem,
+  tooltipAttrs,
 } from "@/ui";
 import { pluginsBackend } from "../backend";
 import { subscribeTheme, themeKey } from "@/platform/themeWatch";
@@ -381,7 +382,7 @@ function TableBody({
             key={c}
             role="gridcell"
             className={styles.cell}
-            title={cells[c]}
+            {...tooltipAttrs(cells[c])}
             onDoubleClick={() => table.editable && setEditing({ row: r, column: c })}
           >
             {editing?.row === r && editing.column === c ? (
@@ -414,7 +415,7 @@ function TableBody({
         <div className={`${styles.tableRow} ${styles.tableHeader}`} role="row" aria-rowindex={1}>
           <div className={styles.rowNumber} />
           {table.columns.map((c, i) => (
-            <div key={i} role="columnheader" className={styles.cell} title={c}>
+            <div key={i} role="columnheader" className={styles.cell} {...tooltipAttrs(c)}>
               {c}
             </div>
           ))}

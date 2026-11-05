@@ -22,6 +22,7 @@ import {
   firstSelectable,
   type MenuItem,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { buildBranchRows, withExpanded, type BranchRow, type PopupAction } from "./branches";
 import { branchPresentation, extensionPopupActions, useBranchWidgetExtensions } from "./branchWidgetExtensions";
@@ -900,13 +901,13 @@ function BranchRowView({ row }: { row: BranchRow | Extract<RepoRow, { type: "act
       )}
       {/* Like IDEA: incoming (↙) before outgoing (↗). */}
       {b.behind > 0 && (
-        <span className={clsx(styles.syncSmall, styles.incoming)} title={tx`${b.behind} incoming commits`}>
+        <span className={clsx(styles.syncSmall, styles.incoming)} {...tooltipAttrs(tx`${b.behind} incoming commits`)}>
           <Icon name="vcs-incoming" size={12} />
           {b.behind}
         </span>
       )}
       {b.ahead > 0 && (
-        <span className={clsx(styles.syncSmall, styles.outgoing)} title={tx`${b.ahead} outgoing commits`}>
+        <span className={clsx(styles.syncSmall, styles.outgoing)} {...tooltipAttrs(tx`${b.ahead} outgoing commits`)}>
           <Icon name="vcs-outgoing" size={12} />
           {b.ahead}
         </span>

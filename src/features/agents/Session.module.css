@@ -17,14 +17,26 @@
   border-right: 1px solid var(--border);
 }
 
-/* Reserved right quarter: empty space for future content. */
+/* Reserved right quarter: persistent sidecar for the context card. */
 .sidecar {
   grid-column: 2;
   min-width: 0;
   min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.contextCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-popup);
+  background: var(--bg-elev);
+  padding: 10px 12px 12px;
 }
 
 /* Session environment: agent, directory, branch. Shares the context card's look. */
@@ -226,6 +238,50 @@
 .stream > :not(.message):not(details) {
   content-visibility: auto;
   contain-intrinsic-block-size: auto 80px;
+}
+
+/* Room for the message index rail on the stream's right edge. */
+.streamWithIndex {
+  padding-right: 28px;
+}
+
+/* Session index: one tick per user message; clicking jumps to it. */
+.messageIndex {
+  position: absolute;
+  top: 12px;
+  right: 4px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  z-index: 1;
+}
+.messageIndexTick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.messageIndexTick::before {
+  content: "";
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fg-faint);
+}
+.messageIndexTick:hover::before {
+  background: var(--fg-strong);
+}
+.messageIndexTick:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* Your message with its actions, shown on hover. */

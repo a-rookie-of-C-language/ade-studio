@@ -109,7 +109,7 @@ class LensWidget extends WidgetType {
       }
       const el = document.createElement(lens.run ? "button" : "span");
       el.className = lens.run ? "cm-openidea-lensItem cm-openidea-lensAction" : "cm-openidea-lensItem";
-      if (lens.tooltip) el.title = lens.tooltip;
+      if (lens.tooltip) el.setAttribute("data-tooltip", lens.tooltip ?? "");
       if (lens.icon && ICONS[lens.icon]) {
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("viewBox", "0 0 16 16");

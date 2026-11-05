@@ -4,7 +4,21 @@ import { basename, relativePath, useProject } from "@/platform/project";
 import { executeAction, getAction } from "@/platform/actions";
 import { call, commands, type AttachableProcess, type RunConfig, type Variable } from "@/platform/ipc";
 import { maybeEditorService, notifications } from "@/workbench/contributions";
-import { Button, Checkbox, Dialog, Icon, IconButton, Input, Kbd, List, Menu, Popup, Toggle, T } from "@/ui";
+import {
+  Button,
+  Checkbox,
+  Dialog,
+  Icon,
+  IconButton,
+  Input,
+  Kbd,
+  List,
+  Menu,
+  Popup,
+  Toggle,
+  T,
+  tooltipAttrs,
+} from "@/ui";
 import { isConditional, suspends, type BreakpointEntry } from "../breakpoints/model";
 import {
   removeAllBreakpoints,
@@ -541,7 +555,7 @@ function ExceptionBreakpoints({ open }: { open: boolean }) {
           >
             {groups.length > 1 && <div className={styles.exceptionAdapter}>{g.adapter}</div>}
             {g.filters.map((f) => (
-              <span key={f.filter} title={f.description ?? undefined} className={styles.exceptionRow}>
+              <span key={f.filter} {...tooltipAttrs(f.description ?? undefined)} className={styles.exceptionRow}>
                 <Checkbox
                   checked={f.enabled}
                   onChange={(on) => setExceptionFilter(g.adapter, f.filter, on)}
@@ -959,7 +973,7 @@ function AttachPopup() {
             }
             renderItem={(r) =>
               r.kind === "process" ? (
-                <div className={styles.chooserRow} title={r.process.commandLine}>
+                <div className={styles.chooserRow} {...tooltipAttrs(r.process.commandLine)}>
                   <span className={styles.attachPid}>{r.process.pid}</span>
                   <span className={styles.bpName}>{r.process.name}</span>
                   <span className={styles.bpDir}>{r.process.commandLine}</span>

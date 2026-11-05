@@ -24,9 +24,12 @@ class MovedCodeLink extends WidgetType {
     button.type = "button";
     button.className = "cm-diffMoveLink";
     if (this.edited)
-      button.title = isA
-        ? tx`Moved to line ${this.line} with internal edits`
-        : tx`Moved from line ${this.line} with internal edits`;
+      button.setAttribute(
+        "data-tooltip",
+        (isA
+          ? tx`Moved to line ${this.line} with internal edits`
+          : tx`Moved from line ${this.line} with internal edits`) ?? "",
+      );
     button.textContent = this.edited
       ? isA
         ? tx`To L${this.line} (edited)`

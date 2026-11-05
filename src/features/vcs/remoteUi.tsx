@@ -5,7 +5,7 @@ import { call, commands } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
 import { workflowSettings } from "@/platform/workflowSettings";
 import { notifications } from "@/workbench/contributions";
-import { Checkbox, Dialog, Input, List, Select, Spinner, T, Tree } from "@/ui";
+import { Checkbox, Dialog, Input, List, Select, Spinner, T, Tree, tooltipAttrs } from "@/ui";
 import { ask } from "@/workbench/messages";
 import { openDialog } from "./dialogs";
 import { formatTime } from "./model";
@@ -451,7 +451,9 @@ function PushDialog({ target: pushTarget, onClose }: { target: PushTarget; onClo
       resizable="both"
       footerStart={
         <>
-          <span title={protectedTarget ? `Force push to protected branch '${target}' is prohibited` : undefined}>
+          <span
+            {...tooltipAttrs(protectedTarget ? `Force push to protected branch '${target}' is prohibited` : undefined)}
+          >
             <Checkbox
               checked={force && !protectedTarget}
               disabled={protectedTarget}

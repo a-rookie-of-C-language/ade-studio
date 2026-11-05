@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AgentProvider } from "@/bindings";
 import { tx, useTx } from "@/platform/i18n";
 import clsx from "clsx";
-import { Button, Icon, IconButton, Input, List, Spinner, T } from "@/ui";
+import { Button, Icon, IconButton, Input, List, Spinner, T, tooltipAttrs } from "@/ui";
 import { useSettingsForm } from "@/workbench/contributions";
 import { providerIcon } from "./model";
 import type { CommandsBackend } from "./registry";
@@ -128,7 +128,7 @@ function Details({
         />
         <span>{status}</span>
         <span aria-hidden>·</span>
-        <code className={styles.launch} title={tx("Launch command")}>
+        <code className={styles.launch} {...tooltipAttrs(tx("Launch command"))}>
           {launch}
         </code>
       </div>

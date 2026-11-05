@@ -9,7 +9,7 @@ import type { AgentRegistry, RegistryAgent, RequestId } from "@/bindings";
 import { isCancelled, nextRequestId } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
 import { openExternalUrl } from "@/platform/openUrl";
-import { Badge, Button, Icon, ProgressBar, SearchField, Spinner, T, Tabs } from "@/ui";
+import { Badge, Button, Icon, ProgressBar, SearchField, Spinner, T, Tabs, tooltipAttrs } from "@/ui";
 import { confirm } from "@/workbench/messages";
 import { providerIcon } from "./model";
 import {
@@ -335,7 +335,7 @@ function ExternalLink({ url, label }: { url: string; label: string }) {
   // Links come from the registry: web pages only.
   if (!/^https?:\/\//i.test(url)) return null;
   return (
-    <button type="button" className={styles.link} title={url} onClick={() => void openExternalUrl(url)}>
+    <button type="button" className={styles.link} {...tooltipAttrs(url)} onClick={() => void openExternalUrl(url)}>
       <T>{label}</T>
     </button>
   );

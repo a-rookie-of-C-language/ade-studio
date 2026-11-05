@@ -9,7 +9,7 @@ import { tx } from "@/platform/i18n";
 import { addContributedTheme, pluginThemeRef } from "@/platform/themes";
 import { currentThemeChoice, setTheme, useThemeOverride } from "@/workbench/theme";
 import { useProject } from "@/platform/project";
-import { Button, Kbd, T } from "@/ui";
+import { Button, Kbd, T, tooltipAttrs } from "@/ui";
 import { addIconTheme, iconThemeKey, selectIconTheme, useSelectedIconTheme } from "./iconThemes";
 import { defineUiPoint, type UiItem } from "./projection";
 import { SecretsDetails, type SecretDecl } from "./secrets";
@@ -36,7 +36,7 @@ function CommandsDetails({ plugin, items }: { plugin: PluginInfo; items: UiItem<
           <li key={c.id} className={styles.item}>
             <span className={styles.itemMain}>{c.title}</span>
             <Kbd action={actionId} />
-            <span className={styles.mono} title={tx("Action id (bind it in Keymap)")}>
+            <span className={styles.mono} {...tooltipAttrs(tx("Action id (bind it in Keymap)"))}>
               {actionId}
             </span>
             <Button

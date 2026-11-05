@@ -64,7 +64,7 @@ class PluginMarker extends GutterMarker {
   override toDOM(): Node {
     const el = document.createElement("div");
     el.className = styles.marker!;
-    el.title = this.marker.tooltip;
+    el.setAttribute("data-tooltip", this.marker.tooltip ?? "");
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", this.marker.tooltip);
     el.innerHTML = gutterIconMarkup(markerIcon(this.marker.icon)) ?? "";

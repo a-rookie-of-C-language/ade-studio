@@ -23,6 +23,7 @@ import {
   Spinner,
   T,
   type MenuItem,
+  tooltipAttrs,
 } from "@/ui";
 import { openPullRequest } from "../toolwindow/open";
 import { ChangesPanel } from "./ChangesPanel";
@@ -164,7 +165,7 @@ function ErrorDetails({ title, error }: { title: string; error: string }) {
 
 function ErrorLabel({ text }: { text: string }) {
   return (
-    <span className={styles.statusText} title={text}>
+    <span className={styles.statusText} {...tooltipAttrs(text)}>
       <Icon name="error" size={16} />
       <span className={styles.ellipsis}>{text}</span>
     </span>

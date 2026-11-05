@@ -45,7 +45,7 @@ class BlameMarker extends GutterMarker {
     const l = this.line;
     if (isUncommitted(l)) {
       el.textContent = "";
-      el.title = "Not committed yet";
+      el.setAttribute("data-tooltip", "Not committed yet");
       return el;
     }
     const author = document.createElement("span");
@@ -57,7 +57,10 @@ class BlameMarker extends GutterMarker {
     el.append(date, author);
     const pct = Math.round(25 + this.rank * 75);
     el.style.color = `color-mix(in srgb, var(--fg-secondary) ${pct}%, var(--fg-gutter))`;
-    el.title = `${l.commit.slice(0, 8)}  ${l.author}  ${l.timeMs ? new Date(l.timeMs).toLocaleString() : ""}\n${l.summary}`;
+    el.setAttribute(
+      "data-tooltip",
+      `${l.commit.slice(0, 8)}  ${l.author}  ${l.timeMs ? new Date(l.timeMs).toLocaleString() : ""}\n${l.summary}`,
+    );
     return el;
   }
 }

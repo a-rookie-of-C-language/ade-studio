@@ -506,7 +506,7 @@ describe("Find in Files dialog", () => {
       expect(shortcut("Recent Searches")).toEqual([history, history]);
       expect(shortcut("New Line")).toEqual([newLine, newLine]);
       expect(document.querySelector("footer")!.textContent).toContain(`${openKey}Open in Find Window`);
-      expect(screen.getByRole("button", { name: "Replace All" })).toHaveAttribute("title", replaceAllKey);
+      expect(screen.getByRole("button", { name: "Replace All" })).toHaveAttribute("data-tooltip", replaceAllKey);
       if (os !== "macos") expect(document.querySelector("[role=dialog]")!.innerHTML).not.toMatch(/[⌘⌥⇧↵]/);
     } finally {
       usePlatform.setState({ os: previous.os });

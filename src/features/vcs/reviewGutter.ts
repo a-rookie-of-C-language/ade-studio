@@ -200,8 +200,8 @@ class ControlsMarker extends GutterMarker {
               ? "inline-add-hover"
               : "inline-add";
       btn.innerHTML = iconMarkup(icon, 16) ?? "";
-      if (a === "add") btn.title = tx("Leave a comment");
-      else if (a === "cancel") btn.title = tx("Discard a comment");
+      if (a === "add") btn.setAttribute("data-tooltip", tx("Leave a comment") ?? "");
+      else if (a === "cancel") btn.setAttribute("data-tooltip", tx("Discard a comment") ?? "");
       box.append(btn);
     });
     for (const h of this.handles) {
@@ -212,7 +212,7 @@ class ControlsMarker extends GutterMarker {
         handle.dataset.key = h.key;
       }
       handle.dataset.disabled = h.adjustable ? undefined : "true";
-      handle.title = h.tooltip;
+      handle.setAttribute("data-tooltip", h.tooltip ?? "");
       box.append(handle);
     }
     return box;

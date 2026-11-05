@@ -48,6 +48,12 @@
   color: var(--fg-muted);
 }
 
+/* TRAE-style primary action: always-visible text button pinned to the right. */
+.openInIDE {
+  margin-left: auto;
+  flex: none;
+}
+
 .note,
 .warning {
   margin: 0;
@@ -97,6 +103,10 @@
   min-width: 0;
   max-width: 45%;
   margin-left: auto;
+}
+.docked .openInIDE {
+  order: 3;
+  margin-left: 8px;
 }
 .branchName {
   min-width: 0;

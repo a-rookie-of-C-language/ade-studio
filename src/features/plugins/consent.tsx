@@ -7,7 +7,7 @@ import { useState } from "react";
 import { create } from "zustand";
 import type { CapabilityInfo, Consent } from "@/bindings";
 import { tx } from "@/platform/i18n";
-import { Badge, Checkbox, Dialog, T } from "@/ui";
+import { Badge, Checkbox, Dialog, T, tooltipAttrs } from "@/ui";
 import { setConsentPrompt, type ConsentRequest } from "./store";
 import styles from "./PluginsPage.module.css";
 
@@ -99,7 +99,7 @@ function ConsentDialog({ pending, onDone }: { pending: Pending; onDone: () => vo
                     aria-label={tx`Allow ${c.id}`}
                   />
                 ) : (
-                  <span className={styles.consentRequired} title={tx("Required")}>
+                  <span className={styles.consentRequired} {...tooltipAttrs(tx("Required"))}>
                     •
                   </span>
                 )}

@@ -8,7 +8,7 @@ import { useRef, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import type { AgentConfigOption } from "@/bindings";
 import { useTx } from "@/platform/i18n";
-import { Icon, IconButton, Popup, Select, T, Toggle } from "@/ui";
+import { Icon, IconButton, Popup, Select, T, Toggle, tooltipAttrs } from "@/ui";
 import type { SelectOption } from "@/ui/Select";
 import EffortStars from "./EffortStars";
 import { mainOptions, modeIcon } from "./composerModel";
@@ -218,7 +218,7 @@ function ModelEffortPicker({
         aria-label={tx(model.name)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={summary}
+        {...tooltipAttrs(summary)}
         onClick={() => setOpen((v) => !v)}
       >
         <span className={styles.chipValue}>{modelName}</span>
@@ -296,7 +296,7 @@ function EffortSlider({
         value={index}
         aria-label={tx(option.name)}
         aria-valuetext={steps[index]?.name}
-        title={steps[index]?.description ?? undefined}
+        {...tooltipAttrs(steps[index]?.description ?? undefined)}
         onChange={(e) => {
           const next = steps[Number(e.target.value)];
           if (next && next.value !== value) onChange(next.value);
@@ -347,7 +347,7 @@ function ModePicker({
         aria-label={tx(mode.name)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={summary}
+        {...tooltipAttrs(summary)}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name={on ? "unlock" : modeIcon(current?.value ?? "")} size={14} />
@@ -369,7 +369,7 @@ function ModePicker({
               type="button"
               role="option"
               aria-selected={v.value === current?.value}
-              title={v.description ?? undefined}
+              {...tooltipAttrs(v.description ?? undefined)}
               className={styles.modeOption}
               onClick={() => {
                 onChange(mode.id, v.value);
@@ -383,7 +383,7 @@ function ModePicker({
           ))}
         </div>
         <div className={styles.modeFooter}>
-          <span title={allowAll.description ?? undefined}>{tx(allowAll.name)}</span>
+          <span {...tooltipAttrs(allowAll.description ?? undefined)}>{tx(allowAll.name)}</span>
           <Toggle
             checked={on}
             aria-label={tx(allowAll.name)}

@@ -151,7 +151,7 @@ class RunMarker extends GutterMarker {
       14,
       this.error ? "cm-openidea-db-run-error" : "cm-openidea-db-run-ok",
     );
-    el.title = this.error ?? "Executed";
+    el.setAttribute("data-tooltip", this.error ?? "Executed");
     return el;
   }
 }
@@ -176,7 +176,7 @@ function errorBanner(message: string) {
     const text = document.createElement("span");
     text.className = "cm-openidea-db-banner-text";
     text.textContent = message;
-    text.title = message;
+    text.setAttribute("data-tooltip", message ?? "");
     const close = document.createElement("button");
     close.type = "button";
     close.className = "cm-openidea-db-banner-close";

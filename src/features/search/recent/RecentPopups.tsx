@@ -19,6 +19,7 @@ import {
   SINGLE_FIRST,
   type RowSelection,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import {
   maybeEditorService,
@@ -383,7 +384,7 @@ function RecentFilesDialog() {
           />
         </div>
       </div>
-      <footer className={styles.footer} title={footerPath}>
+      <footer className={styles.footer} {...tooltipAttrs(footerPath)}>
         <span className={styles.footerPath}>
           <bdi>{footerPath}</bdi>
         </span>

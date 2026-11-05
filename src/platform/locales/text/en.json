@@ -5,6 +5,11 @@
   "WSL distribution": "WSL distribution",
   "Project runs on {label}": "Project runs on {label}",
   "Forwarding ports is not supported in a WSL project yet": "Forwarding ports is not supported in a WSL project yet",
+  "Starting…": "Starting…",
+  "Running": "Running",
+  "Session finished": "Session finished",
+  "Open in IDE": "Open in IDE",
+  "Back to Cowork": "Back to Cowork",
   "Context": "Context",
   "Used": "Used",
   "used": "used",
@@ -15,5 +20,7 @@
   "Cache write": "Cache write",
   "Reasoning": "Reasoning",
   "Compact session": "Compact session",
-  "Environment": "Environment"
+  "Environment": "Environment",
+  "Message index": "Message index",
+  "Go to message {num}": "Go to message {num}"
 }

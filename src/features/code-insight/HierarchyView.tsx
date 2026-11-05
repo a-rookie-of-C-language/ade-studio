@@ -14,6 +14,7 @@ import {
   type TreeHandle,
   type TreeRowState,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import { openLocation } from "./ipc";
 import {
@@ -175,7 +176,7 @@ export function HierarchyView() {
     const { item } = n.node;
     const calls = item.fromRanges.length;
     return (
-      <span className={styles.row} title={relativePath(projectRoot, item.path)}>
+      <span className={styles.row} {...tooltipAttrs(relativePath(projectRoot, item.path))}>
         <SymbolBadge kind={badgeKind(item.kind)} />
         <span className={styles.name}>{item.name}</span>
         {item.detail && <span className={styles.detail}>{item.detail}</span>}
@@ -189,7 +190,7 @@ export function HierarchyView() {
           </span>
         )}
         {notes.has(n.id) && (
-          <span className={styles.muted} title={notes.get(n.id)}>
+          <span className={styles.muted} {...tooltipAttrs(notes.get(n.id))}>
             {notes.get(n.id)}
           </span>
         )}

@@ -4,7 +4,7 @@ import { call, commands } from "@/platform/ipc";
 import { basename, dirname, useProject } from "@/platform/project";
 import { isRemoteWindow } from "@/platform/remote";
 import { tx } from "@/platform/i18n";
-import { Button, Dialog, Icon, IconButton, Input, T } from "@/ui";
+import { Button, Dialog, Icon, IconButton, Input, T, tooltipAttrs } from "@/ui";
 import { openProjectWithPolicy } from "./windows";
 import styles from "./WorkspaceDialog.module.css";
 
@@ -123,7 +123,7 @@ function WorkspaceDialog({ mode, onClose }: { mode: "create" | "manage"; onClose
               <Icon name="folder" size={16} />
               <div className={styles.path}>
                 <strong>{basename(root)}</strong>
-                <span title={root}>{root}</span>
+                <span {...tooltipAttrs(root)}>{root}</span>
               </div>
               <IconButton
                 icon="close"

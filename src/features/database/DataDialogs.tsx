@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { call, commands, type DbHistoryEntry } from "@/platform/ipc";
 import { editorsFor } from "@/editor/api";
-import { Checkbox, Dialog, EmptyState, IconButton, Input, List, Select, T } from "@/ui";
+import { Checkbox, Dialog, EmptyState, IconButton, Input, List, Select, T, tooltipAttrs } from "@/ui";
 import { notifications } from "@/workbench/contributions";
 import { CodePreview } from "./CodePreview";
 import { guessSeparator, importEdits, parseDelimited } from "./model";
@@ -106,7 +106,7 @@ export function HistoryDialog({ id, path }: { id: string; path: string | null })
             onActiveChange={setActive}
             onActivate={(e) => done(e.text)}
             renderItem={(e) => (
-              <span className={styles.historyItem} title={when(e.time ?? 0)}>
+              <span className={styles.historyItem} {...tooltipAttrs(when(e.time ?? 0))}>
                 <span className={styles.historyText}>{e.text.replace(/\s+/g, " ")}</span>
               </span>
             )}

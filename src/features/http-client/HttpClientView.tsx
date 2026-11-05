@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import type { HttpExchange, HttpHistoryEntry } from "@/platform/ipc";
-import { EmptyState, IconButton, SplitGroup, SplitHandle, SplitPanel, Spinner, Tabs, T } from "@/ui";
+import { EmptyState, IconButton, SplitGroup, SplitHandle, SplitPanel, Spinner, Tabs, T, tooltipAttrs } from "@/ui";
 import { bodyKind, formatMs, formatSize, prettyBody } from "./format";
 import { cancelRunning, clearHistory, refreshHistory, selectEntry, useHttpClient } from "./store";
 import styles from "./HttpClient.module.css";
@@ -56,7 +56,7 @@ function ExchangeView({ ex }: { ex: HttpExchange }) {
               {r.status} {r.statusText}
             </span>
             <span className={styles.meta}>{r.version}</span>
-            <span className={styles.meta} title={`Headers after ${formatMs(r.ttfbMs)}`}>
+            <span className={styles.meta} {...tooltipAttrs(`Headers after ${formatMs(r.ttfbMs)}`)}>
               {formatMs(r.totalMs)}
             </span>
             <span className={styles.meta}>{formatSize(r.size)}</span>

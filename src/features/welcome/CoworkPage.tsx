@@ -2,7 +2,7 @@
 import { useMemo, type ComponentProps } from "react";
 import type { AgentStatus } from "@/bindings";
 import { useT } from "@/platform/i18n";
-import { Icon } from "@/ui";
+import { Icon, tooltipAttrs } from "@/ui";
 import { HomeEditor } from "@/features/agents/HomeEditor";
 import { CoworkSession } from "@/features/agents/SessionEditor";
 import { openCoworkTask, openTask, useAgents } from "@/features/agents/store";
@@ -81,7 +81,12 @@ export function CoworkTasks() {
         <ul className={styles.taskList}>
           {tasks.map((task) => (
             <li key={task.id}>
-              <button type="button" className={styles.task} title={task.title} onClick={() => openTask(task.id)}>
+              <button
+                type="button"
+                className={styles.task}
+                {...tooltipAttrs(task.title)}
+                onClick={() => openTask(task.id)}
+              >
                 <span className={statusClass(task.status)} aria-hidden />
                 <span className={styles.taskTitle}>{task.title}</span>
               </button>

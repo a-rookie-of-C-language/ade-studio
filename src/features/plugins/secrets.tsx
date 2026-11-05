@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginInfo, PluginSecretState } from "@/bindings";
 import { tx } from "@/platform/i18n";
-import { Badge, Button, Input, T } from "@/ui";
+import { Badge, Button, Input, T, tooltipAttrs } from "@/ui";
 import { pluginsBackend } from "./backend";
 import type { UiItem } from "./projection";
 import styles from "./PluginsPage.module.css";
@@ -47,7 +47,7 @@ function SecretRow({
   };
   return (
     <li className={styles.item}>
-      <span className={styles.itemMain} title={decl.description ?? undefined}>
+      <span className={styles.itemMain} {...tooltipAttrs(decl.description ?? undefined)}>
         {decl.label}
       </span>
       {isSet ? <Badge tone="success">{tx("Stored")}</Badge> : <Badge tone="neutral">{tx("Not set")}</Badge>}

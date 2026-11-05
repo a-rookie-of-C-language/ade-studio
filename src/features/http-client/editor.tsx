@@ -81,7 +81,7 @@ class RequestMarker extends GutterMarker {
     const el = document.createElement("div");
     el.className = styles.runMarker ?? "";
     const label = this.request.name ?? `${this.request.method} ${this.request.url}`;
-    el.title = `Run '${label}'`;
+    el.setAttribute("data-tooltip", `Run '${label}'`);
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", el.title);
     el.innerHTML = gutterIconMarkup("gutter-run") ?? "";

@@ -1,6 +1,17 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
 import clsx from "clsx";
-import { HighlightedText, Icon, List, Popup, SearchField, fuzzyMatch, listNavigate, T, type PopupAnchor } from "@/ui";
+import {
+  HighlightedText,
+  Icon,
+  List,
+  Popup,
+  SearchField,
+  fuzzyMatch,
+  listNavigate,
+  T,
+  type PopupAnchor,
+  tooltipAttrs,
+} from "@/ui";
 import { useRunConfigTypes, runConfigTypes, type RunConfigTypeContribution } from "@/workbench/contributions";
 import styles from "./Run.module.css";
 
@@ -136,7 +147,10 @@ export function AddConfigPopup({
           }
           renderItem={(r) =>
             r.kind === "type" ? (
-              <span className={clsx(styles.chooserRow, r.nested && styles.typeNested)} title={r.type.description}>
+              <span
+                className={clsx(styles.chooserRow, r.nested && styles.typeNested)}
+                {...tooltipAttrs(r.type.description)}
+              >
                 <Icon name={r.type.icon} size={13} className={styles.chooserIcon} />
                 <span className={styles.chooserName}>
                   {r.indices?.length ? <HighlightedText text={r.type.label} indices={r.indices} /> : r.type.label}

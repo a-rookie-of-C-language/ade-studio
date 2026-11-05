@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef } from "react";
 import clsx from "clsx";
-import { BarButton, Button, Popup, T } from "@/ui";
+import { BarButton, Button, Popup, T, tooltipAttrs } from "@/ui";
 import { executeAction } from "@/platform/actions";
 import { isTauri, type AppMetrics } from "@/platform/ipc";
 import { formatBytes, formatCount, formatMs, formatSize, formatUptime } from "./format";
@@ -72,7 +72,7 @@ interface RowProps {
 
 function Row({ label, detail, value, title, indented }: RowProps) {
   return (
-    <div className={clsx(styles.row, indented && styles.indented)} title={title}>
+    <div className={clsx(styles.row, indented && styles.indented)} {...tooltipAttrs(title)}>
       <span className={styles.label}>
         {label}
         {detail && <span className={styles.detail}>{detail}</span>}

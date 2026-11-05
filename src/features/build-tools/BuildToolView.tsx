@@ -17,6 +17,7 @@ import {
   type MenuItem,
   type TreeRowState,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import {
   gradleChildren,
@@ -216,7 +217,7 @@ function BuildBanner({ info, tool }: { info: MavenModel | GradleModel; tool: Bui
   if (info.syncError) {
     const [jdkFix] = downloadJdkActions(info.syncError);
     return (
-      <div className={clsx(styles.banner, styles.bannerWarning)} title={info.syncError}>
+      <div className={clsx(styles.banner, styles.bannerWarning)} {...tooltipAttrs(info.syncError)}>
         <Icon name="warning" size={16} />
         <span className={styles.bannerText}>{info.syncError.split("\n")[0]}</span>
         {jdkFix && (
@@ -253,7 +254,10 @@ function NodeRow({ node, state }: { node: BuildNode; state: TreeRowState }) {
           ? node.task.description
           : null;
   return (
-    <span className={styles.row} title={node.kind === "task" ? (node.task.description ?? undefined) : undefined}>
+    <span
+      className={styles.row}
+      {...tooltipAttrs(node.kind === "task" ? (node.task.description ?? undefined) : undefined)}
+    >
       <Icon name={nodeIcon(node)} size={16} className={styles.icon} />
       <span className={clsx(styles.label, state.selected && styles.selectedLabel)}>{nodeLabel(node)}</span>
       {detail && <span className={styles.detail}>{detail}</span>}

@@ -646,7 +646,7 @@ class FloatingBulb {
       return;
     }
     const keys = shortcutLabel("code.showIntentions");
-    this.dom.title = `Show intentions${keys ? ` (${keys})` : ""}`;
+    this.dom.setAttribute("data-tooltip", `Show intentions${keys ? ` (${keys})` : ""}`);
     this.dom.classList.toggle("cm-lsp-bulb-fix", bulb.quickFix);
     this.view.requestMeasure({
       key: this,

@@ -53,7 +53,7 @@ class Swatch extends GutterMarker {
   override toDOM() {
     const el = document.createElement("span");
     el.className = this.editable ? `${styles.swatch} ${styles.editable}` : `${styles.swatch}`;
-    el.title = this.color.text;
+    el.setAttribute("data-tooltip", this.color.text ?? "");
     const fill = document.createElement("span");
     fill.style.background = this.color.text;
     el.append(fill);

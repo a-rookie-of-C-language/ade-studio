@@ -22,6 +22,7 @@ import {
   type TreeHandle,
   type TreeRowState,
   T,
+  tooltipAttrs,
 } from "@/ui";
 import type { BuildMessage, Severity } from "@/platform/ipc";
 import {
@@ -147,7 +148,7 @@ function BuildTree() {
     const m = n.message;
     const start = m.range?.start;
     return (
-      <span className={styles.row} title={m.text}>
+      <span className={styles.row} {...tooltipAttrs(m.text)}>
         <Icon name={SEVERITY_ICON[m.severity]} size={14} className={styles[`sev-${m.severity}`]} />
         <span className={styles.message}>{m.text.split("\n")[0]}</span>
         {start && (
