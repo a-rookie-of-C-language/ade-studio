@@ -6273,5 +6273,16 @@
   "Cache write": "缓存写入",
   "Reasoning": "推理",
   "Compact session": "压缩会话",
-  "Environment": "环境"
+  "Environment": "环境",
+  "Conversation": "会话",
+  "Trajectory": "轨迹",
+  "Search trajectory": "搜索轨迹",
+  "Follow new activity": "跟随最新动态",
+  "Stop following": "停止跟随",
+  "No activity yet": "暂无动态",
+  "No matching records": "没有匹配的记录",
+  "Turn {turn}": "第 {turn} 轮",
+  "error": "个错误",
+  "errors": "个错误",
+  "Timing overview": "时序概览"
 }

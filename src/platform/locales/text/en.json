@@ -39,5 +39,18 @@
   "Environment": "Environment",
   "Message index": "Message index",
   "Go to message {num}": "Go to message {num}",
-  "New task in this project": "New task in this project"
+  "New task in this project": "New task in this project",
+  "Conversation": "Conversation",
+  "Trajectory": "Trajectory",
+  "Search trajectory": "Search trajectory",
+  "Follow new activity": "Follow new activity",
+  "Stop following": "Stop following",
+  "No activity yet": "No activity yet",
+  "No matching records": "No matching records",
+  "Turn {turn}": "Turn {turn}",
+  "tool call": "tool call",
+  "tool calls": "tool calls",
+  "error": "error",
+  "errors": "errors",
+  "Timing overview": "Timing overview"
 }
