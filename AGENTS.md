@@ -52,6 +52,8 @@ Visual style: dark, low-contrast greys, one cool accent
 Follow `CONTRIBUTING.md` and `.github/pull_request_template.md`: one problem per PR
 (`Closes #<n>` when it resolves an issue), reproduce first, keep the diff focused, short plain description, and a
 **How it was verified** section with commands run, results and (for UI) before/after screenshots.
+Titles and commits use Conventional Commits prefixes (`feat|fix|refactor|perf|test|docs|style|build|ci|chore`)
+with a scope, e.g. `feat(welcome): group sidebar tasks by project`.
 Unclear product decisions → `needs-decision` and stop.
 
 ## Skills
