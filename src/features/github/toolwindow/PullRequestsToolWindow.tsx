@@ -11,6 +11,8 @@ import { tx } from "@/platform/i18n";
 import { Button, EmptyState, IconButton, Select, Spinner, Tabs, T, showContextMenu, type MenuItem } from "@/ui";
 import { CreatePanel } from "../create/CreatePanel";
 import { DetailsPanel } from "../details/DetailsPanel";
+import { reloadIssues, useGhIssues } from "../issues/data";
+import { IssuesPanel } from "../issues/IssuesPanel";
 import { ListPanel } from "../list/ListPanel";
 import { reloadList, useGhPrList } from "../data/list";
 import { cancelBusy, openInBrowser, useGhBusy } from "../data/local";
@@ -169,9 +171,13 @@ function Connected() {
   const tabs = useGhTabs((s) => s.tabs);
   const active = useGhTabs((s) => s.active);
   const listRef = useRef<HTMLDivElement>(null);
+  const issuesRef = useRef<HTMLDivElement>(null);
   // IntelliJ refreshes the list whenever its tab is selected or the window is shown with it.
   useOnShown(listRef, () => {
     if (useGhPrList.getState().loaded) void reloadList();
+  });
+  useOnShown(issuesRef, () => {
+    if (useGhIssues.getState().loaded) void reloadIssues();
   });
   const pr = tabs.find((t) => tabId(t) === active);
   return (
@@ -179,6 +185,9 @@ function Connected() {
       <BusyBanner />
       <div ref={listRef} className={`${styles.content} ${styles.listTab}`} hidden={active !== "list"}>
         <ListPanel />
+      </div>
+      <div ref={issuesRef} className={`${styles.content} ${styles.listTab}`} hidden={active !== "issues"}>
+        <IssuesPanel />
       </div>
       {pr?.kind === "pr" && (
         <div className={styles.content}>
@@ -223,11 +232,11 @@ export function PullRequestsToolWindow() {
 /** The tab's context menu: Close Tab / Close Other Tabs for `#N` and New Pull Request tabs. */
 function tabMenu(id: GhTabId, all: GhTabId[]): MenuItem[] {
   return [
-    { label: "Close Tab", disabled: id === "list", run: () => closeTab(id) },
+    { label: "Close Tab", disabled: id === "list" || id === "issues", run: () => closeTab(id) },
     {
       label: "Close Other Tabs",
-      disabled: all.filter((t) => t !== "list" && t !== id).length === 0,
-      run: () => all.forEach((t) => t !== id && closeTab(t)),
+      disabled: all.filter((t) => t !== "list" && t !== "issues" && t !== id).length === 0,
+      run: () => all.forEach((t) => t !== id && t !== "issues" && closeTab(t)),
     },
   ];
 }
@@ -240,7 +249,7 @@ export function PullRequestsTabs() {
   const active = useGhTabs((s) => s.active);
   if (!connection) return null;
   const repo = repositoryDisplayName(remotes, connection.coordinates);
-  const ids: GhTabId[] = ["list", ...tabs.map(tabId)];
+  const ids: GhTabId[] = ["list", "issues", ...tabs.map(tabId)];
   return (
     <Tabs
       variant="compact"
@@ -252,6 +261,12 @@ export function PullRequestsTabs() {
       onContextMenu={(id, e) => showContextMenu(e, tabMenu(id as GhTabId, ids))}
       items={[
         { id: "list", label: repo, tooltip: nameWithOwner(connection.coordinates), closable: false },
+        {
+          id: "issues",
+          label: "Issues",
+          tooltip: tx`Issues at ${nameWithOwner(connection.coordinates)}`,
+          closable: false,
+        },
         ...tabs.map((t) =>
           t.kind === "pr"
             ? {

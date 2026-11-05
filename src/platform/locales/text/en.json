@@ -4,5 +4,18 @@
   "WSL distribution:": "WSL distribution:",
   "WSL distribution": "WSL distribution",
   "Project runs on {label}": "Project runs on {label}",
-  "Forwarding ports is not supported in a WSL project yet": "Forwarding ports is not supported in a WSL project yet"
+  "Forwarding ports is not supported in a WSL project yet": "Forwarding ports is not supported in a WSL project yet",
+  "View Issues": "View Issues",
+  "Refresh Issues List": "Refresh Issues List",
+  "Start Work in Worktree": "Start Work in Worktree",
+  "Creates an issue branch and opens it in a Git worktree in a new window": "Creates an issue branch and opens it in a Git worktree in a new window",
+  "View Issue in Browser": "View Issue in Browser",
+  "Copy Issue URL": "Copy Issue URL",
+  "Issues": "Issues",
+  "Issue state": "Issue state",
+  "Open": "Open",
+  "Issues at {name}": "Issues at {name}",
+  "No open issues in {name}": "No open issues in {name}",
+  "No closed issues in {name}": "No closed issues in {name}",
+  "Can't load issues": "Can't load issues"
 }

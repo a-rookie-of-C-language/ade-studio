@@ -6242,5 +6242,17 @@
   "Project folder not found": "找不到项目文件夹",
   "Cannot select workspace": "无法选择工作区",
   "Folder is in Restricted Mode": "该文件夹处于受限模式",
-  "Trust this folder to run agents in it.": "信任此文件夹以在其中运行 agent。"
+  "Trust this folder to run agents in it.": "信任此文件夹以在其中运行 agent。",
+  "View Issues": "查看议题",
+  "Refresh Issues List": "刷新议题列表",
+  "Start Work in Worktree": "在工作树中开始工作",
+  "Creates an issue branch and opens it in a Git worktree in a new window": "创建议题分支并在新窗口的工作树中打开",
+  "View Issue in Browser": "在浏览器中查看议题",
+  "Copy Issue URL": "复制议题 URL",
+  "Issues": "议题",
+  "Issue state": "议题状态",
+  "Issues at {name}": "{name} 的议题",
+  "No open issues in {name}": "{name} 中没有未解决的议题",
+  "No closed issues in {name}": "{name} 中没有已关闭的议题",
+  "Can't load issues": "无法加载议题"
 }

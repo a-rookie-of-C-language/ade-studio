@@ -26,6 +26,14 @@ import { checkoutPullRequest, clearDiffCache, copyUrl, openInBrowser, openInWork
 import { deleteMergedBranch } from "./data/operations";
 import { cachedDetails, loadPullRequestData, reloadPullRequest } from "./data/pullRequest";
 import { refreshConnection, resetConnection, useGhRepository } from "./data/repository";
+import {
+  copyIssueUrl,
+  openIssueInBrowser,
+  reloadIssues,
+  resetIssues,
+  startIssueWorktree,
+  useGhIssues,
+} from "./issues/data";
 import { showSubmitReview } from "./details/SubmitReviewPopup";
 import { activateReviewMode } from "./reviewMode";
 import { githubHandler, handlerContextKey } from "./toolwindow/handlers";
@@ -43,7 +51,7 @@ import {
   PullRequestsToolWindow,
   usePullRequestsHeaderMenu,
 } from "./toolwindow/PullRequestsToolWindow";
-import { contextPullRequest, resetTabs } from "./toolwindow/store";
+import { contextPullRequest, resetTabs, selectTab } from "./toolwindow/store";
 import {
   activeTimelinePullRequest,
   openTimeline,
@@ -70,6 +78,25 @@ async function withPullRequest(arg: unknown, run: (number: number) => unknown) {
 
 async function prUrl(number: number): Promise<string> {
   return cachedDetails(number)?.url ?? (await loadPullRequestData(number, "details")).url;
+}
+
+/** The issue an action applies to: its argument, else the issues tab's selection. */
+function targetIssue(arg: unknown): number | null {
+  if (typeof arg === "number") return arg;
+  return useGhIssues.getState().selection;
+}
+
+async function withIssue(arg: unknown, run: (number: number) => unknown) {
+  const n = targetIssue(arg);
+  if (n !== null) await run(n);
+}
+
+/** Shows the tool window on the Issues tab, connecting first when needed. */
+async function showIssues(): Promise<boolean> {
+  if (!(await showPullRequests())) return false;
+  selectTab("issues");
+  if (!useGhIssues.getState().loaded) await reloadIssues();
+  return true;
 }
 
 function actions(): Action[] {
@@ -137,6 +164,55 @@ function actions(): Action[] {
         await refreshConnection();
         if (useGhRepository.getState().connection) await reloadList();
       },
+    },
+    {
+      id: "github.viewIssues",
+      title: "View Issues",
+      category: "GitHub",
+      icon: "github-issue-open",
+      keywords: ["github", "issues", "tasks", "bugs"],
+      when: WHEN,
+      run: () => void showIssues(),
+    },
+    {
+      id: "github.refreshIssues",
+      title: "Refresh Issues List",
+      category: "GitHub",
+      icon: "refresh",
+      keywords: ["refresh list", "reload"],
+      when: WHEN,
+      keyWhen: `${IN_WINDOW} && githubPrTab == 'issues'`,
+      run: async () => {
+        await refreshConnection();
+        if (useGhRepository.getState().connection) await reloadIssues();
+      },
+    },
+    {
+      id: "github.issue.startWorktree",
+      title: "Start Work in Worktree",
+      description: "Creates an issue branch and opens it in a Git worktree in a new window",
+      category: "GitHub",
+      icon: "branch",
+      keywords: ["github", "issue", "worktree", "branch"],
+      when: CONNECTED,
+      run: ({ arg }) => withIssue(arg, startIssueWorktree),
+    },
+    {
+      id: "github.issue.openInBrowser",
+      title: "View Issue in Browser",
+      category: "GitHub",
+      icon: "external-link",
+      keywords: ["open issue in github"],
+      when: CONNECTED,
+      run: ({ arg }) => withIssue(arg, openIssueInBrowser),
+    },
+    {
+      id: "github.issue.copyUrl",
+      title: "Copy Issue URL",
+      category: "GitHub",
+      icon: "copy",
+      when: CONNECTED,
+      run: ({ arg }) => withIssue(arg, copyIssueUrl),
     },
     // Tool window
     {
@@ -345,11 +421,15 @@ export function activate(): () => void {
       const b = prev.connection?.coordinates;
       if (a?.owner !== b?.owner || a?.name !== b?.name) {
         resetTabs();
+        resetIssues();
         clearDiffCache();
       }
     }),
     useProject.subscribe((s, prev) => {
-      if (s.project?.root !== prev.project?.root) resetConnection();
+      if (s.project?.root !== prev.project?.root) {
+        resetConnection();
+        resetIssues();
+      }
     }),
     activateReviewDiff(),
     activateReviewMode(),

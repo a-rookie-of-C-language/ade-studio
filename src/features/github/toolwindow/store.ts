@@ -8,7 +8,7 @@ import { create } from "zustand";
 import { setContext } from "@/platform/context";
 
 export type GhTab = { kind: "pr"; number: number } | { kind: "create" };
-export type GhTabId = "list" | `pr:${number}` | "create";
+export type GhTabId = "list" | "issues" | `pr:${number}` | "create";
 
 interface TabsState {
   tabs: GhTab[];
@@ -43,13 +43,13 @@ export function selectTab(id: GhTabId) {
 
 /** Closes a `#N` or the New Pull Request tab; the tab before it becomes active. */
 export function closeTab(id: GhTabId) {
-  if (id === "list") return;
+  if (id === "list" || id === "issues") return;
   useGhTabs.setState((s) => {
     const i = s.tabs.findIndex((t) => tabId(t) === id);
     if (i < 0) return s;
     const tabs = s.tabs.filter((_, j) => j !== i);
     const before = tabs[i - 1];
-    const active = s.active === id ? (before ? tabId(before) : "list") : s.active;
+    const active: GhTabId = s.active === id ? (before ? tabId(before) : "list") : s.active;
     return { tabs, active };
   });
 }
