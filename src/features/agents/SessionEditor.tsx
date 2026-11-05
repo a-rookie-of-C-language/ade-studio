@@ -15,7 +15,13 @@ import type { AgentChange, AgentEntry, AgentImage, AgentLimit, AgentRetry, Agent
 import { executeAction } from "@/platform/actions";
 import { call, commands, onIdeEvent } from "@/platform/ipc";
 import { basename, relativeDir, useProject } from "@/platform/project";
-import { editorService, notifications, type EditorInput } from "@/workbench/contributions";
+import {
+  editorService,
+  notifications,
+  sessionSidecarCards,
+  useSessionSidecarCards,
+  type EditorInput,
+} from "@/workbench/contributions";
 import {
   Button,
   EmptyState,
@@ -134,6 +140,7 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
   const openSubagent = (sub: string) => setPath((p) => [...p, sub]);
   const [finding, setFinding] = useState(false);
   const [findFocus, setFindFocus] = useState(0);
+  const sidecarCards = useSessionSidecarCards((s) => s.cards);
   const [showTrajectory, setShowTrajectory] = useState(false);
   const [session] = useState<FocusedSession>(() => ({
     openFind: () => {
@@ -216,6 +223,9 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
         <div className={styles.sidecar} data-reserved="right-quarter">
           <EnvironmentCard task={task} />
           <ContextCard task={task} />
+          {sessionSidecarCards(sidecarCards).map((card) => (
+            <card.component key={card.id} task={task} />
+          ))}
         </div>
       )}
       {changesOpen && (

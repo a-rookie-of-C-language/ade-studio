@@ -48,7 +48,7 @@ function ErrorState({ error }: { error: string }) {
   );
 }
 
-export function IssuesPanel() {
+export function IssuesPanel({ menu }: { menu?: (number: number) => MenuItem[] }) {
   const t = useTx();
   const connection = useGhRepository((s) => s.connection);
   const { items, loading, error, loaded, filter, selection } = useGhIssues();
@@ -62,7 +62,7 @@ export function IssuesPanel() {
   const onContextMenu = (issue: { number: number }, _i: number, e: MouseEvent) => {
     e.preventDefault();
     setIssuesSelection(issue.number);
-    showContextMenu(e, contextMenu(issue.number));
+    showContextMenu(e, (menu ?? contextMenu)(issue.number));
   };
 
   const empty = loading ? (
