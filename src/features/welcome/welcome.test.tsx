@@ -40,6 +40,8 @@ import { handleListKey } from "./ProjectsPage";
 import { customizeView } from "./CustomizePage";
 import { filterRecent, useRecent } from "./recent";
 import { WelcomeView } from "./WelcomeView";
+import { HOME, useAgents } from "@/features/agents/store";
+import type { AgentTask } from "@/bindings";
 
 const p = (name: string, path: string, branch: string | null = null): RecentProject => ({
   name,
@@ -60,6 +62,12 @@ async function renderWelcome() {
   return view;
 }
 
+async function renderCode() {
+  await renderWelcome();
+  fireEvent.click(screen.getByRole("tab", { name: "Code" }));
+  await act(async () => {});
+}
+
 const selectedName = () =>
   screen
     .getAllByRole("option")
@@ -77,6 +85,7 @@ beforeEach(() => {
   openProject.mockReset().mockResolvedValue({});
   useRecent.setState({ projects: [], loaded: false, home: null, version: null, opening: null });
   useProject.setState({ project: null, settings: { appearance: { theme: "light" } } as Settings, opening: false });
+  useAgents.setState({ tasks: new Map(), composers: new Map() });
 });
 
 afterEach(() => {
@@ -85,8 +94,8 @@ afterEach(() => {
 
 describe("Welcome › Projects", () => {
   it("shows brand, version and project rows with badges, ~ paths and branches", async () => {
-    await renderWelcome();
-    expect(screen.getByText("OpenIDEA")).toBeTruthy();
+    await renderCode();
+    expect(screen.getByText("ADE Studio")).toBeTruthy();
     expect(screen.getByText("1.2.3")).toBeTruthy();
     const rows = screen.getAllByRole("option");
     expect(rows).toHaveLength(3);
@@ -98,7 +107,7 @@ describe("Welcome › Projects", () => {
   });
 
   it("moves with arrows, filters by typing, opens with Enter and removes with Delete", async () => {
-    await renderWelcome();
+    await renderCode();
     const search = screen.getByLabelText("Search projects") as HTMLInputElement;
     expect(selectedName()).toBe("acme-api");
     fireEvent.keyDown(search, { key: "ArrowDown" });
@@ -122,7 +131,7 @@ describe("Welcome › Projects", () => {
 
   it("offers Open in New Window in the row menu when the action exists", async () => {
     const dispose = registerActions([{ id: "file.openInNewWindow", title: "Open in New Window", run: () => {} }]);
-    await renderWelcome();
+    await renderCode();
     fireEvent.click(within(screen.getAllByRole("option")[0]!).getByRole("button", { name: "Project actions" }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByText("Open in New Window")).toBeTruthy();
@@ -133,7 +142,7 @@ describe("Welcome › Projects", () => {
 
   it("shows the landing page without recent projects", async () => {
     recent = [];
-    await renderWelcome();
+    await renderCode();
     expect(screen.getByText("Welcome to OpenIDEA")).toBeTruthy();
     expect(screen.queryByLabelText("Search projects")).toBeNull();
   });
@@ -145,6 +154,7 @@ describe("Welcome › navigation", () => {
     expect(screen.queryByRole("button", { name: "Plugins" })).toBeNull();
     const dispose = registerSettingsPage({ id: "plugins", title: "Plugins", component: () => <div>plugin page</div> });
     await act(async () => {});
+    fireEvent.click(screen.getByRole("tab", { name: "Code" }));
     fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
     expect(screen.getByText("plugin page")).toBeTruthy();
     act(() => dispose());
@@ -159,6 +169,44 @@ describe("Welcome › navigation", () => {
     await act(async () => {});
     expect(settingsSet).toHaveBeenCalledWith("global", "appearance.accent", '"#955ae0"');
     expect(settingsSet).toHaveBeenCalledWith("global", "appearance.syncWithOs", "true");
+  });
+});
+
+describe("Welcome › Cowork", () => {
+  it("is the default page with greeting, composer and ideas", async () => {
+    await renderWelcome();
+    expect(screen.getByRole("tab", { name: "Cowork" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Where should we start?")).toBeTruthy();
+    expect(screen.getByText("Ideas for you")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "New" })).toBeTruthy();
+  });
+
+  it("fills the composer when an idea is picked", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Explain this project to me" }));
+    expect(useAgents.getState().composers.get(HOME)?.text).toBe("Explain this project to me");
+  });
+
+  it("lists recent tasks in the sidebar", async () => {
+    const task = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
+    const older = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
+    useAgents.setState({
+      tasks: new Map([
+        ["t1", task],
+        ["t2", older],
+      ]),
+    });
+    await renderWelcome();
+    expect(screen.getByRole("button", { name: "Fix login redirect" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Draft release notes" })).toBeTruthy();
+  });
+
+  it("shows placeholders for Artifacts and Scheduled", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
+    expect(screen.getByText("Coming soon")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
+    expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
   });
 });
 

@@ -1,6 +1,6 @@
 /** New Task page: one prompt box with the agent and its settings; where it works under it. */
 import clsx from "clsx";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { AgentProbe, Branch } from "@/bindings";
 import { executeAction } from "@/platform/actions";
 import { call, commands } from "@/platform/ipc";
@@ -18,7 +18,15 @@ import { ADD_AGENT, providerOptions as agentOptions } from "./providerOptions";
 import { HOME, NO_COMMANDS, refreshProviders, startTask, updateDraft, useAgentCommands, useAgents } from "./store";
 import styles from "./Home.module.css";
 
-export function HomeEditor({ docked = false }: { docked?: boolean; input?: EditorInput }) {
+export function HomeEditor({
+  docked = false,
+  heading,
+}: {
+  docked?: boolean;
+  input?: EditorInput;
+  /** Overrides the default "What should the agent do?" heading. */
+  heading?: ReactNode;
+}) {
   const tx = useTx();
   const txTemplate = useTxTemplate();
   const draft = useAgents((s) => s.draft);
@@ -90,11 +98,7 @@ export function HomeEditor({ docked = false }: { docked?: boolean; input?: Edito
   return (
     <div className={clsx(styles.home, docked && styles.docked)}>
       <div className={styles.inner}>
-        {!docked && (
-          <h1 className={styles.heading}>
-            <T>What should the agent do?</T>
-          </h1>
-        )}
+        {!docked && <h1 className={styles.heading}>{heading ?? <T>What should the agent do?</T>}</h1>}
         <Composer
           id={HOME}
           autoFocus

@@ -1,23 +1,28 @@
-/** IntelliJ-style welcome window: brand + navigation on the left, the selected page on the right. */
-import { useEffect, useRef, useState } from "react";
+/** Agent-first welcome: Cowork home by default, classic Code (projects) one tab away. */
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import clsx from "clsx";
 import { executeAction } from "@/platform/actions";
 import { useT, useTx, tx } from "@/platform/i18n";
 import { isTauri } from "@/platform/ipc";
 import { useProject } from "@/platform/project";
 import { useRemoteProgress } from "@/platform/remote";
+import { HOME, focusComposer } from "@/features/agents/store";
 import { stageLabel, useConnectDialog } from "@/features/remote-dev/model";
 import { Icon, IconButton, Menu, ProgressBar, Spinner, type MenuItem, T } from "@/ui";
 import { useSettingsPages } from "@/workbench/contributions";
 import { ErrorBoundary, Slot } from "@/workbench/ErrorBoundary";
 import logo from "../../../src-tauri/icons/128x128.png";
+import { CoworkHome, CoworkSoon, CoworkTasks } from "./CoworkPage";
 import { CustomizePage } from "./CustomizePage";
 import { ProjectsPage } from "./ProjectsPage";
 import { loadRecent, useRecent } from "./recent";
 import { useSession } from "./session";
 import styles from "./Welcome.module.css";
+import coworkStyles from "./Cowork.module.css";
 
-export type WelcomePage = "projects" | "customize" | "plugins";
+export type WelcomePage = "cowork" | "projects" | "customize" | "plugins" | "artifacts" | "scheduled";
+/** Sidebar mode: agent-first home, or the classic project list. */
+export type WelcomeMode = "cowork" | "code";
 
 /** Settings page id contributed by the plugins feature (embedded as Welcome › Plugins). */
 const PLUGINS_PAGE = "plugins";
@@ -64,11 +69,13 @@ function GearButton() {
 function NavItem({
   id,
   label,
+  icon,
   page,
   onSelect,
 }: {
   id: WelcomePage;
   label: string;
+  icon?: ComponentProps<typeof Icon>["name"];
   page: WelcomePage;
   onSelect: (p: WelcomePage) => void;
 }) {
@@ -79,6 +86,7 @@ function NavItem({
       aria-current={page === id ? "page" : undefined}
       onClick={() => onSelect(id)}
     >
+      {icon && <Icon name={icon} size={16} className={coworkStyles.sideIcon} />}
       {label}
     </button>
   );
@@ -149,9 +157,10 @@ export function WelcomeView() {
   const listOpening = useRecent((s) => s.opening);
   const opening = useProject((s) => s.opening);
   const Plugins = useSettingsPages((s) => s.pages.get(PLUGINS_PAGE)?.component);
-  const [page, setPage] = useState<WelcomePage>("projects");
+  const [mode, setMode] = useState<WelcomeMode>("cowork");
+  const [page, setPage] = useState<WelcomePage>("cowork");
   const dropping = useFolderDrop();
-  const shown = page === "plugins" && !Plugins ? "projects" : page;
+  const shown = page === "plugins" && !Plugins ? (mode === "code" ? "projects" : "cowork") : page;
 
   useEffect(() => {
     void loadRecent();
@@ -160,24 +169,105 @@ export function WelcomeView() {
   if (reopening) return <Reopening location={reopening} />;
   if (connecting && !connectDialog && !listOpening) return <Reopening location={connecting} />;
 
+  const goCode = () => {
+    setMode("code");
+    setPage("projects");
+  };
+  const goCowork = () => {
+    setMode("cowork");
+    setPage("cowork");
+  };
+  /** Cowork rail: Projects jumps to the Code list, the rest are cowork pages. */
+  const selectCowork = (p: WelcomePage) => {
+    if (p === "projects") return goCode();
+    setPage(p);
+  };
+  const contentLabel =
+    shown === "projects"
+      ? t("cowork.projects")
+      : shown === "customize"
+        ? t("cowork.customize")
+        : shown === "artifacts"
+          ? t("cowork.artifacts")
+          : shown === "scheduled"
+            ? t("cowork.scheduled")
+            : shown === "plugins"
+              ? "Plugins"
+              : t("cowork.cowork");
+
   return (
     <div className={styles.welcome}>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <img className={styles.logo} src={logo} alt="" draggable={false} />
           <span className={styles.brandText}>
-            <span className={styles.appName}>
-              <T>OpenIDEA</T>
-            </span>
+            <span className={styles.appName}>{t("cowork.brand")}</span>
             {version && <span className={styles.version}>{version}</span>}
           </span>
         </div>
-        <p className={styles.tagline}>{t("app.about.tagline")}</p>
-        <nav className={styles.nav} aria-label={tx("Welcome")}>
-          <NavItem id="projects" label="Projects" page={shown} onSelect={setPage} />
-          <NavItem id="customize" label="Customize" page={shown} onSelect={setPage} />
-          {Plugins && <NavItem id="plugins" label="Plugins" page={shown} onSelect={setPage} />}
-        </nav>
+        <div className={coworkStyles.modeTabs} role="tablist" aria-label={t("cowork.mode")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "cowork"}
+            className={coworkStyles.modeTab}
+            onClick={goCowork}
+          >
+            {t("cowork.cowork")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "code"}
+            className={coworkStyles.modeTab}
+            onClick={goCode}
+          >
+            {t("cowork.code")}
+          </button>
+        </div>
+        {mode === "cowork" ? (
+          <>
+            <button
+              type="button"
+              className={coworkStyles.newButton}
+              onClick={() => {
+                setPage("cowork");
+                focusComposer(HOME);
+              }}
+            >
+              <Icon name="plus" size={16} />
+              {t("cowork.new")}
+            </button>
+            <nav className={styles.nav} aria-label={t("cowork.cowork")}>
+              <NavItem id="projects" label={t("cowork.projects")} icon="folder" page={shown} onSelect={selectCowork} />
+              <NavItem
+                id="artifacts"
+                label={t("cowork.artifacts")}
+                icon="package"
+                page={shown}
+                onSelect={selectCowork}
+              />
+              <NavItem id="scheduled" label={t("cowork.scheduled")} icon="clock" page={shown} onSelect={selectCowork} />
+              <NavItem
+                id="customize"
+                label={t("cowork.customize")}
+                icon="sliders"
+                page={shown}
+                onSelect={selectCowork}
+              />
+            </nav>
+            <CoworkTasks />
+          </>
+        ) : (
+          <>
+            <p className={styles.tagline}>{t("app.about.tagline")}</p>
+            <nav className={styles.nav} aria-label={tx("Welcome")}>
+              <NavItem id="projects" label="Projects" page={shown} onSelect={setPage} />
+              <NavItem id="customize" label="Customize" page={shown} onSelect={setPage} />
+              {Plugins && <NavItem id="plugins" label="Plugins" page={shown} onSelect={setPage} />}
+            </nav>
+          </>
+        )}
         <div className={styles.sidebarSpacer} />
         <div className={styles.sidebarFooter}>
           <GearButton />
@@ -185,9 +275,16 @@ export function WelcomeView() {
       </aside>
       <section
         className={clsx(styles.content, shown === "plugins" && styles.contentPlugins)}
-        aria-label={shown === "projects" ? "Projects" : shown === "customize" ? "Customize" : "Plugins"}
+        aria-label={contentLabel}
         aria-busy={opening || undefined}
       >
+        {shown === "cowork" && <CoworkHome />}
+        {shown === "artifacts" && (
+          <CoworkSoon icon="package" title={t("cowork.artifacts")} hint={t("cowork.soon.artifacts")} />
+        )}
+        {shown === "scheduled" && (
+          <CoworkSoon icon="clock" title={t("cowork.scheduled")} hint={t("cowork.soon.scheduled")} />
+        )}
         {shown === "projects" && <ProjectsPage />}
         {shown === "customize" && <CustomizePage />}
         {shown === "plugins" && Plugins && (
