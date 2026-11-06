@@ -8,7 +8,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import type { AgentEntry, AgentTask } from "@/bindings";
 import { useTx } from "@/platform/i18n";
-import { EmptyState, Icon, IconButton, SearchField, Spinner, T, copyText, fileIconName } from "@/ui";
+import { EmptyState, Icon, IconButton, SearchField, Spinner, T, copyText, fileIconName, tooltipAttrs } from "@/ui";
 import { formatDuration, formatSentAt } from "./conversation";
 import { Markdown } from "./Markdown";
 import { isBusy, subagentTitle, subagentWorking, type SubagentEntry } from "./model";
@@ -191,7 +191,7 @@ export function TrajectoryView({
                   s.isError && styles.spanError,
                 )}
                 style={{ left: left + "%", width: width + "%" }}
-                title={"#" + String(s.index + 1) + " " + s.label}
+                {...tooltipAttrs("#" + String(s.index + 1) + " " + s.label)}
                 aria-label={"#" + String(s.index + 1) + " " + s.label}
                 onClick={() => goToRecord(s.index, s.turn)}
               />
@@ -215,11 +215,11 @@ export function TrajectoryView({
                   s.endMs == null && styles.spanRunning,
                 )}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                title={
+                {...tooltipAttrs(
                   s.title
                     ? `${s.title} · ${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
-                    : `${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
-                }
+                    : `${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`,
+                )}
                 aria-label={s.kind === "turn" ? tx`Turn ${s.turn! + 1}` : (s.title ?? tx("Subagent"))}
                 onClick={() => {
                   if (s.kind === "turn" && s.turn != null) goToTurn(s.turn);
@@ -283,7 +283,7 @@ export function TrajectoryView({
                 </button>
                 <span className={styles.turnTitle}>{tx`Turn ${t.turn + 1}`}</span>
                 {t.durationMs != null && (
-                  <span className={styles.turnMeta} title={tx("Time the agent took to answer")}>
+                  <span className={styles.turnMeta} {...tooltipAttrs(tx("Time the agent took to answer"))}>
                     {formatDuration(t.durationMs)}
                   </span>
                 )}
@@ -440,7 +440,7 @@ function RecordIndex({
     <button
       type="button"
       className={clsx(styles.rowIndex, selected && styles.rowIndexSelected)}
-      title={tx("Inspect record")}
+      {...tooltipAttrs(tx("Inspect record"))}
       aria-pressed={selected}
       onClick={(e) => {
         // Inside a <summary> this would also fold the row; keep it an inspection only.
@@ -711,7 +711,7 @@ function SubagentRow({
           type="button"
           className={styles.subagentOpen}
           onClick={() => onOpen(entry.id)}
-          title={tx("Open the subagent's conversation")}
+          {...tooltipAttrs(tx("Open the subagent's conversation"))}
         >
           {subagentTitle(entry)}
         </button>
@@ -888,7 +888,7 @@ function Inspector({
             type="button"
             className={styles.subagentOpen}
             onClick={() => onOpenSubagent(entry.id)}
-            title={tx("Open the subagent's conversation")}
+            {...tooltipAttrs(tx("Open the subagent's conversation"))}
           >
             {subagentTitle(entry)}
           </button>
