@@ -57,6 +57,39 @@ with a scope, e.g. `feat(welcome): group sidebar tasks by project`.
 Merge only after CI checks pass on the PR; re-check status before merging.
 Unclear product decisions → `needs-decision` and stop.
 
+## Upstream sync (metadata-free, local wins)
+
+`origin/main` is the fork's source of truth. Never let `upstream` commit objects
+(authors, emails, hashes) enter its history — take only a file snapshot and land it
+as one squash commit authored by us. Never use the GitHub "Sync fork" button,
+plain `git merge upstream/main`, `rebase`, or `cherry-pick`.
+
+- Flow (PowerShell):
+  `git fetch upstream`
+  `git checkout -b sync upstream/main`
+  `git merge --squash --allow-unrelated-histories -X theirs main`
+  `git commit -m "chore(sync): import upstream snapshot, local tree wins"`
+  `git checkout main`
+  `git merge --squash sync`
+  `git commit -m "chore(sync): import upstream snapshot, local tree wins"`
+  `git branch -D sync`
+- Why two steps: the temp branch starts from `upstream/main` (full upstream tree),
+  then `-X theirs main` overlays the local tree so every conflict resolves local-wins
+  and local files stay byte-identical. The final squash onto `main` is additions-only
+  vs the pre-sync base; upstream deletions never delete local files.
+- Identity: both commits are authored by the local `git config user.name/email`.
+  Pass `--author="<name> <email>"` explicitly if the machine config is uncertain.
+- Verify before pushing:
+  `git log --format="%an <%ae>" <base>..HEAD` must list only us;
+  `git merge-base --is-ancestor upstream/main HEAD` must exit 1 (not an ancestor).
+- Prune fallout from newly added files only: each `git rm` path must exist in the
+  worktree and be absent in the pre-sync base (`git cat-file -e <base>:<path>` fails).
+  Never modify or delete a local file; if an added test exercises a local source,
+  remove the test, not the source. Re-run `typecheck`, `knip`, `format:check`, `lint`,
+  and full `pnpm test` after pruning, then amend (don't stack commits).
+- Delete the temp `sync` branch when done so it can never be pushed (it contains
+  upstream history and metadata).
+
 ## Skills
 
 Shared agent skills live in `.agents/skills/` (`.claude/skills/` links to them):
