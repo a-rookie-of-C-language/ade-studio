@@ -16,6 +16,7 @@
     "src/editor/core/cm/angular/parser*.ts",
     "fixtures",
     "plugins",
+    "third-party",
     "test-results",
     "playwright-report",
     ".claude",

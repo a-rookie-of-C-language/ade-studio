@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@cindy/maker-shared": ["./src/vendor-shims/maker-shared-barrel.ts"],
+      "@cindy/maker-shared/agent-task": ["../../third-party/cindy-agent/maker-shared/agentTask.ts"],
+      "@cindy/maker-shared/auto-review-intent": ["../../third-party/cindy-agent/maker-shared/autoReviewIntent.ts"],
+      "@cindy/maker-shared/command-display": ["../../third-party/cindy-agent/maker-shared/commandDisplay.ts"],
+      "@cindy/maker-shared/error-redaction": ["../../third-party/cindy-agent/maker-shared/errorRedaction.ts"],
+      "@cindy/maker-shared/internal-citation": ["../../third-party/cindy-agent/maker-shared/internalCitation.ts"],
+      "@cindy/maker-shared/subagent-observation": ["../../third-party/cindy-agent/maker-shared/subagentObservation.ts"],
+      "@cindy/maker-shared/tool-loop-error": ["../../third-party/cindy-agent/maker-shared/toolLoopError.ts"],
+      "@cindy/maker-shared/tool-process-media": ["../../third-party/cindy-agent/maker-shared/toolProcessMedia.ts"],
+      "@cindy/maker-shared/usage-format": ["../../third-party/cindy-agent/maker-shared/usageFormat.ts"],
+      "@cindy/model-providers/classification": ["../../third-party/cindy-agent/model-providers/classification.ts"],
+      "@cindy/model-providers/effort-resolution": ["../../third-party/cindy-agent/model-providers/effortResolution.ts"]
+    }
+  },
+  "include": ["../../third-party/cindy-agent/**/*.ts", "src/**/*.ts"]
+}
