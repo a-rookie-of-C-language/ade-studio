@@ -19,6 +19,7 @@ import {
 } from "@/workbench/contributions";
 import { AgentsStatus } from "./AgentsStatus";
 import { HOME_KIND, REGISTRY_PAGE, SESSION_KIND, TASK_DRAG, TOOL_WINDOW } from "./model";
+import { installAgentMode } from "./agentMode";
 import { sendPaths, sendSelection } from "./references";
 import { focusedSession } from "./sessionFocus";
 import { connect, disconnect, openHome, useAgents } from "./store";
@@ -46,6 +47,7 @@ export function activate(): () => void {
   sync();
   const disposers = [
     activateSettingsPages(),
+    installAgentMode(),
     useProject.subscribe((s, prev) => {
       if (s.project?.root !== prev.project?.root || s.project?.trusted !== prev.project?.trusted) sync();
     }),

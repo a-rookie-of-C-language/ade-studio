@@ -36,6 +36,7 @@ export const NOTIFICATION_GROUPS: ReadonlyArray<{ id: string; title: string }> =
   { id: "plugins", title: "Plugins" },
   { id: "updates", title: "IDE Updates" },
   { id: "distractionFree", title: "Distraction Free Mode" },
+  { id: "agentMode", title: "Agent Mode" },
 ];
 
 export type NotificationDisplay = "balloon" | "sticky" | "none";

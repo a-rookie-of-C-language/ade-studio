@@ -17,15 +17,15 @@
  * edge restyles the grid alone instead of every node in the workbench below it.
  */
 @property --tw-left {
-  syntax: "*";
+  syntax: "<length>";
   inherits: false;
 }
 @property --tw-right {
-  syntax: "*";
+  syntax: "<length>";
   inherits: false;
 }
 @property --tw-bottom {
-  syntax: "*";
+  syntax: "<length>";
   inherits: false;
 }
 @property --gap-left {
@@ -61,6 +61,16 @@
     "left gap-left editor gap-right right"
     "left gap-left gap-bottom gap-right right"
     "left gap-left bottom gap-right right";
+}
+/*
+ * Mode switches (Agent Mode enter) slide the tracks over .3s, like TRAE;
+ * drags and restores set sizes with no transition so they stay immediate.
+ */
+.gridAnim {
+  transition:
+    --tw-left 0.3s var(--ease),
+    --tw-right 0.3s var(--ease),
+    --tw-bottom 0.3s var(--ease);
 }
 .grid > [data-anchor="left"] {
   grid-area: left;

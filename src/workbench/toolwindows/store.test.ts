@@ -18,6 +18,7 @@ import {
   resizeActiveToolWindow,
   RESIZE_STEP,
   resetToolWindowPlacements,
+  setLayoutTransition,
   setToolWindowSplit,
   slotOfId,
   toggleMaximizeToolWindow,
@@ -364,5 +365,16 @@ describe("stripe buttons", () => {
     expect(buttons()).toEqual({ find: false, terminal: false });
     resetToolWindowPlacements();
     expect(buttons()).toEqual({});
+  });
+});
+
+describe("layout transition", () => {
+  it("is off by default, toggles without persisting, and resets with the layout", () => {
+    expect(useToolWindowLayout.getState().layoutTransition).toBe(false);
+    setLayoutTransition(true);
+    expect(useToolWindowLayout.getState().layoutTransition).toBe(true);
+    setLayoutTransition(true);
+    resetToolWindowLayout();
+    expect(useToolWindowLayout.getState().layoutTransition).toBe(false);
   });
 });

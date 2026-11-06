@@ -3925,6 +3925,8 @@
   "Process comments": "处理注释",
   "Distraction Free Mode": "无干扰模式",
   "Exit Distraction Free Mode": "退出无干扰模式",
+  "Agent Mode": "Agent 模式",
+  "Exit Agent Mode": "退出 Agent 模式",
   "Show Hidden Files": "显示隐藏文件",
   "Show Members": "显示成员",
   "Show Excluded Files": "显示已排除的文件",

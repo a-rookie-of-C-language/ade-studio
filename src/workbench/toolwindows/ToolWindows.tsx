@@ -1098,6 +1098,8 @@ export function ToolWindowLayout({ editor }: { editor: ReactNode }) {
   const sizes = useToolWindowLayout((s) => s.sizes);
   const maximized = useToolWindowLayout((s) => s.maximized);
   const stripeButtons = useToolWindowLayout((s) => s.stripeButtons);
+  // Mode switches (Agent Mode enter) animate the grid tracks; drags stay immediate.
+  const layoutTransition = useToolWindowLayout((s) => s.layoutTransition);
   // The right stripe holds the right side's windows and Bottom Right.
   const hasRight = windows.some((w) => {
     const slot = slotOf(w);
@@ -1131,7 +1133,10 @@ export function ToolWindowLayout({ editor }: { editor: ReactNode }) {
     >
       {bars && stripe("left")}
       {bars && stripeHandle("left")}
-      <div ref={gridRef} className={clsx(styles.grid, widescreen && styles.widescreen)}>
+      <div
+        ref={gridRef}
+        className={clsx(styles.grid, widescreen && styles.widescreen, layoutTransition && styles.gridAnim)}
+      >
         <SidePanel anchor="left" windows={windows} visible={visible} />
         {gap("left")}
         <div ref={editorRef} className={clsx(styles.island, styles.editorIsland)}>
