@@ -7,11 +7,12 @@ import { Marked } from "marked";
 import DOMPurify from "dompurify";
 import { highlightInto } from "@/editor/lsp/markdown";
 import { iconNode } from "@/editor/lsp/iconMarkup";
-import { call, commands } from "@/platform/ipc";
-import { tx, useTx } from "@/platform/i18n";
+import { call, commands, isCancelled } from "@/platform/ipc";
+import { t, tx, useTx } from "@/platform/i18n";
 import { openExternalUrl } from "@/platform/openUrl";
 import { copyText, tooltipAttrs } from "@/ui";
-import { editorService } from "@/workbench/contributions";
+import { basename, openLightEdit, useProject } from "@/platform/project";
+import { editorService, notifications } from "@/workbench/contributions";
 import { fileHref, pathLink, type PathLink } from "./conversation";
 import styles from "./Session.module.css";
 
@@ -86,9 +87,35 @@ export function fileExists(path: string): Promise<boolean> {
   return known;
 }
 
-export function openPathLink(link: PathLink) {
+export async function openPathLink(link: PathLink) {
+  const { project, lightEdit } = useProject.getState();
+  if (!project && !lightEdit) {
+    // Cowork home has no project and no editor tabs, so openFile would admit
+    // nothing. Open LightEdit first, like File > Open File\u2026 does.
+    try {
+      await openLightEdit(link.path);
+    } catch (e) {
+      openFailed(link.path, e);
+      return;
+    }
+  }
   const selection = link.line === undefined ? undefined : { line: link.line, col: link.col ?? 0 };
-  void editorService().openFile(link.path, { selection, focus: true });
+  try {
+    await editorService().openFile(link.path, { selection, focus: true });
+  } catch (e) {
+    openFailed(link.path, e);
+  }
+}
+
+/** Failure toast for a file link (mirrors File > Open File\u2026); never throws. */
+function openFailed(path: string, e: unknown) {
+  if (isCancelled(e)) return;
+  notifications().notify({
+    level: "error",
+    title: t("app.window.openFailed", { name: basename(path) }),
+    body: e instanceof Error ? e.message : String(e),
+    key: "app.open:" + path,
+  });
 }
 
 /** Highlighting, Copy buttons and file links over freshly rendered `root`. */

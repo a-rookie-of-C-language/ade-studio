@@ -3,20 +3,38 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { Markdown, renderUserText } from "./Markdown";
 import styles from "./Session.module.css";
 
-const { openFile, openExternalUrl } = vi.hoisted(() => ({
+const { openFile, openExternalUrl, notify } = vi.hoisted(() => ({
   openFile: vi.fn().mockResolvedValue(undefined),
   openExternalUrl: vi.fn().mockResolvedValue(undefined),
+  notify: vi.fn(),
 }));
-vi.mock("@/workbench/contributions", () => ({ editorService: () => ({ openFile }) }));
+vi.mock("@/workbench/contributions", () => ({
+  editorService: () => ({ openFile }),
+  notifications: () => ({ notify }),
+}));
 vi.mock("@/platform/openUrl", () => ({ openExternalUrl }));
 
-const { fsProbe } = vi.hoisted(() => ({ fsProbe: vi.fn() }));
+const { fsProbe, openLightEdit, projectState } = vi.hoisted(() => ({
+  fsProbe: vi.fn(),
+  openLightEdit: vi.fn().mockResolvedValue(undefined),
+  projectState: {
+    current: { project: { root: "/repo" } as { root: string } | null, lightEdit: false },
+  },
+}));
 vi.mock("@/platform/ipc", async (original) => {
   const mod = await original<typeof import("@/platform/ipc")>();
   return { ...mod, commands: { ...mod.commands, fsProbe } };
 });
 
-beforeEach(() => vi.clearAllMocks());
+vi.mock("@/platform/project", async (original) => {
+  const mod = await original<typeof import("@/platform/project")>();
+  return { ...mod, openLightEdit, useProject: { getState: () => projectState.current } };
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  projectState.current = { project: { root: "/repo" }, lightEdit: false };
+});
 
 it.each([
   "<style>body{outline:7px solid red}</style>",
@@ -101,4 +119,27 @@ it("leaves a user message chip plain when the file is missing", async () => {
 it("does not probe user text that is not a file path", () => {
   render(<div>{renderUserText("run `foo()` now", "/repo")}</div>);
   expect(fsProbe).not.toHaveBeenCalled();
+});
+
+it("opens LightEdit first when no project is open (cowork home)", async () => {
+  projectState.current = { project: null, lightEdit: false };
+  render(<Markdown text={`see [CLAUDE.md](CLAUDE.md)`} cwd="/repo" />);
+  fireEvent.click(screen.getByRole("link", { name: "CLAUDE.md" }));
+  await waitFor(() => expect(openLightEdit).toHaveBeenCalledWith("/repo/CLAUDE.md"));
+  await waitFor(() => expect(openFile).toHaveBeenCalledWith("/repo/CLAUDE.md", { focus: true, selection: undefined }));
+});
+
+it("opens directly when a project is open", async () => {
+  render(<Markdown text={`see [CLAUDE.md](CLAUDE.md)`} cwd="/repo" />);
+  fireEvent.click(screen.getByRole("link", { name: "CLAUDE.md" }));
+  await waitFor(() => expect(openFile).toHaveBeenCalledWith("/repo/CLAUDE.md", { focus: true, selection: undefined }));
+  expect(openLightEdit).not.toHaveBeenCalled();
+});
+
+it("toasts when the file cannot be opened", async () => {
+  openFile.mockRejectedValueOnce(new Error("gone"));
+  render(<Markdown text={`see [CLAUDE.md](CLAUDE.md)`} cwd="/repo" />);
+  fireEvent.click(screen.getByRole("link", { name: "CLAUDE.md" }));
+  await waitFor(() => expect(notify).toHaveBeenCalled());
+  expect(notify.mock.calls[0]![0]).toMatchObject({ level: "error" });
 });
