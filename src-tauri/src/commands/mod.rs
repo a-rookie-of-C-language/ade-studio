@@ -130,6 +130,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         agent::agent_base_text,
         agent::agent_external_sessions,
         agent::agent_import_external,
+        agent::agent_adopt_task,
         notebook::notebook_open,
         notebook::notebook_get,
         notebook::notebook_edit,

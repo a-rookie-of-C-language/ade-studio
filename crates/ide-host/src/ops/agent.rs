@@ -325,6 +325,35 @@ pub async fn import_external(host: &Host, window: &str, request: ImportExternalT
     project.agents.import_external(request).await
 }
 
+/// Carries one session across the Cowork home and an IDE project: the task file
+/// lives in the source project's store, which the target project never lists, so
+/// it is pulled into this window's project here and resumed on its next message.
+/// `source_root` is the project being left (the default workspace when `None`);
+/// its copy is removed only after the session lands.
+pub fn adopt_task(host: &Host, window: &str, task: String, source_root: Option<String>) -> IdeResult<AgentTask> {
+    if task.trim().is_empty() {
+        return Err(IdeError::invalid("unknown session"));
+    }
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    let source_root = match source_root {
+        Some(root) => dunce::canonicalize(std::path::PathBuf::from(root))?,
+        None => dunce::canonicalize(Host::default_workspace()).unwrap_or_else(|_| Host::default_workspace()),
+    };
+    let file_name = format!("{task}.json");
+    let source_file = host.data_dir.join("agents").join(crate::project::project_key(&source_root)).join(&file_name);
+    let target_file = host.data_dir.join("agents").join(crate::project::project_key(&project.root)).join(&file_name);
+    if source_file == target_file && project.agents.has_task(&task) {
+        return project.agents.task_snapshot(&task);
+    }
+    let bytes = std::fs::read(&source_file).map_err(|_| IdeError::not_found("that session is no longer available"))?;
+    let adopted = project.agents.adopt_task_file(&bytes)?;
+    if source_file != target_file {
+        let _ = std::fs::remove_file(&source_file);
+    }
+    Ok(adopted)
+}
+
 /// Commands of this module the remote server answers.
 pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_subscribe", |c| async move { subscribe(&c.host, &c.window, c.channel("onEvent")?) });
@@ -371,6 +400,7 @@ pub(crate) fn register(d: &mut Dispatcher) {
         |c| async move { external_sessions(&c.host, &c.window, c.arg("provider")?).await },
     );
     d.add("agent_import_external", |c| async move { import_external(&c.host, &c.window, c.arg("request")?).await });
+    d.add("agent_adopt_task", |c| async move { adopt_task(&c.host, &c.window, c.arg("task")?, c.arg("sourceRoot")?) });
 }
 
 /// Whether `root` is the agent-first home's default workspace

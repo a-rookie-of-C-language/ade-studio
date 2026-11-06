@@ -503,6 +503,16 @@ impl AgentManager {
         self.tasks.read().get(id).cloned().ok_or_else(|| IdeError::not_found(format!("no agent task {id}")))
     }
 
+    /// Whether this project already lists the task (an adopt from its own store is a no-op).
+    pub fn has_task(&self, id: &str) -> bool {
+        self.tasks.read().contains_key(id)
+    }
+
+    /// A copy of the task's metadata.
+    pub fn task_snapshot(&self, id: &str) -> IdeResult<AgentTask> {
+        Ok(self.task(id)?.state.lock().task.clone())
+    }
+
     /// The entries of the task's conversation, or of its subagent `subagent`'s.
     pub fn entries(&self, id: &str, subagent: Option<String>) -> IdeResult<Vec<AgentEntry>> {
         let task = self.task(id)?;
@@ -931,6 +941,34 @@ impl AgentManager {
         task.emit_task();
         let copy = task.state.lock().task.clone();
         Ok(copy)
+    }
+
+    /// Takes in a task file saved by another project (Cowork home ⇄ IDE project):
+    /// the same session, resumed here on its next message. The agent process never
+    /// survives a project switch, so a status left in flight reads as ready, exactly
+    /// like a restart; a live task of the same id is never replaced.
+    pub fn adopt_task_file(&self, bytes: &[u8]) -> IdeResult<AgentTask> {
+        let invalid = |e: String| IdeError::invalid(format!("that session can't move here: {e}"));
+        let mut file: TaskFile = serde_json::from_slice::<Value>(bytes)
+            .map_err(|e| invalid(e.to_string()))
+            .and_then(|v| serde_json::from_value::<TaskFile>(upgrade(v)).map_err(|e| invalid(e.to_string())))?;
+        // Styling residue persisted by older builds never reaches the agent again.
+        file.task.config = clean_options(file.task.config);
+        // The agent process did not survive the project switch: whatever was in
+        // flight is over.
+        if matches!(file.task.status, AgentStatus::Running | AgentStatus::NeedsInput | AgentStatus::Starting) {
+            file.task.status = AgentStatus::Ready;
+        }
+        file.task.retry = None;
+        if self.tasks.read().get(&file.task.id).is_some_and(|t| t.state.lock().busy) {
+            return Err(IdeError::invalid("wait until the agent is done"));
+        }
+        file.task.updated_ms = now_ms();
+        let task = Task::restore(file, self.shared.clone());
+        self.tasks.write().insert(task.id.clone(), task.clone());
+        task.persist();
+        task.emit_task();
+        Ok(task.state.lock().task.clone())
     }
 
     /// Drops the task's turns after its first `turns`, in the agent's session and in the

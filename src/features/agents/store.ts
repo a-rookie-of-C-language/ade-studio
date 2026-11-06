@@ -18,6 +18,7 @@ import type {
 import { useProject } from "@/platform/project";
 import { defaultTaskProject } from "./project";
 import { call, commands, isTauri } from "@/platform/ipc";
+import { executeAction } from "@/platform/actions";
 import { editorService, notifications, toolWindowService } from "@/workbench/contributions";
 import { bypassDefaults, canSend, emptyDraft, toPrompt, type ComposerDraft, type FileRef } from "./composerModel";
 import { withQuote } from "./conversation";
@@ -228,6 +229,11 @@ export async function connect(): Promise<void> {
     changes: new Map(),
     providers,
   });
+  // A Cowork ⇄ IDE switch armed by `openCoworkSessionInIDE` / `backToCowork`
+  // lands here: the new project is subscribed, so the carried session moves
+  // into its store before stale tabs are closed (otherwise the carried tab
+  // would look unknown and be closed again right after adopting).
+  await consumePendingCarry();
   void refreshExternal();
   // Restored tabs of tasks deleted meanwhile close, like editors of deleted files.
   const editors = editorService();
@@ -529,6 +535,76 @@ export function carrySessionToDocked() {
   const id = centeredTask();
   if (id) useAgents.setState({ docked: id, lastTask: id, homeOpen: false });
 }
+
+/** A session carried across a Cowork home ⇄ IDE project switch in flight. */
+interface PendingCarry {
+  id: string;
+  /** Where the session must be showing after the switch lands. */
+  where: "ide" | "cowork";
+  /** Project root the session is adopted from (`null`: the default workspace). */
+  sourceRoot: string | null;
+  /** IDE project root the switch must land on (`null`: back on the Cowork home). */
+  targetRoot: string | null;
+}
+
+// Module-level on purpose: `disconnect()` clears the zustand state on every
+// project switch, which is exactly when the carried session is homeless.
+let pendingCarry: PendingCarry | null = null;
+
+/**
+ * Opens a Cowork session in the IDE, carrying it over: the IDE project loads a
+ * different task store that never lists the Cowork session, so once the switch
+ * lands the session is adopted into the new project and opened there.
+ */
+export function openCoworkSessionInIDE(id: string) {
+  const task = useAgents.getState().tasks.get(id);
+  if (!task) return;
+  pendingCarry = { id, where: "ide", sourceRoot: null, targetRoot: task.cwd };
+  void executeAction("welcome.openInIDE", task.cwd);
+}
+
+/**
+ * Returns an IDE session to the Cowork home, carrying it over the same way: the
+ * home lists the default workspace's store, so the session is adopted back there
+ * once the project closes.
+ */
+export function backToCowork(id: string) {
+  const root = useProject.getState().project?.root ?? null;
+  pendingCarry = { id, where: "cowork", sourceRoot: root, targetRoot: null };
+  void executeAction("file.closeProject");
+}
+
+/** Opens the carried session once the project switch it was waiting for lands. */
+export async function consumePendingCarry(): Promise<void> {
+  const carry = pendingCarry;
+  if (!carry) return;
+  const root = useProject.getState().project?.root ?? null;
+  // A cancelled (or superseded) switch must never adopt into the wrong place.
+  // Roots are compared slash-normalised: `task.cwd` may carry `\` separators
+  // while the opened project reports `/` (Windows), which must still match.
+  if (normRoot(root) !== normRoot(carry.targetRoot)) {
+    pendingCarry = null;
+    return;
+  }
+  pendingCarry = null;
+  if (!useAgents.getState().tasks.has(carry.id)) {
+    try {
+      const adopted = await call(commands.agentAdoptTask(carry.id, carry.sourceRoot));
+      useAgents.setState((s) => ({ tasks: new Map(s.tasks).set(adopted.id, adopted) }));
+    } catch (e) {
+      notifications().notify({
+        level: "error",
+        title: "Couldn't import the session",
+        body: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+  }
+  if (carry.where === "cowork") openCoworkTask(carry.id);
+  else openTask(carry.id);
+}
+
+const normRoot = (p: string | null) => (p == null ? null : p.replace(/\\/g, "/").replace(/\/+$/, ""));
 
 function saveSessionLocation(location: SessionLocation) {
   useAgents.setState({ sessionLocation: location });

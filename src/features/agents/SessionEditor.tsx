@@ -75,10 +75,12 @@ import {
   type SubagentEntry,
 } from "./model";
 import {
+  backToCowork,
   cancelTask,
   focusComposer,
   loadEntries,
   markVisible,
+  openCoworkSessionInIDE,
   refreshChanges,
   editQueued,
   forkTask,
@@ -373,17 +375,12 @@ function Header({
           variant="secondary"
           size="small"
           icon="open-in-tool-window"
-          onClick={() => void executeAction("welcome.openInIDE", task.cwd)}
+          onClick={() => void openCoworkSessionInIDE(task.id)}
         >
           <T>Open in IDE</T>
         </Button>
       ) : (
-        <Button
-          variant="secondary"
-          size="small"
-          icon="arrow-left"
-          onClick={() => void executeAction("file.closeProject")}
-        >
+        <Button variant="secondary" size="small" icon="arrow-left" onClick={() => void backToCowork(task.id)}>
           <T>Back to Cowork</T>
         </Button>
       )}

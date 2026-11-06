@@ -183,6 +183,11 @@ export const commands = {
 	 *  session id. Importing the same session twice returns the first task.
 	 */
 	agentImportExternal: (request: ImportExternalTask) => typedError<AgentTask, IdeError>(__TAURI_INVOKE("agent_import_external", { request })),
+	/**
+	 *  Carries one session across the Cowork home and an IDE project: pulls the task
+	 *  file from the source project's store into this window's project.
+	 */
+	agentAdoptTask: (task: string, sourceRoot: string | null) => typedError<AgentTask, IdeError>(__TAURI_INVOKE("agent_adopt_task", { task, sourceRoot })),
 	notebookOpen: (path: string) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_open", { path })),
 	notebookGet: (id: string) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_get", { id })),
 	notebookEdit: (id: string, version: number, edit: NotebookEdit) => typedError<NotebookSnapshot, IdeError>(__TAURI_INVOKE("notebook_edit", { id, version, edit })),

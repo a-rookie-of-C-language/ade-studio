@@ -315,3 +315,16 @@ pub async fn agent_import_external(
 ) -> IdeResult<AgentTask> {
     agent::import_external(&state.host, window.label(), request).await
 }
+
+/// Carries one session across the Cowork home and an IDE project: pulls the task
+/// file from the source project's store into this window's project.
+#[tauri::command]
+#[specta::specta]
+pub fn agent_adopt_task(
+    window: Window,
+    state: State<'_, AppState>,
+    task: String,
+    source_root: Option<String>,
+) -> IdeResult<AgentTask> {
+    agent::adopt_task(&state.host, window.label(), task, source_root)
+}
