@@ -57,7 +57,8 @@ test("drags the docked conversation back onto the editor", async ({ page }) => {
   await page.mouse.up();
 
   await expect(page.getByRole("tab", { name: "Repro task" })).toBeVisible();
-  await expect(page.getByRole("tree", { name: "Agent tasks" })).toBeVisible();
+  // The session moved to the center: the tool window it came from closes.
+  await expect(page.getByRole("tree", { name: "Agent tasks" })).toHaveCount(0);
 });
 
 test("drags the docked conversation back onto the empty editor", async ({ page }) => {
@@ -99,13 +100,17 @@ test("docks a session tab dropped on the tool window", async ({ page }) => {
       unread: new Set(),
       docked: null,
     });
+    // Sessions open docked by default: ask for the center so there is a tab to drag.
+    store.setSessionLocation("editor");
     toolWindowService().show(TOOL_WINDOW, true);
     store.openTask(task.id);
   }, TASK);
   await page.getByRole("tab", { name: "Repro task" }).waitFor();
 
   const tab = page.getByRole("tab", { name: "Repro task" });
-  const to = await page.getByRole("tree", { name: "Agent tasks" }).boundingBox();
+  // Dropping a session tab anywhere on the tool window docks it (the task
+  // list lives in a portaled popup now, outside the window's drop target).
+  const to = await page.locator('section[aria-label="Agents"]').boundingBox();
   const from = await tab.boundingBox();
   await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
   await page.mouse.down();

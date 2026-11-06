@@ -5622,7 +5622,6 @@
   "expected a relative comparison entry path": "需要比较条目的相对路径",
   "Agent sessions": "智能体会话",
   "Back to conversation": "返回会话",
-  "Conversation location": "会话显示位置",
   "Chat in Tool Window": "在工具窗口中聊天",
   "Chat in Editor": "在编辑器中聊天",
   "Agent settings": "智能体设置",
@@ -6350,5 +6349,7 @@
   "Attachments": "附件",
   "Choice": "所选",
   "Pin Task": "置顶任务",
-  "Unpin Task": "取消置顶"
+  "Unpin Task": "取消置顶",
+  "Solo Mode": "专注模式",
+  "Exit Solo Mode": "退出专注模式"
 }

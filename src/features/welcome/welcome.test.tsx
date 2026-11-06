@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { RecentProject, Settings } from "@/platform/ipc";
 
 const settingsSet = vi.fn();
@@ -393,7 +393,9 @@ describe("Welcome › Cowork", () => {
       useHomeTerminal.getState().setOpen(true);
     });
     await screen.findByLabelText("Terminal sessions");
-    expect(termNewTab).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
+    // The tab lands after the async cwd resolve, so wait for it instead of
+    // asserting right after the drawer appears.
+    await waitFor(() => expect(termNewTab).toHaveBeenCalledWith("/Users/me/.openidea/workspace"));
     expect(screen.getByRole("button", { name: "New Tab" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByLabelText("Terminal sessions")).toBeNull();
@@ -406,7 +408,7 @@ describe("Welcome › Cowork", () => {
       useHomeTerminal.getState().setOpen(true);
     });
     await screen.findByLabelText("Terminal sessions");
-    expect(termNewTab).toHaveBeenCalledWith("/Users/me/repo/acme-api");
+    await waitFor(() => expect(termNewTab).toHaveBeenCalledWith("/Users/me/repo/acme-api"));
     // The cwd uses the shared tooltip channel (`data-tooltip`), not a native `title`.
     // It lands a tick after the panel mounts (async cwd resolve), so wait for it.
     const cwd = await within(screen.getByRole("complementary", { name: "Terminal" })).findByText("acme-api");
