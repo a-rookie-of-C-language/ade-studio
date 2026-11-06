@@ -376,6 +376,8 @@ interface WorkbenchSlots {
   editorArea?: ComponentType;
   /** Shown instead of the workbench when no project is open (recent projects…). */
   welcome?: ComponentType;
+  /** Centered agent workspace (screenshot): left tasks, center session, right rail. */
+  agentShell?: ComponentType;
   /** The title bar project widget's popup (open / recent projects). */
   projectPopup?: ComponentType<ProjectPopupProps>;
 }
@@ -396,6 +398,7 @@ function provideSlot<K extends keyof WorkbenchSlots>(slot: K, component: NonNull
 
 export const provideEditorArea = (component: ComponentType) => provideSlot("editorArea", component);
 export const provideWelcomeView = (component: ComponentType) => provideSlot("welcome", component);
+export const provideAgentShell = (component: ComponentType) => provideSlot("agentShell", component);
 export const provideProjectPopup = (component: ComponentType<ProjectPopupProps>) =>
   provideSlot("projectPopup", component);
 

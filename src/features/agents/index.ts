@@ -9,6 +9,7 @@ import { executeAction } from "@/platform/actions";
 import { lazyComponent } from "@/ui";
 import { isVirtualUri } from "@/platform/virtualDocs";
 import {
+  provideAgentShell,
   registerEditorDropHandler,
   registerEditorKind,
   registerMenuGroup,
@@ -48,6 +49,7 @@ export function activate(): () => void {
   const disposers = [
     activateSettingsPages(),
     installAgentMode(),
+    provideAgentShell(lazyComponent(() => import("./AgentShell").then((m) => m.AgentShell))),
     useProject.subscribe((s, prev) => {
       if (s.project?.root !== prev.project?.root || s.project?.trusted !== prev.project?.trusted) sync();
     }),

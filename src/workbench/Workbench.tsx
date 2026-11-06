@@ -7,10 +7,12 @@
 import { useEditorRegistry } from "@/editor/api";
 import { basename, useProject } from "@/platform/project";
 import { useT } from "@/platform/i18n";
+import { useContextKeys } from "@/platform/context";
 import { ProgressBar, tooltipAttrs } from "@/ui";
 import projectMark from "../../src-tauri/icons/source/openidea-mark.svg";
 import { useDistractionFree } from "./distractionFree";
 import { EditorArea } from "./EditorArea";
+import { ErrorBoundary, Slot } from "./ErrorBoundary";
 import { OverlayHost } from "./OverlayHost";
 import { projectColorVars } from "./projectColor";
 import { StatusBar } from "./StatusBar";
@@ -20,7 +22,7 @@ import { useApplyTheme } from "./theme";
 import { ToolWindowLayout } from "./toolwindows/ToolWindows";
 import { Welcome } from "./Welcome";
 import { WindowResizeHandles } from "./WindowResizeHandles";
-import { useContributions, useStandaloneEditor } from "./contributions";
+import { useContributions, useStandaloneEditor, useWorkbenchSlots } from "./contributions";
 import styles from "./Workbench.module.css";
 
 /** LightEdit: editor tabs only; no tool windows, toolbar widgets or project status items. */
@@ -70,6 +72,11 @@ export function Workbench() {
   const openingPath = useProject((s) => s.openingPath);
   const root = project?.root ?? null;
   const distractionFree = useDistractionFree((s) => s.active);
+  // Agent Mode owns its shell (left tasks, center session, right rail);
+  // the workbench only reads the context key + slot, never agents itself.
+  const agentMode = useContextKeys((s) => s.agentMode === true);
+  const agentShell = useWorkbenchSlots((s) => s.agentShell);
+  const showAgent = agentMode && agentShell && !openingPath;
   const frame = project ? styles.framed : lightEdit || standaloneTitle ? styles.lightEditFrame : undefined;
 
   return (
@@ -78,7 +85,14 @@ export function Workbench() {
       style={project ? projectColorVars(project.name) : undefined}
     >
       <div className={styles.content} inert={openingPath !== null} aria-hidden={openingPath ? true : undefined}>
-        {project ? (
+        {showAgent && agentShell ? (
+          <>
+            <TitleBar bare={distractionFree} />
+            <ErrorBoundary name="agent shell">
+              <Slot component={agentShell} />
+            </ErrorBoundary>
+          </>
+        ) : project ? (
           <>
             {/* Distraction Free Mode keeps the bar for the traffic lights and window dragging only. */}
             <TitleBar bare={distractionFree} />
