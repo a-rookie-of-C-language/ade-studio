@@ -86,7 +86,18 @@ plain `git merge upstream/main`, `rebase`, or `cherry-pick`.
   worktree and be absent in the pre-sync base (`git cat-file -e <base>:<path>` fails).
   Never modify or delete a local file; if an added test exercises a local source,
   remove the test, not the source. Re-run `typecheck`, `knip`, `format:check`, `lint`,
-  and full `pnpm test` after pruning, then amend (don't stack commits).
+  and full `pnpm test` after pruning, then amend (don't stack commits). For Rust,
+  run `cargo fmt --all --check` and `cargo check --workspace --all-targets --locked`
+  (plus the sdk crate's own `cargo test`, it is excluded from the workspace):
+  version-coupled directories must stay uniform — a new `wit/*.wit` carrying a bumped
+  `package openidea:plugin@x.y.z` poisons the whole WIT package unless every file in
+  the dir moves with it, and `sdk/.../tests/api/*` snapshots must match the
+  `api_frozen.rs` scheme in the tree (old test + `1.0.0/` snapshot vs new test +
+  `released/` snapshot — never mix). When an upstream feature's lib-side changes were
+  dropped by local-wins, excise its dangling cluster too: the unwired modules, their
+  tests and their fixtures/snapshots — not just the failing test file. A test that
+  cannot compile against local libs (`*_tests`, versioned `with:` maps, changed
+  function arities) always means its feature's lib changes are missing.
 - Delete the temp `sync` branch when done so it can never be pushed (it contains
   upstream history and metadata).
 
