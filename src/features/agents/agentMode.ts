@@ -29,7 +29,7 @@ import {
   type SlotRecord,
 } from "@/workbench/toolwindows/store";
 import { TOOL_WINDOW } from "./model";
-import { setSessionLocation, useAgents, type SessionLocation } from "./store";
+import { carrySessionToDocked, setSessionLocation, useAgents, type SessionLocation } from "./store";
 
 export const AGENT_MODE_ACTION = "agents.toggleAgentMode";
 export const AGENT_MODE_CONTEXT = "agentMode";
@@ -93,6 +93,9 @@ function dockConversation() {
     }
   }
   if (useAgents.getState().sessionLocation !== "toolWindow") setSessionLocation("toolWindow");
+  // Already docked on the right: the shell may still center an undocked
+  // fallback (last/newest task), which the IDE would otherwise drop on exit.
+  carrySessionToDocked();
 }
 
 function restoreConversation() {
@@ -107,6 +110,8 @@ function restoreConversation() {
     /* storage unavailable */
   }
   if (useAgents.getState().sessionLocation !== "toolWindow") setSessionLocation("toolWindow");
+  // Every exit path (shell button, menu, shortcut) keeps the centered session.
+  carrySessionToDocked();
 }
 
 export function agentModeHint(): string {

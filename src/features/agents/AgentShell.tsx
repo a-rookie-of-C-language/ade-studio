@@ -4,12 +4,12 @@
  * Sessions reuse HomeEditor / SessionEditor; tasks open docked so the
  * centered column shows them without editor tabs.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Icon, IconButton, T, tooltipAttrs } from "@/ui";
 import { basename, useProject } from "@/platform/project";
 import { useTx } from "@/platform/i18n";
 import { SESSION_KIND, sessionKey } from "./model";
-import { openHome, openTask, useAgents } from "./store";
+import { carrySessionToDocked, openHome, openTask, useAgents } from "./store";
 import { setAgentMode } from "./agentMode";
 import { TaskStatusIcon } from "./AgentsView";
 import { HomeEditor } from "./HomeEditor";
@@ -40,6 +40,12 @@ export function AgentShell() {
   const list = useMemo(() => [...tasks.values()].sort((a, b) => (b.updatedMs ?? 0) - (a.updatedMs ?? 0)), [tasks]);
   const active = homeOpen ? "home" : (docked ?? lastTask ?? list[0]?.id ?? "home");
   const current = active !== "home" ? tasks.get(active) : undefined;
+  const activeId = homeOpen || !current ? null : current.id;
+  // The center column also shows an undocked fallback (last/newest task);
+  // carry it into the docked slot so leaving for the IDE keeps the session.
+  useEffect(() => {
+    if (activeId) carrySessionToDocked();
+  }, [activeId]);
   const title = homeOpen || !current ? tx("New Agent Task") : current.title || tx("Agent Task");
   const projectName = project ? project.name || basename(project.root) : tx("Agent");
 

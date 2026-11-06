@@ -283,6 +283,42 @@ describe("agent mode", () => {
       expect(useAgents.getState().docked).toBe("one");
     });
 
+    it("docks the centered fallback session when already on the right", () => {
+      const one = { ...task("one"), updatedMs: 10 };
+      const two = { ...task("two"), updatedMs: 20 };
+      useAgents.setState({
+        tasks: new Map([
+          [one.id, one],
+          [two.id, two],
+        ]),
+        sessionLocation: "toolWindow",
+        docked: null,
+        lastTask: null,
+        homeOpen: false,
+      });
+      setAgentMode(true);
+      // The shell centers the newest task; carry it so the IDE keeps it on exit.
+      expect(useAgents.getState().docked).toBe("two");
+      expect(useAgents.getState().lastTask).toBe("two");
+      setAgentMode(false);
+      expect(useAgents.getState().docked).toBe("two");
+    });
+
+    it("exiting carries a session centered mid-mode into the docked slot", () => {
+      setAgentMode(true);
+      const one = task("one");
+      // A task arriving mid-mode centers as an undocked fallback in the shell.
+      useAgents.setState({
+        tasks: new Map([[one.id, one]]),
+        docked: null,
+        lastTask: "one",
+        homeOpen: false,
+      });
+      setAgentMode(false);
+      expect(useAgents.getState().docked).toBe("one");
+      expect(useAgents.getState().homeOpen).toBe(false);
+    });
+
     it("keeps an editor placement that was already docked", () => {
       setSessionLocation("toolWindow");
       setAgentMode(true);

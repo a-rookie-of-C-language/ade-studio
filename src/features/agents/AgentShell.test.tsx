@@ -76,4 +76,18 @@ describe("AgentShell", () => {
     render(<AgentShell />);
     expect(screen.getByText("session-stub")).toBeInTheDocument();
   });
+
+  it("carries the centered fallback session into the docked slot for the IDE", async () => {
+    const one = task("one", "Analyze project");
+    useAgents.setState({
+      tasks: new Map([[one.id, one]]),
+      homeOpen: false,
+      docked: null,
+      lastTask: "one",
+    });
+    render(<AgentShell />);
+    expect(screen.getByText("session-stub")).toBeInTheDocument();
+    // Leaving for the IDE now shows the same session instead of the task list.
+    expect(useAgents.getState().docked).toBe("one");
+  });
 });

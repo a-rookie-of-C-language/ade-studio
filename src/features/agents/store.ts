@@ -501,6 +501,35 @@ function showDockedTask(task: string) {
   void editorService().closeInput?.(sessionKey(task));
 }
 
+/**
+ * The session the Agent Mode shell centers: the docked one, else the last
+ * opened, else the newest task (`null` on the New Task page). The IDE tool
+ * window only shows a session when it is docked, so both mode switches carry
+ * this id over to keep the same session on screen.
+ */
+export function centeredTask(): string | null {
+  const s = useAgents.getState();
+  if (s.homeOpen) return null;
+  if (s.docked && s.tasks.has(s.docked)) return s.docked;
+  if (s.lastTask && s.tasks.has(s.lastTask)) return s.lastTask;
+  let newest: string | null = null;
+  let newestMs = -Infinity;
+  for (const t of s.tasks.values()) {
+    const ms = t.updatedMs ?? 0;
+    if (ms > newestMs) {
+      newestMs = ms;
+      newest = t.id;
+    }
+  }
+  return newest;
+}
+
+/** Docks the centered session so crossing to the IDE (or back) keeps it on screen. */
+export function carrySessionToDocked() {
+  const id = centeredTask();
+  if (id) useAgents.setState({ docked: id, lastTask: id, homeOpen: false });
+}
+
 function saveSessionLocation(location: SessionLocation) {
   useAgents.setState({ sessionLocation: location });
   save(SESSION_LOCATION_KEY, location);
