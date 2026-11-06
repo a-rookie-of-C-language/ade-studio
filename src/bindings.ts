@@ -1314,6 +1314,12 @@ export type ActiveTheme = {
 	theme: ThemeDef,
 };
 
+/**  Executable to launch instead of the auto-detected one. */
+export type AgentBinarySettings = {
+	/**  Executable to launch instead of the auto-detected one; empty = auto-detect. */
+	path?: string,
+};
+
 /**
  *  What a task's agent can do beyond a plain conversation, as it reported when its
  *  session started.
@@ -1629,6 +1635,11 @@ export type AgentSettings = {
 	showUsageLimits?: boolean,
 	/**  What the session has cost so far, as the agent reports it. */
 	showCost?: boolean,
+	/**
+	 *  Coding agents at a user-chosen location, by agent id (`claude`);
+	 *  empty path = auto-detect.
+	 */
+	binaries?: { [key in string]: AgentBinarySettings },
 };
 
 /**  Where an agent comes from. */

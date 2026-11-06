@@ -78,11 +78,28 @@ pub struct AgentSettings {
     pub show_usage_limits: bool,
     /// What the session has cost so far, as the agent reports it.
     pub show_cost: bool,
+    /// Coding agents at a user-chosen location, by agent id (`claude`);
+    /// empty path = auto-detect.
+    pub binaries: BTreeMap<String, AgentBinarySettings>,
+}
+
+/// Executable to launch instead of the auto-detected one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AgentBinarySettings {
+    /// Executable to launch instead of the auto-detected one; empty = auto-detect.
+    pub path: String,
 }
 
 impl Default for AgentSettings {
     fn default() -> Self {
-        Self { show_context_usage: true, show_work_time: true, show_usage_limits: true, show_cost: false }
+        Self {
+            show_context_usage: true,
+            show_work_time: true,
+            show_usage_limits: true,
+            show_cost: false,
+            binaries: BTreeMap::new(),
+        }
     }
 }
 
@@ -197,6 +214,11 @@ impl Settings {
     /// The configured executable for `command`, if any (`~/` not yet expanded).
     pub fn tool_path(&self, command: &str) -> Option<&str> {
         self.tools.get(command).map(|t| t.path.trim()).filter(|p| !p.is_empty())
+    }
+
+    /// The configured executable for the agent `id`, if any (`~/` not yet expanded).
+    pub fn agent_path(&self, id: &str) -> Option<&str> {
+        self.agents.binaries.get(id).map(|a| a.path.trim()).filter(|p| !p.is_empty())
     }
 }
 
@@ -1041,6 +1063,18 @@ mod tests {
         assert_eq!(json["agents"]["showUsageLimits"], false);
         let restored: Settings = serde_json::from_value(json).unwrap();
         assert_eq!(restored.agents, settings.agents);
+    }
+
+    #[test]
+    fn agent_path_round_trip_and_trimming() {
+        let s: Settings =
+            serde_json::from_str(r#"{"agents":{"binaries":{"claude":{"path":"  /opt/claude  "}}}}"#).unwrap();
+        assert_eq!(s.agent_path("claude"), Some("/opt/claude"));
+        assert_eq!(s.agent_path("codex"), None);
+        let empty: Settings = serde_json::from_str(r#"{"agents":{"binaries":{"claude":{"path":"  "}}}}"#).unwrap();
+        assert_eq!(empty.agent_path("claude"), None);
+        let json = serde_json::to_value(Settings::default()).unwrap();
+        assert_eq!(json["agents"]["binaries"], serde_json::json!({}));
     }
 
     #[test]
