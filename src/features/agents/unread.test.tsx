@@ -351,6 +351,21 @@ describe("docking a conversation in the tool window", () => {
     expect(useAgents.getState().composers.get("home")?.text).toBe("Keep this draft");
   });
 
+  it("opens sessions in the Cowork center column even when docked placement is on", () => {
+    // Agent Mode persists the tool-window placement globally; Cowork has no
+    // tool window, so docking there would open nowhere and the click looks dead.
+    useProject.setState({ project: null, lightEdit: false });
+    useAgents.setState({ sessionLocation: "toolWindow" });
+    act(() => openTask("one"));
+    expect(useAgents.getState().coworkTask).toBe("one");
+    expect(useAgents.getState().docked).toBeNull();
+    expect(backend.showToolWindow).not.toHaveBeenCalled();
+    expect(backend.openInput).not.toHaveBeenCalled();
+    act(() => openHome());
+    expect(useAgents.getState().coworkTask).toBeNull();
+    expect(backend.showToolWindow).not.toHaveBeenCalled();
+  });
+
   it("drops the dock when the project changes", async () => {
     act(() => dockTask("one"));
     disconnect();

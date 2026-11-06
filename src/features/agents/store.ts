@@ -471,15 +471,16 @@ export function openCoworkTask(task: string | null) {
 }
 
 export function openTask(task: string) {
-  if (useAgents.getState().sessionLocation === "toolWindow") {
-    showDockedTask(task);
-    return;
-  }
-  // Welcome shows no editor tabs: opening into the hidden editor would look like
-  // nothing happened, so Cowork keeps the conversation in its center column.
+  // Welcome/Cowork has neither editor tabs nor tool windows: a docked
+  // conversation would open nowhere and the click would look dead, so Cowork
+  // always keeps the conversation in its center column.
   const { project, lightEdit } = useProject.getState();
   if (!project && !lightEdit) {
     openCoworkTask(task);
+    return;
+  }
+  if (useAgents.getState().sessionLocation === "toolWindow") {
+    showDockedTask(task);
     return;
   }
   useAgents.setState({ lastTask: task, homeOpen: false });
@@ -559,6 +560,12 @@ export function openHome(prompt?: string) {
     updateDraft({ projectRoot, ...(projectRoot !== previous ? { base: null } : {}) });
   }
   if (prompt !== undefined) updateComposer(HOME, { text: prompt });
+  // Welcome/Cowork has no tool window to show: reveal the composer in the
+  // center column instead of docking into nothing.
+  if (!useProject.getState().project && !useProject.getState().lightEdit) {
+    openCoworkTask(null);
+    return;
+  }
   if (useAgents.getState().sessionLocation === "toolWindow") {
     useAgents.setState({ docked: null, homeOpen: true });
     toolWindowService().show(TOOL_WINDOW, true);

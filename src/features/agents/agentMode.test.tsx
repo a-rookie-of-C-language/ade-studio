@@ -251,6 +251,17 @@ describe("agent mode", () => {
   });
 
   describe("right-side conversation", () => {
+    beforeEach(() => {
+      // Docking targets the project frame's right tool window: pretend a
+      // project is open (Cowork has no tool window and stays centered).
+      useProject.setState({
+        project: { root: "/work/agent", name: "agent", trusted: true, isGit: false, settings: {} as never },
+        lightEdit: false,
+      });
+    });
+    afterEach(() => {
+      useProject.setState({ project: null, lightEdit: false });
+    });
     it("docks the conversation on the right when entering, restoring the editor on exit", () => {
       expect(useAgents.getState().sessionLocation).toBe("editor");
       setAgentMode(true);
