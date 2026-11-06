@@ -135,7 +135,9 @@ export const useAgents = create<AgentsState>(() => ({
   history: load<string[]>(HISTORY_KEY, []),
   focus: null,
   docked: null,
-  sessionLocation: load<unknown>(SESSION_LOCATION_KEY, null) === "toolWindow" ? "toolWindow" : "editor",
+  // TRAE's IDE keeps the chat on the right: default to the tool window, not
+  // a centered editor tab. Only an explicit "editor" choice opts into center.
+  sessionLocation: load<unknown>(SESSION_LOCATION_KEY, null) === "editor" ? "editor" : "toolWindow",
   lastTask: null,
   homeOpen: false,
   coworkTask: null,

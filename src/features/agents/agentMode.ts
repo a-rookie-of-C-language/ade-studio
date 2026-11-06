@@ -2,14 +2,16 @@
  * Agent Mode (View): the project frame keeps the left side, the bottom is
  * hidden and the Agents tool window is pinned on the right at a usable width
  * and focused. The same action enters and exits; exiting restores the
- * remembered layout. Like Distraction Free Mode the mode is an
- * application-wide preference that survives restarts (localStorage, next to
- * the saved tool window layouts, which keep the layout to restore on exit).
- * Published as the `agentMode` context key; components read `useAgentMode`.
- * Entering the mode exits Distraction Free Mode first; the reverse nests
- * (Distraction Free entered atop Agent Mode restores the agent layout).
- * Conversations follow TRAE: entering docks them in the Agents tool window
- * on the right, exiting restores the placement from before the mode.
+ * remembered tool window layout (sizes/visibility), but the conversation
+ * stays docked on the right the way TRAE's IDE does -- there is no centered
+ * editor-tab chat in the IDE frame. Like Distraction Free Mode the mode is
+ * an application-wide preference that survives restarts (localStorage, next
+ * to the saved tool window layouts, which keep the layout to restore on
+ * exit). Published as the `agentMode` context key; components read
+ * `useAgentMode`. Entering the mode exits Distraction Free Mode first; the
+ * reverse nests (Distraction Free entered atop Agent Mode restores the agent
+ * layout). Conversations follow TRAE: entering docks them in the Agents
+ * tool window on the right, exiting keeps them there.
  */
 import { create } from "zustand";
 import { registerAction, type Action } from "@/platform/actions";
@@ -94,14 +96,17 @@ function dockConversation() {
 }
 
 function restoreConversation() {
-  const restore = readStashedLocation();
+  // TRAE's IDE always shows the chat on the right, so leaving Agent Mode
+  // keeps the conversation docked instead of restoring a centered editor
+  // tab. The stash is only cleared; an explicit editor placement the user
+  // picks afterwards still wins via setSessionLocation.
   stashedLocation = null;
   try {
     localStorage.removeItem(LOCATION_STASH_KEY);
   } catch {
     /* storage unavailable */
   }
-  if (restore) setSessionLocation(restore);
+  if (useAgents.getState().sessionLocation !== "toolWindow") setSessionLocation("toolWindow");
 }
 
 export function agentModeHint(): string {

@@ -262,14 +262,14 @@ describe("agent mode", () => {
     afterEach(() => {
       useProject.setState({ project: null, lightEdit: false });
     });
-    it("docks the conversation on the right when entering, restoring the editor on exit", () => {
+    it("docks the conversation on the right when entering, keeping it there on exit (TRAE IDE)", () => {
       expect(useAgents.getState().sessionLocation).toBe("editor");
       setAgentMode(true);
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       expect(useAgents.getState().homeOpen).toBe(true);
       setAgentMode(false);
-      expect(useAgents.getState().sessionLocation).toBe("editor");
-      expect(useAgents.getState().homeOpen).toBe(false);
+      expect(useAgents.getState().sessionLocation).toBe("toolWindow");
+      expect(localStorage.getItem("openidea.agentMode.sessionLocation")).toBeNull();
     });
 
     it("docks the open task instead of its editor tab", () => {
@@ -279,8 +279,8 @@ describe("agent mode", () => {
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       expect(useAgents.getState().docked).toBe("one");
       setAgentMode(false);
-      expect(useAgents.getState().sessionLocation).toBe("editor");
-      expect(useAgents.getState().docked).toBeNull();
+      expect(useAgents.getState().sessionLocation).toBe("toolWindow");
+      expect(useAgents.getState().docked).toBe("one");
     });
 
     it("keeps an editor placement that was already docked", () => {
@@ -291,16 +291,16 @@ describe("agent mode", () => {
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
     });
 
-    it("respects a mid-mode undock, still restoring the pre-mode placement on exit", () => {
+    it("re-docks on the right on exit even after a mid-mode undock (TRAE IDE)", () => {
       setAgentMode(true);
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       setSessionLocation("editor");
       expect(useAgents.getState().sessionLocation).toBe("editor");
       setAgentMode(false);
-      expect(useAgents.getState().sessionLocation).toBe("editor");
+      expect(useAgents.getState().sessionLocation).toBe("toolWindow");
     });
 
-    it("stays docked across a restart and restores the editor on exit", () => {
+    it("stays docked across a restart and keeps the right side on exit", () => {
       setAgentMode(true);
       expect(localStorage.getItem("openidea.agentMode.sessionLocation")).toBe("editor");
       // Restart: fresh module and session state; only localStorage remains.
@@ -312,7 +312,7 @@ describe("agent mode", () => {
       expect(isAgentMode()).toBe(true);
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       setAgentMode(false);
-      expect(useAgents.getState().sessionLocation).toBe("editor");
+      expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       expect(localStorage.getItem("openidea.agentMode.sessionLocation")).toBeNull();
     });
   });
