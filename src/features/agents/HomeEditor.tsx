@@ -235,7 +235,10 @@ export function HomeEditor({
               />
             </>
           )}
-          {!project ? (
+          {/* On the Cowork home offer the TRAE-style IDE entry. Inside the IDE
+              the title bar's Agent pill returns to Cowork, so no second
+              button here. */}
+          {!project && (
             <Button
               variant="secondary"
               size="small"
@@ -244,16 +247,6 @@ export function HomeEditor({
               onClick={() => void executeAction("welcome.openInIDE")}
             >
               <T>Open in IDE</T>
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="small"
-              icon="arrow-left"
-              className={styles.openInIDE}
-              onClick={() => void executeAction("file.closeProject")}
-            >
-              <T>Back to Cowork</T>
             </Button>
           )}
         </div>

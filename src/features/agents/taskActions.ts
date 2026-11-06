@@ -10,9 +10,11 @@ import {
   deleteTask,
   dockTask,
   forkTask,
+  isPinned,
   openTask,
   openTaskInEditorLocation,
   setSessionLocation,
+  togglePin,
   undockTask,
   useAgents,
 } from "./store";
@@ -103,6 +105,16 @@ export const taskActions: Action[] = [
     },
   },
   {
+    id: "agents.pinTask",
+    title: "Pin Task",
+    category: "Agents",
+    icon: "pin",
+    hidden: true,
+    run: ({ arg }) => {
+      if (typeof arg === "string") togglePin(arg);
+    },
+  },
+  {
     id: "agents.dockTask",
     title: "Open Agent Task in Tool Window",
     category: "Agents",
@@ -170,6 +182,13 @@ export function taskMenu(tasks: AgentTask[]): MenuItem[] {
       ? ([
           { kind: "action", action: "agents.openTask", label: "Open", arg: task.id },
           { kind: "action", action: "terminal.openAt", label: "Open in Terminal", icon: "terminal", arg: task.cwd },
+          {
+            kind: "action",
+            action: "agents.pinTask",
+            label: isPinned(task.id) ? "Unpin Task" : "Pin Task",
+            icon: "pin",
+            arg: task.id,
+          },
           ...(task.capabilities?.fork && task.status !== "archived"
             ? ([
                 {

@@ -4,14 +4,46 @@
  */
 import { useEffect, useState } from "react";
 import clsx from "clsx";
-import { t } from "@/platform/i18n";
-import { Icon, tooltipAttrs } from "@/ui";
+import { executeAction } from "@/platform/actions";
+import { t, tx } from "@/platform/i18n";
+import { useProject } from "@/platform/project";
+import { backToCowork, centeredTask } from "@/features/agents/store";
+import { Icon, T, tooltipAttrs } from "@/ui";
 import styles from "./TitleBar.module.css";
 
 type AppWindow = import("@tauri-apps/api/window").Window;
 
 function withWindow(run: (w: AppWindow) => unknown) {
   void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => run(getCurrentWindow()));
+}
+
+/**
+ * Green pill before the caption buttons: one click back to the Cowork home in
+ * the same window. When a session is centered it is carried back to the home
+ * (adopted into the default workspace); otherwise the project is just closed.
+ * `file.closeProject` confirms unsaved work first. Hidden on Welcome and
+ * dialogs where there is no project.
+ */
+export function AgentButton() {
+  const project = useProject((s) => s.project);
+  if (!project) return null;
+  const label = tx("Back to Cowork");
+  return (
+    <button
+      type="button"
+      className={styles.agentPill}
+      aria-label={label}
+      {...tooltipAttrs(label)}
+      onClick={() => {
+        const id = centeredTask();
+        if (id) backToCowork(id);
+        else void executeAction("file.closeProject");
+      }}
+    >
+      <T>Agent</T>
+      <Icon name="external-link" size={12} />
+    </button>
+  );
 }
 
 function CloseButton() {
@@ -75,6 +107,7 @@ function SizeButtons() {
 export function WindowControls({ dialog = false }: { dialog?: boolean }) {
   return (
     <div className={styles.captions}>
+      {!dialog && <AgentButton />}
       {!dialog && <SizeButtons />}
       <CloseButton />
     </div>

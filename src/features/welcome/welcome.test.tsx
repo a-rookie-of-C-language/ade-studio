@@ -330,6 +330,43 @@ describe("Welcome › Cowork", () => {
     expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
   });
 
+  it("shows honest placeholders for Plugins, Automation and Artifacts", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
+    expect(screen.getByText("Discover and install agent plugins here.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Automation" }));
+    expect(screen.getByText("Recurring runs and rules will live here once configured.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
+    expect(screen.getByText("Files your agents produce will be collected here.")).toBeTruthy();
+  });
+
+  it("pins a task atop the sidebar and unpins it again", async () => {
+    const one = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
+    const two = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
+    useAgents.setState({
+      tasks: new Map([
+        ["t1", one],
+        ["t2", two],
+      ]),
+      pinned: ["t1"],
+    });
+    await renderWelcome();
+    expect(screen.getByText("Pinned")).toBeTruthy();
+    // The pinned task shows in the Pinned section and in its project group.
+    expect(screen.getAllByRole("button", { name: "Unpin Task" })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpin Task" })[0]!);
+    expect(screen.queryByText("Pinned")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unpin Task" })).toBeNull();
+    useAgents.setState({ pinned: [] });
+  });
+
+  it("jumps to the IDE for the current workspace from the Cowork home", async () => {
+    await renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "IDE" }));
+    await act(async () => {});
+    expect(openProject).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
+  });
+
   it("opens the workspace list from Projects and switches workspace from its children", async () => {
     await renderWelcome();
     fireEvent.click(screen.getByRole("button", { name: "Projects" }));

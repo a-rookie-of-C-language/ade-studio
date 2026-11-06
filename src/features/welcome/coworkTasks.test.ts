@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentTask } from "@/bindings";
 import { groupTasksByProject, projectName } from "./CoworkPage";
+import { isPinned, togglePin, useAgents } from "@/features/agents/store";
 
 const task = (patch: Partial<AgentTask> & { id: string }): AgentTask => ({
   title: patch.id,
@@ -54,5 +55,21 @@ describe("groupTasksByProject", () => {
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.items.map((t) => t.id)).toEqual(["kept"]);
+  });
+});
+
+describe("togglePin", () => {
+  it("pins newest-first and unpins back to empty", () => {
+    useAgents.setState({ pinned: [] });
+    expect(isPinned("a")).toBe(false);
+    togglePin("a");
+    togglePin("b");
+    expect(useAgents.getState().pinned).toEqual(["b", "a"]);
+    expect(isPinned("a")).toBe(true);
+    togglePin("a");
+    expect(useAgents.getState().pinned).toEqual(["b"]);
+    togglePin("b");
+    expect(useAgents.getState().pinned).toEqual([]);
+    useAgents.setState({ pinned: [] });
   });
 });

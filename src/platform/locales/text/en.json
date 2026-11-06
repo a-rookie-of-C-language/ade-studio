@@ -26,6 +26,7 @@
   "Session finished": "Session finished",
   "Open in IDE": "Open in IDE",
   "Back to Cowork": "Back to Cowork",
+  "Agent": "Agent",
   "Context": "Context",
   "Used": "Used",
   "used": "used",
@@ -114,5 +115,7 @@
   "Task": "Task",
   "Result": "Result",
   "Output": "Output",
-  "Running": "Running"
+  "Running": "Running",
+  "Pin Task": "Pin Task",
+  "Unpin Task": "Unpin Task"
 }

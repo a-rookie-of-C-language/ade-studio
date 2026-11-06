@@ -1,5 +1,6 @@
 /** Agent-first home: one screen with the composer, workspaces and scheduled tasks. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useT, useTx } from "@/platform/i18n";
 import { isTauri } from "@/platform/ipc";
 import { useProject } from "@/platform/project";
@@ -27,7 +28,7 @@ import { dropWorkspace, RECENT_PREFIX, selectWorkspace, useWorkspace } from "./w
 import styles from "./Welcome.module.css";
 import coworkStyles from "./Cowork.module.css";
 
-export type WelcomePage = "cowork" | "projects" | "scheduled";
+export type WelcomePage = "cowork" | "projects" | "scheduled" | "plugins" | "automation" | "artifacts";
 
 export const GEAR_MENU: MenuItem[] = [
   { kind: "action", action: "file.settings" },
@@ -85,9 +86,12 @@ function useFolderDrop(onWorkspace: () => void): boolean {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     let disposed = false;
-    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
-      getCurrentWebview()
-        .onDragDropEvent((event) => {
+    // Static import (not lazy): dynamic import() of Tauri APIs bypasses
+    // vi.mock, so tests would load the real module and crash on
+    // `window.__TAURI_INTERNALS__`. The module has no import-time side effects.
+    void Promise.resolve()
+      .then(() =>
+        getCurrentWebview().onDragDropEvent((event) => {
           const p = event.payload;
           if (p.type === "enter" || p.type === "over") return setOver(true);
           setOver(false);
@@ -96,12 +100,12 @@ function useFolderDrop(onWorkspace: () => void): boolean {
             void dropWorkspace(p.paths).then((ok) => {
               if (ok) onWorkspace();
             });
-        })
-        .then((u) => {
-          if (disposed) u();
-          else unlisten = u;
         }),
-    );
+      )
+      .then((u) => {
+        if (disposed) u();
+        else unlisten = u;
+      });
     return () => {
       disposed = true;
       unlisten?.();
@@ -160,7 +164,17 @@ export function WelcomeView() {
   if (connecting && !connectDialog && !listOpening) return <Reopening location={connecting} />;
 
   const contentLabel =
-    page === "projects" ? t("cowork.projects") : page === "scheduled" ? t("cowork.scheduled") : t("cowork.cowork");
+    page === "projects"
+      ? t("cowork.projects")
+      : page === "scheduled"
+        ? t("cowork.scheduled")
+        : page === "plugins"
+          ? t("cowork.plugins")
+          : page === "automation"
+            ? t("cowork.automation")
+            : page === "artifacts"
+              ? t("cowork.artifacts")
+              : t("cowork.cowork");
 
   const handleNav = (id: string) => {
     if (id.startsWith(RECENT_PREFIX)) {
@@ -188,6 +202,9 @@ export function WelcomeView() {
           icon: "folder",
           children: recents.slice(0, 7).map((p) => ({ id: `${RECENT_PREFIX}${p.path}`, label: p.name })),
         },
+        { id: "plugins", label: t("cowork.plugins"), icon: "plugin" },
+        { id: "automation", label: t("cowork.automation"), icon: "run" },
+        { id: "artifacts", label: t("cowork.artifacts"), icon: "package" },
         { id: "scheduled", label: t("cowork.scheduled"), icon: "clock" },
       ],
     },
@@ -236,6 +253,13 @@ export function WelcomeView() {
       </Sidebar>
       <section className={styles.content} aria-label={contentLabel} aria-busy={opening || undefined}>
         {page === "cowork" && <CoworkHome />}
+        {page === "plugins" && <CoworkSoon icon="plugin" title={t("cowork.plugins")} hint={t("cowork.soon.plugins")} />}
+        {page === "automation" && (
+          <CoworkSoon icon="run" title={t("cowork.automation")} hint={t("cowork.soon.automation")} />
+        )}
+        {page === "artifacts" && (
+          <CoworkSoon icon="package" title={t("cowork.artifacts")} hint={t("cowork.soon.artifacts")} />
+        )}
         {page === "scheduled" && (
           <CoworkSoon icon="clock" title={t("cowork.scheduled")} hint={t("cowork.soon.scheduled")} />
         )}

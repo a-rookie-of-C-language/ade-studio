@@ -75,7 +75,6 @@ import {
   type SubagentEntry,
 } from "./model";
 import {
-  backToCowork,
   cancelTask,
   focusComposer,
   loadEntries,
@@ -300,7 +299,8 @@ function Header({
   const where = task.isolation === "worktree" ? branchLabel(task.branch) : null;
   // Cowork home has no IDE project open: offer the same always-visible
   // TRAE-style entry as the home composer, opening this session's folder.
-  // Inside the IDE the same slot returns to Cowork instead.
+  // Inside the IDE the title bar's Agent pill returns to Cowork instead
+  // (carrying the centered session), so the header keeps no second button.
   const inCoworkHome = !project;
   return (
     <div
@@ -370,7 +370,7 @@ function Header({
         <Icon name="toolwindow-changes" size={14} />
         {count > 0 && <span>{count}</span>}
       </button>
-      {inCoworkHome ? (
+      {inCoworkHome && (
         <Button
           variant="secondary"
           size="small"
@@ -378,10 +378,6 @@ function Header({
           onClick={() => void openCoworkSessionInIDE(task.id)}
         >
           <T>Open in IDE</T>
-        </Button>
-      ) : (
-        <Button variant="secondary" size="small" icon="arrow-left" onClick={() => void backToCowork(task.id)}>
-          <T>Back to Cowork</T>
         </Button>
       )}
     </div>

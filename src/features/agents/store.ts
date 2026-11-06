@@ -82,6 +82,8 @@ interface AgentsState {
   homeOpen: boolean;
   /** Task shown inline in the Cowork home when no project is open (Welcome has no editor tabs). */
   coworkTask: string | null;
+  /** Pinned task ids, newest first; shown atop the Cowork sidebar across projects. */
+  pinned: string[];
   /** Sessions created outside OpenIDEA (another Codex or Claude client), newest first. */
   external: ExternalSession[];
   /** Why the external sessions could not be loaded. */
@@ -92,6 +94,7 @@ const DRAFT_KEY = "openidea.agents.draft.v2";
 const HISTORY_KEY = "openidea.agents.history.v1";
 const HISTORY_SIZE = 50;
 const SESSION_LOCATION_KEY = "openidea.agents.sessionLocation.v1";
+const PINNED_KEY = "{{SECRET_kb06lsdf}}";
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -142,10 +145,24 @@ export const useAgents = create<AgentsState>(() => ({
   lastTask: null,
   homeOpen: false,
   coworkTask: null,
+  pinned: load<string[]>(PINNED_KEY, []),
   scrollPositions: new Map(),
   external: [],
   externalError: null,
 }));
+
+/** Whether the task is pinned atop the Cowork sidebar. */
+export function isPinned(id: string): boolean {
+  return useAgents.getState().pinned.includes(id);
+}
+
+/** Pins or unpins the task atop the Cowork sidebar (survives restarts). */
+export function togglePin(id: string) {
+  const pinned = useAgents.getState().pinned.filter((p) => p !== id);
+  if (!isPinned(id)) pinned.unshift(id);
+  useAgents.setState({ pinned });
+  save(PINNED_KEY, pinned);
+}
 
 export function updateDraft(patch: Partial<Draft>) {
   const draft = { ...useAgents.getState().draft, ...patch };

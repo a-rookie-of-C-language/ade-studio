@@ -6348,5 +6348,7 @@
   "Tool calls": "工具调用",
   "Latest activity": "最新动态",
   "Attachments": "附件",
-  "Choice": "所选"
+  "Choice": "所选",
+  "Pin Task": "置顶任务",
+  "Unpin Task": "取消置顶"
 }

@@ -1,15 +1,32 @@
 /** Agent-first home: greeting + task composer; tasks rail; placeholders. */
 import { useMemo, type ComponentProps } from "react";
 import type { AgentStatus, AgentTask } from "@/bindings";
-import { useT } from "@/platform/i18n";
+import { useT, useTx } from "@/platform/i18n";
 import { Icon, IconButton, tooltipAttrs } from "@/ui";
 import { HomeEditor } from "@/features/agents/HomeEditor";
 import { CoworkSession } from "@/features/agents/SessionEditor";
-import { openCoworkTask, openTask, useAgents } from "@/features/agents/store";
+import { isPinned, openCoworkTask, openTask, togglePin, useAgents } from "@/features/agents/store";
 import { HomeTerminalPanel, useHomeTerminal } from "./HomeTerminal";
+import { openCurrentWorkspaceInIDE } from "./workspace";
 import styles from "./Cowork.module.css";
 
 type IconName = ComponentProps<typeof Icon>["name"];
+
+/** Top-right jump to the IDE for the current workspace, like TRAE's home. */
+function IdeJump() {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className={styles.ideJump}
+      onClick={() => void openCurrentWorkspaceInIDE()}
+      title={t("cowork.openIDE")}
+    >
+      <span>IDE</span>
+      <Icon name="open-in-tool-window" size={14} />
+    </button>
+  );
+}
 
 /** Center column: greeting and the real task composer, or the open task when one is selected. */
 export function CoworkHome() {
@@ -21,6 +38,7 @@ export function CoworkHome() {
   if (coworkTask && task) {
     return (
       <div className={`${styles.home} ${styles.homeSession}`}>
+        <IdeJump />
         <div className={styles.sessionWrap}>
           <button type="button" className={styles.backButton} onClick={() => openCoworkTask(null)}>
             <Icon name="arrow-left" size={14} />
@@ -36,6 +54,7 @@ export function CoworkHome() {
   }
   return (
     <div className={styles.home}>
+      <IdeJump />
       <HomeEditor heading={<span className={styles.greeting}>{t("cowork.greeting")}</span>} />
       {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}
     </div>
@@ -92,11 +111,30 @@ export function groupTasksByProject(all: Iterable<AgentTask>, limit = 30): TaskG
 export function CoworkTasks({ onNewInProject }: { onNewInProject?: (path: string) => void }) {
   const t = useT();
   const map = useAgents((s) => s.tasks);
+  const pinned = useAgents((s) => s.pinned);
   const groups = useMemo(() => groupTasksByProject(map.values()), [map]);
+  const pinnedTasks = useMemo(
+    () =>
+      pinned.flatMap((id) => {
+        const task = map.get(id);
+        return task && task.status !== "archived" ? [task] : [];
+      }),
+    [pinned, map],
+  );
   return (
     <section className={styles.tasks} aria-label={t("cowork.tasks")}>
       <h2 className={styles.tasksTitle}>{t("cowork.tasks")}</h2>
-      {groups.length === 0 ? (
+      {pinnedTasks.length > 0 && (
+        <div className={styles.taskGroup}>
+          <h3 className={styles.taskGroupName}>{t("cowork.pinned")}</h3>
+          <ul className={styles.taskGroupList}>
+            {pinnedTasks.map((task) => (
+              <TaskRow key={task.id} task={task} pinned />
+            ))}
+          </ul>
+        </div>
+      )}
+      {groups.length === 0 && pinnedTasks.length === 0 ? (
         <p className={styles.tasksEmpty}>{t("cowork.emptyTasks")}</p>
       ) : (
         <div className={styles.taskList}>
@@ -120,17 +158,7 @@ export function CoworkTasks({ onNewInProject }: { onNewInProject?: (path: string
               ) : null}
               <ul className={styles.taskGroupList}>
                 {group.items.map((task) => (
-                  <li key={task.id}>
-                    <button
-                      type="button"
-                      className={styles.task}
-                      {...tooltipAttrs(task.title)}
-                      onClick={() => openTask(task.id)}
-                    >
-                      <span className={statusClass(task.status)} aria-hidden />
-                      <span className={styles.taskTitle}>{task.title}</span>
-                    </button>
-                  </li>
+                  <TaskRow key={task.id} task={task} />
                 ))}
               </ul>
             </div>
@@ -138,6 +166,30 @@ export function CoworkTasks({ onNewInProject }: { onNewInProject?: (path: string
         </div>
       )}
     </section>
+  );
+}
+
+/** One task row with a pin toggle (always visible when pinned, on hover otherwise). */
+function TaskRow({ task, pinned }: { task: AgentTask; pinned?: boolean }) {
+  const tx = useTx();
+  const isTaskPinned = pinned ?? isPinned(task.id);
+  return (
+    <li className={styles.taskItem}>
+      <button type="button" className={styles.task} {...tooltipAttrs(task.title)} onClick={() => openTask(task.id)}>
+        <span className={statusClass(task.status)} aria-hidden />
+        <span className={styles.taskTitle}>{task.title}</span>
+      </button>
+      <button
+        type="button"
+        className={`${styles.pinButton} ${isTaskPinned ? styles.pinButtonOn : ""}`}
+        title={isTaskPinned ? tx("Unpin Task") : tx("Pin Task")}
+        aria-label={isTaskPinned ? tx("Unpin Task") : tx("Pin Task")}
+        aria-pressed={isTaskPinned}
+        onClick={() => togglePin(task.id)}
+      >
+        <Icon name="pin" size={13} />
+      </button>
+    </li>
   );
 }
 

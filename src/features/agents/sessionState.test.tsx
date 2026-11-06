@@ -416,7 +416,9 @@ describe("meters in the task header", () => {
     render(<SessionEditor input={input("A")} />);
     await screen.findByText("Answer A");
     expect(screen.queryByRole("button", { name: "Open in IDE" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Back to Cowork" })).toBeInTheDocument();
+    // Inside the IDE the title bar's Agent pill returns to Cowork (carrying
+    // the session), so the header keeps no second button.
+    expect(screen.queryByRole("button", { name: "Back to Cowork" })).toBeNull();
   });
 
   it("shows the session environment above the context card", async () => {

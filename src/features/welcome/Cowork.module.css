@@ -118,6 +118,48 @@
   flex-direction: column;
   gap: 1px;
 }
+.taskItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.taskItem .task {
+  flex: 1;
+  min-width: 0;
+  padding-right: 30px;
+}
+.pinButton {
+  position: absolute;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--fg-faint);
+  cursor: default;
+  opacity: 0;
+}
+.taskItem:hover .pinButton,
+.taskItem:focus-within .pinButton,
+.pinButtonOn {
+  opacity: 1;
+}
+.pinButton:hover {
+  background: var(--bg-hover);
+  color: var(--fg-strong);
+}
+.pinButton:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.pinButtonOn {
+  color: var(--accent);
+}
 .task {
   display: flex;
   align-items: center;
@@ -193,6 +235,36 @@
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--fg-strong);
+}
+
+/* ---- IDE jump (top-right of the Cowork center, like TRAE's home) ---- */
+
+.ideJump {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--bg-elev);
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: default;
+}
+.ideJump:hover {
+  background: var(--bg-hover);
+  color: var(--fg-strong);
+}
+.ideJump:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
 }
 
 /* ---- Inline session (no project open) ---- */
