@@ -2,15 +2,15 @@
  * Agent messages: Markdown → sanitized HTML (marked + DOMPurify). Fenced code is
  * highlighted and gets a Copy button; inline code naming a file of the task opens it.
  */
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Marked } from "marked";
 import DOMPurify from "dompurify";
 import { highlightInto } from "@/editor/lsp/markdown";
 import { iconNode } from "@/editor/lsp/iconMarkup";
 import { call, commands } from "@/platform/ipc";
-import { tx } from "@/platform/i18n";
+import { tx, useTx } from "@/platform/i18n";
 import { openExternalUrl } from "@/platform/openUrl";
-import { copyText } from "@/ui";
+import { copyText, tooltipAttrs } from "@/ui";
 import { editorService } from "@/workbench/contributions";
 import { fileHref, pathLink, type PathLink } from "./conversation";
 import styles from "./Session.module.css";
@@ -74,7 +74,7 @@ function wrapLooseText(li: Element) {
 
 /** Whether a path names an existing file, per path (agents name the same files again and again). */
 const existing = new Map<string, Promise<boolean>>();
-function fileExists(path: string): Promise<boolean> {
+export function fileExists(path: string): Promise<boolean> {
   let known = existing.get(path);
   if (!known) {
     known = call(commands.fsProbe(path)).then(
@@ -126,6 +126,51 @@ function enhance(root: HTMLElement, cwd: string): () => void {
   return () => {
     alive = false;
   };
+}
+
+/** A `\`code\`` chip in a plain-text message; opens the file when it names one that exists. */
+export function UserCode({ text, cwd }: { text: string; cwd: string }) {
+  const tx = useTx();
+  const [link, setLink] = useState<PathLink | null>(null);
+  useEffect(() => {
+    const parsed = pathLink(text, cwd);
+    if (!parsed) return;
+    let alive = true;
+    void fileExists(parsed.path).then((exists) => {
+      if (alive && exists) setLink(parsed);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [text, cwd]);
+  if (!link) return <code>{text}</code>;
+  return (
+    <code
+      className={styles.fileLink}
+      {...tooltipAttrs(tx`Open ${link.path}`)}
+      onClick={(e) => {
+        // Let a text selection finish instead of navigating away.
+        if (window.getSelection()?.toString()) return;
+        e.stopPropagation();
+        openPathLink(link);
+      }}
+    >
+      {text}
+    </code>
+  );
+}
+
+/** Plain text with `\`code\`` chips that open files, like the agent's (see `UserMessage`). */
+export function renderUserText(text: string, cwd: string) {
+  const parts = text.split(/(`[^`]*`)/g);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) =>
+    part.startsWith("`") && part.endsWith("`") && part.length >= 2 ? (
+      <UserCode key={i} text={part.slice(1, -1)} cwd={cwd} />
+    ) : (
+      <Fragment key={i}>{part}</Fragment>
+    ),
+  );
 }
 
 export function Markdown({ text, cwd }: { text: string; cwd: string }) {

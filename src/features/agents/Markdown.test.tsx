@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { Markdown } from "./Markdown";
+import { Markdown, renderUserText } from "./Markdown";
+import styles from "./Session.module.css";
 
 const { openFile, openExternalUrl } = vi.hoisted(() => ({
   openFile: vi.fn().mockResolvedValue(undefined),
@@ -8,6 +9,12 @@ const { openFile, openExternalUrl } = vi.hoisted(() => ({
 }));
 vi.mock("@/workbench/contributions", () => ({ editorService: () => ({ openFile }) }));
 vi.mock("@/platform/openUrl", () => ({ openExternalUrl }));
+
+const { fsProbe } = vi.hoisted(() => ({ fsProbe: vi.fn() }));
+vi.mock("@/platform/ipc", async (original) => {
+  const mod = await original<typeof import("@/platform/ipc")>();
+  return { ...mod, commands: { ...mod.commands, fsProbe } };
+});
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -71,3 +78,27 @@ it.each(["#section", "//example.com/image.jpg", "javascript:alert(1)", "/tmp/%ZZ
     expect(openExternalUrl).not.toHaveBeenCalled();
   },
 );
+
+it("links a user message code chip to an existing file", async () => {
+  fsProbe.mockResolvedValue({ status: "ok", data: null });
+  const { container } = render(<div>{renderUserText("see `user-link-a.md`", "/repo")}</div>);
+  const code = container.querySelector("code")!;
+  await waitFor(() => expect(code.classList.contains(styles.fileLink!)).toBe(true));
+  fireEvent.click(code);
+  expect(openFile).toHaveBeenCalledWith("/repo/user-link-a.md", { focus: true, selection: undefined });
+});
+
+it("leaves a user message chip plain when the file is missing", async () => {
+  fsProbe.mockRejectedValue(new Error("missing"));
+  const { container } = render(<div>{renderUserText("see `user-miss-b.md`", "/repo")}</div>);
+  const code = container.querySelector("code")!;
+  await waitFor(() => expect(fsProbe).toHaveBeenCalled());
+  expect(code.classList.contains(styles.fileLink!)).toBe(false);
+  fireEvent.click(code);
+  expect(openFile).not.toHaveBeenCalled();
+});
+
+it("does not probe user text that is not a file path", () => {
+  render(<div>{renderUserText("run `foo()` now", "/repo")}</div>);
+  expect(fsProbe).not.toHaveBeenCalled();
+});
