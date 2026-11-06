@@ -22,10 +22,11 @@
       "@cindy/maker-shared/subagent-observation": ["../../third-party/cindy-agent/maker-shared/subagentObservation.ts"],
       "@cindy/maker-shared/tool-loop-error": ["../../third-party/cindy-agent/maker-shared/toolLoopError.ts"],
       "@cindy/maker-shared/tool-process-media": ["../../third-party/cindy-agent/maker-shared/toolProcessMedia.ts"],
+      "@cindy/maker-shared/session-controls": ["./src/vendor-shims/session-controls.ts"],
       "@cindy/maker-shared/usage-format": ["../../third-party/cindy-agent/maker-shared/usageFormat.ts"],
       "@cindy/model-providers/classification": ["../../third-party/cindy-agent/model-providers/classification.ts"],
       "@cindy/model-providers/effort-resolution": ["../../third-party/cindy-agent/model-providers/effortResolution.ts"]
     }
   },
-  "include": ["../../third-party/cindy-agent/**/*.ts", "src/**/*.ts"]
+  "include": ["../../third-party/cindy-agent/**/*.ts", "src/**/*.ts", "test/**/*.ts"]
 }

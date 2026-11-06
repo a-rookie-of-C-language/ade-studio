@@ -43,8 +43,20 @@ cindy-bridge (Node, 无状态转译)
 - 线格式（v0 私有 NDJSON，每行一帧）：
   - Rust→bridge：`start {provider:"claude", cwd, model?}` / `prompt {session, text}` /
     `respond {session, permissionId, decision}` / `cancel {session}` / `close {session}`。
-  - bridge→Rust：`started {session, sdkSessionId}` / `text {delta}` / `tool {name, status}` /
-    `permission {id, summary}` / `done {stopReason}` / `error {message}`。
+    `model` 缺席时 bridge 直接报错（不静默选模型，模型由 `cindy.toml` 默认值经 Rust 侧供给）。
+  - bridge→Rust：`started {session, sdkSessionId}` /
+    `text {delta, kind?: "text"|"thinking", final?}`（vendor 对同一段文本会先给增量
+    `delta`、结尾再给一次全量：`final:true` 表示“此为完整文本，请替换本 turn 缓冲”，
+    Rust B3 侧按 `append / replace` 维护缓冲，避免 timeline 重复）/
+    `tool {name, status, toolUseId?}` / `permission {id, toolName?, summary?}` /
+    `permission_dismissed {id, resolvedAs?}` / `done {stopReason, usage?}` /
+    `error {message, terminal?}`。
+  - `thinking` 的 `start/redacted` 等无文本阶段直接丢弃，只有带文本的 `delta/final`
+    才以前缀 `kind:"thinking"` 发出；`tool_result` 的 `status:"completed"` 靠 bridge 侧
+    `toolUseId→name` 表回填名称（`tool_result` 摘要帧本身不带名称）。
+    `interaction_request` 事件不翻译成帧（resolver 回调才是唯一的挂起点，避免双发）；
+    `interaction_dismissed` 事件翻译成 `permission_dismissed` 帧。
+    `error.terminal` 为 false 表示 turn 可继续（如 permission 超时后的拒绝）；缺席按终止处理。
 - 字段只满足 timeline 折叠与 permission 审批的最小需要；以后切 ACP 时逐帧可映射
   （`session/update` 的子集语义），不在 v0 里预埋 ACP。
 
@@ -91,12 +103,47 @@ cindy-bridge (Node, 无状态转译)
 新增文件评审后纳入）；
 `THIRD_PARTY_LICENSES.md` 新增 Apache-2.0 条目并保留 LICENSE/NOTICE 原文。
 
-### B2 — `cindy-bridge.mjs`（Node，仓内 `agent/cindy-bridge/`）
+### B2 — `cindy-bridge`（Node，仓内 `agent/cindy-bridge/`，产物 `dist/` 单目录）
 
-- 依赖注入全部本地化：`AuthAdapter` 读本机 `claude` 登录态（沿用用户终端登录，不存新凭据）；
-  `McpProvider` v0 为空实现（后加）；storage 只用内存 + SDK 自有 jsonl。
-- 翻译层：`AgentEvent → v0 帧`（纯函数，可单测）；permission 回调转 `permission` 帧并挂起等待。
-- 验收：对假 SDK 句柄的 NDJSON 回放测试（start/prompt/permission/done 全序列）。
+实测接缝（`third-party/cindy-agent/maker-core`，只读）：
+
+- `AgentDeps`（`agents/base-agent.ts:682`）：必填只有 `auth` / `runtimeConfig` /
+  `binaryPath`（空串构造期抛错）/ `logger` 四项。v0 只填这四项 +
+  `mcpProviders: []`；其余 codex/pi 钩子一律不填（`memoryEnabled: false` +
+  `makerMemoryEnabled: false` 后不需要 `sqliteFactory`，storage 只用内存 + SDK 自有 jsonl）。
+- `ClaudeCodeAgent` 构造后调 `startSession({sessionId, workingDir, model,
+  makerMemoryEnabled: false})` 得 `AgentSessionHandle`；`handle.id` 即 `started` 帧的
+  `sdkSessionId`；事件泵 = `for await (handle.events())`；发消息 =
+  `handle.send({type:'user', content: text})`；`cancel → handle.abort()`；
+  `close → handle.close()`。
+- 挂起点是 `handle.setInteractionResolver(resolver)`，不是事件流：
+  `permission` kind 转 `permission` 帧并挂起等 Rust `respond`（只支持当次
+  `allow/deny`，不支持 `permissionUpdates` 会话级放行）；
+  `ask_user_question` 回 `{answers:{}, dismissed:true}`、
+  `plan_review` 回 `{behavior:'deny', dismissed:true}`（fail-closed，不弹帧之外
+  再加 `error {terminal:false}` 提示，不自动放行）；
+  超时（默认 300s，`CINDY_BRIDGE_PERMISSION_TIMEOUT_MS` 可调）按“拒绝 + 非终止 error 帧”
+  处理，不自动放行、不重试掩盖；`close` 时未决 permission 按 `deny(reason:'session-closed')` 结算。
+- `AuthAdapter` v0：`getState` 只做 `~/.claude/.credentials.json` 存在性检查或
+  `ANTHROPIC_API_KEY` 环境变量检查（只读存在性，不读内容）；`getAuthEnv` 返回 `{}`
+  （继承用户终端进程环境，零新凭据）；`triggerLogin` 直接返回未认证并提示用户自行
+  `claude login`；`logout` 为空操作（绝不删除用户自己的登录态）。
+- `binaryPath` 从 `PATH` 解析 `claude`（win32 顺带试 `.exe/.cmd`）；找不到 bridge
+  以 exit 2 退出并明示缺 `claude` CLI（供 B4 的“找不到时明确报错”）。
+- `Logger` 实现只写 stderr（stdout 是 NDJSON 帧通道，日志绝不污染）。
+  日志分级与 AGENTS.md 对齐（`debug` 高频诊断生产不落盘 / `info` 生命周期事件 /
+  `warn` 可恢复异常 / `error` 崩溃与握手失败），禁止凭据与真实用户数据落日志；
+  本机实测负路径（无 `claude login`）输出示例：
+  `error {terminal:true, message:"start failed: claude-code not authenticated: no_key"}`。
+- `?raw` 的两个 `.md`：vitest 下 vite 原生支持；node 运行时由 bridge 自带
+  `raw-loader`（`module.register`，把 `dist/` 镜像路径映射回源码树读文本，
+  vendor 零修改）解决。
+- 构建：`tsc -p tsconfig.build.json`，`dist/` 镜像源码布局
+  （入口 `dist/agent/cindy-bridge/src/index.js`，B4 的 toml 指向它）。
+
+- 翻译层：`AgentEvent → v0 帧`（纯函数，可单测，`tool_result` 需外部 `toolUseId→name` 表）。
+- 验收：对假 SDK 句柄的 NDJSON 回放测试（start/prompt/permission/done 全序列）；
+  permission 挂起/超时/取消三态单测（见 §6）。
 
 ### B3 — Rust `Driver::Cindy`（`ide-agent` 最小增量）
 
@@ -130,7 +177,8 @@ cindy-bridge (Node, 无状态转译)
 - B1：vendor 拷贝上重跑闭包，文件集与 `VERSIONS.md` 清单一致（无多余、无缺失、无上游 barrel 外
   的新增外部依赖）；`tsc --noEmit` 在 bridge 包上下文（`agent/cindy-bridge/` tsconfig `paths` 指向
   vendor + 真实 `node_modules`）下通过。
-- B2：NDJSON 回放测试全过；permission 挂起/超时/取消三态单测。
+- B2：NDJSON 回放测试全过；permission 挂起/超时/取消三态单测；
+  构建产物 smoke（缺 model / 未知 session / 无登录态三负路径帧正确，exit 0）。
 - B3：Rust 单测 + 真 bridge E2E；bridge crash 演练（任务标错、entries 保留）。
 - 全链：Cowork 新建 Cindy 任务 → 发消息 → permission 审批 → 取消，全程 UI 可见。
 
