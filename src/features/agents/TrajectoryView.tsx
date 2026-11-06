@@ -24,6 +24,7 @@ import {
   type TrajectoryInspector,
   type TrajectoryInspectorFact,
   type TrajectoryInspectorText,
+  type TrajectoryTimelineMode,
 } from "./trajectory";
 import styles from "./TrajectoryView.module.css";
 
@@ -60,7 +61,7 @@ export function TrajectoryView({
   const tx = useTx();
   const [query, setQuery] = useState("");
   const [follow, setFollow] = useState(true);
-  const [mode, setMode] = useState<"sequence" | "time">("sequence");
+  const [mode, setMode] = useState<TrajectoryTimelineMode>("sequence");
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
   const [selected, setSelected] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
