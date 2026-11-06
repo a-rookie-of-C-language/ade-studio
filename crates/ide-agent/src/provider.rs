@@ -19,6 +19,8 @@ pub(crate) enum Driver {
     Codex,
     /// `claude` in stream-json mode.
     Claude,
+    /// `node <cindy-bridge>` over the private v0 NDJSON protocol.
+    Cindy,
 }
 
 #[derive(Clone, Debug, PartialEq)]

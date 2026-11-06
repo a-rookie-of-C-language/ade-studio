@@ -14,7 +14,8 @@ pub(super) fn is_plan(name: &str) -> bool {
 }
 
 /// The fields of a `tool_call` for a use of tool `name` with `input`.
-pub(super) fn call_fields(name: &str, input: &Value, cwd: &Path) -> Value {
+/// Shared with the Cindy driver, so Claude-family agents show the same titles.
+pub(crate) fn call_fields(name: &str, input: &Value, cwd: &Path) -> Value {
     let s = |k: &str| input.get(k).and_then(Value::as_str).filter(|v| !v.is_empty());
     let path = s("file_path").or_else(|| s("notebook_path")).or_else(|| s("path"));
     let shown = path.map(|p| display_path(p, cwd));

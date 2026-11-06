@@ -11,6 +11,7 @@
 //!   (`{ sessionId, prompt }`: adds ACP content blocks to the running turn; fails when
 //!   no turn runs).
 
+pub(crate) mod cindy;
 pub(crate) mod claude;
 pub(crate) mod codex;
 
