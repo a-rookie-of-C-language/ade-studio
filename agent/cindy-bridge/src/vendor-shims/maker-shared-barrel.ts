@@ -12,4 +12,4 @@
  * If a future sync adds a *runtime* bare-barrel import to the Claude chain,
  * tsc will fail here — that is intentional: widen the snapshot instead.
  */
-export type { OutputLimitDetails } from "../../../third-party/cindy-agent/maker-shared/outputLimitError.js";
+export type { OutputLimitDetails } from "../../../../third-party/cindy-agent/maker-shared/outputLimitError.js";
