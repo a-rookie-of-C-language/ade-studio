@@ -595,3 +595,11 @@ describe("message index", () => {
     expect(screen.queryByRole("navigation", { name: "Message index" })).toBeNull();
   });
 });
+
+describe("session header", () => {
+  it("offers New Task from the middle session view", async () => {
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    expect(screen.getByRole("button", { name: "New Task" })).toBeInTheDocument();
+  });
+});

@@ -6,9 +6,9 @@ import { registerActions } from "@/platform/actions";
 import { EDITOR_TAB_MIME, type EditorInput } from "@/workbench/contributions";
 import { confirmChecked, showError } from "@/workbench/messages";
 import { ContextMenuHost, dragSession, hideContextMenu } from "@/ui";
-import { AgentsHeaderActions, AgentsLocationActions, AgentsView } from "./AgentsView";
+import { AgentsHeaderActions, AgentsView } from "./AgentsView";
 import { SESSION_KIND } from "./model";
-import { archiveTask, unarchiveTask, deleteTask, dockTask, openTask, setSessionLocation, useAgents } from "./store";
+import { archiveTask, unarchiveTask, deleteTask, dockTask, openTask, useAgents } from "./store";
 import { taskActions, taskMenu } from "./taskActions";
 import styles from "./Agents.module.css";
 
@@ -39,7 +39,6 @@ vi.mock("./store", async (original) => ({
   unarchiveTask: vi.fn(async () => {}),
   deleteTask: vi.fn(async () => {}),
   dockTask: vi.fn(),
-  setSessionLocation: vi.fn(),
 }));
 
 vi.mock("./SessionEditor", () => ({ SessionEditor: () => <div data-testid="docked-session" /> }));
@@ -117,7 +116,6 @@ afterEach(() => {
 function setup() {
   render(
     <>
-      <AgentsLocationActions />
       <AgentsHeaderActions />
       <AgentsView />
       <ContextMenuHost />
@@ -126,23 +124,28 @@ function setup() {
 }
 
 describe("Agents selection", () => {
+  const openHistory = () => fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
+
   it("extends and shrinks a range without opening its lead or losing selection to an editor echo", () => {
     setup();
+    openHistory();
     select("one");
     select("three", { shiftKey: true });
     expect(selectedTasks()).toEqual(["one", "two", "three"]);
-    expect(openTask).toHaveBeenCalledTimes(1);
+    expect(openTask).not.toHaveBeenCalled();
     act(() => editor.listener?.({ kind: SESSION_KIND, key: "one", data: { task: "one" } }));
     expect(selectedTasks()).toEqual(["one", "two", "three"]);
     select("two", { shiftKey: true });
     expect(selectedTasks()).toEqual(["one", "two"]);
     select("four");
     expect(selectedTasks()).toEqual(["four"]);
+    expect(openTask).not.toHaveBeenCalled();
   });
 
   it("keeps the initial active task as the anchor for repeated keyboard extension", () => {
     editor.active = { kind: SESSION_KIND, key: "one", data: { task: "one" } };
     setup();
+    openHistory();
     const tree = screen.getByRole("tree");
     fireEvent.keyDown(tree, { key: "ArrowDown", shiftKey: true });
     fireEvent.keyDown(tree, { key: "ArrowDown", shiftKey: true });
@@ -152,12 +155,13 @@ describe("Agents selection", () => {
 
   it.each(["metaKey", "ctrlKey"])("toggles individual tasks with %s", (modifier) => {
     setup();
+    openHistory();
     select("one");
     select("three", { [modifier]: true });
     expect(selectedTasks()).toEqual(["one", "three"]);
     select("three", { [modifier]: true });
     expect(selectedTasks()).toEqual(["one"]);
-    expect(openTask).toHaveBeenCalledTimes(1);
+    expect(openTask).not.toHaveBeenCalled();
   });
 });
 
@@ -166,7 +170,6 @@ describe("Agents docked view", () => {
     useAgents.setState({ docked: "one" });
     setup();
     expect(screen.getByTestId("docked-session")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Chat in Editor" })).toBeTruthy();
     expect(openTask).not.toHaveBeenCalled();
     expect(screen.queryByRole("tree", { name: "Agent tasks" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
@@ -209,21 +212,14 @@ describe("Agents docked view", () => {
     expect(screen.getByTestId("docked-session")).toBeTruthy();
   });
 
-  it("switches placement from the global Agents header", () => {
-    useAgents.setState({ docked: "one", sessionLocation: "toolWindow" });
+  it("chats with the newest session and switches it from history without docking", () => {
     setup();
-    expect(screen.queryByRole("button", { name: "Open in Editor" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Chat in Tool Window" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Chat in Editor" }));
-    expect(setSessionLocation).toHaveBeenCalledWith("editor");
-    fireEvent.click(screen.getByRole("button", { name: "Chat in Tool Window" }));
-    expect(setSessionLocation).toHaveBeenCalledWith("toolWindow");
-  });
-
-  it("opens tabs as usual without a docked conversation", () => {
-    setup();
-    expect(screen.queryByRole("button", { name: "Open in Editor" })).toBeNull();
-    select("two");
+    expect(screen.getByTestId("docked-session")).toBeTruthy();
+    expect(openTask).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
+    fireEvent.click(within(screen.getByRole("tree", { name: "Agent tasks" })).getByText("two"));
+    expect(screen.queryByRole("dialog", { name: "Agent sessions" })).toBeNull();
+    expect(actions.executeAction).toHaveBeenCalledWith("agents.openTask", "two");
     expect(openTask).toHaveBeenCalledWith("two");
     expect(dockTask).not.toHaveBeenCalled();
   });
@@ -234,6 +230,7 @@ describe("Agents bulk actions", () => {
     const tasks = [task("one", "running"), task("two"), task("three")];
     useAgents.setState({ tasks: new Map(tasks.map((t) => [t.id, t])) });
     setup();
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
     select("one");
     select("three", { shiftKey: true });
     context("two");
@@ -252,6 +249,7 @@ describe("Agents bulk actions", () => {
 
   it("right-clicking outside the selection targets only that task", async () => {
     setup();
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
     select("one");
     select("two", { shiftKey: true });
     context("four");
@@ -263,6 +261,7 @@ describe("Agents bulk actions", () => {
     const tasks = [task("one", "running"), task("two"), task("three", "archived")];
     useAgents.setState({ tasks: new Map(tasks.map((t) => [t.id, t])) });
     setup();
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
     fireEvent.doubleClick(screen.getByText("Archived"));
     select("one");
     select("three", { shiftKey: true });
@@ -275,6 +274,7 @@ describe("Agents bulk actions", () => {
     const tasks = [task("one"), task("two", "archived"), task("three", "archived")];
     useAgents.setState({ tasks: new Map(tasks.map((t) => [t.id, t])) });
     setup();
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
     fireEvent.doubleClick(screen.getByText("Archived"));
     select("one");
     select("three", { shiftKey: true });

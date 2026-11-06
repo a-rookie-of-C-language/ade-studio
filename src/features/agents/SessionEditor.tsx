@@ -336,6 +336,7 @@ function Header({
       </span>
       <Meters task={task} entries={entries} />
       {busy && <IconButton icon="stop" title="Stop" size="small" onClick={() => void cancelTask(task.id)} />}
+      <IconButton icon="plus" title={tx("New Task")} size="small" action="agents.newTask" />
       <IconButton
         icon="terminal"
         title="Open in Terminal"

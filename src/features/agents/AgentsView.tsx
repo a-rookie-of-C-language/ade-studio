@@ -1,4 +1,5 @@
-/** Agents tool window: tasks grouped by what they need from the user. */
+/** Agents tool window: a chat panel showing one conversation; the task list
+ * and external sessions live in the history popup behind the title button. */
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import clsx from "clsx";
 import type { AgentStatus as Status, AgentTask, ExternalSession } from "@/bindings";
@@ -30,22 +31,6 @@ import { showError } from "@/workbench/messages";
 
 export function AgentsHeaderActions() {
   return <IconButton icon="plus" action="agents.newTask" size="small" />;
-}
-
-export function AgentsLocationActions() {
-  const location = useAgents((s) => s.sessionLocation);
-  const tx = useTx();
-  return (
-    <div role="group" aria-label={tx("Conversation location")} className={styles.location}>
-      <IconButton
-        icon="open-in-tool-window"
-        action="agents.useToolWindow"
-        pressed={location === "toolWindow"}
-        size="small"
-      />
-      <IconButton icon="editor-only" action="agents.useEditor" pressed={location === "editor"} size="small" />
-    </div>
-  );
 }
 
 type Node = { kind: "group"; group: TaskGroup } | { kind: "task"; task: AgentTask };
@@ -192,8 +177,8 @@ export function AgentsView() {
   const unread = useAgents((s) => s.unread);
   const providers = useAgents((s) => s.providers);
   const docked = useAgents((s) => s.docked);
+  const lastTask = useAgents((s) => s.lastTask);
   const homeOpen = useAgents((s) => s.homeOpen);
-  const inline = docked !== null || homeOpen;
   const historyRef = useRef<HTMLButtonElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(["g:archived"]));
@@ -216,6 +201,19 @@ export function AgentsView() {
   );
   const roots = useMemo<Node[]>(() => groupTasks(tasks.values()).map((group) => ({ kind: "group", group })), [tasks]);
   const expanded = useMemo(() => new Set(roots.map(nodeKey).filter((k) => !collapsed.has(k))), [roots, collapsed]);
+  // Newest task id for the chat panel's fallback (docked → last opened → newest).
+  const newest = useMemo(() => {
+    let id: string | null = null;
+    let ms = -Infinity;
+    for (const t of tasks.values()) {
+      const m = t.updatedMs ?? 0;
+      if (m > ms) {
+        ms = m;
+        id = t.id;
+      }
+    }
+    return id;
+  }, [tasks]);
   // Dropping a session editor tab anywhere on the tool window docks it.
   const viewRef = useRef<HTMLDivElement>(null);
   const [tabOver, setTabOver] = useState(false);
@@ -246,7 +244,11 @@ export function AgentsView() {
     setHistoryOpen(false);
     void executeAction("agents.openTask", task);
   };
-  const dockedTitle = docked ? (tasks.get(docked)?.title ?? docked) : null;
+  // The chat panel always shows a conversation: the docked session, else the
+  // last opened, else the newest task (`null`: the new-task composer).
+  const valid = (id: string | null) => (id && tasks.has(id) ? id : null);
+  const shown = homeOpen ? null : (valid(docked) ?? valid(lastTask) ?? newest);
+  const shownTitle = shown ? (tasks.get(shown)?.title ?? shown) : null;
   const dragTask = (e: ReactPointerEvent<HTMLSpanElement>, task: string) =>
     startPointerDrag(e, e.currentTarget, { type: TASK_DRAG, payload: task });
 
@@ -271,9 +273,10 @@ export function AgentsView() {
           })
         }
         selected={selected}
-        onSelectionChange={(sel, lead) => {
+        // Picking in the history popup never switches on its own: a click (or
+        // Enter) confirms, so keyboard and range selection can browse first.
+        onSelectionChange={(sel) => {
           setSelected(sel);
-          if (!inline && sel.size === 1 && lead?.kind === "task" && sel.has(lead.task.id)) showTask(lead.task.id);
         }}
         onActivate={(n) => n.kind === "task" && showTask(n.task.id)}
         onContextMenu={(n, sel, e) => {
@@ -298,7 +301,7 @@ export function AgentsView() {
               {...tooltipAttrs(n.task.error ?? n.task.title)}
               onPointerDown={(e) => dragTask(e, n.task.id)}
               onClick={(e) => {
-                if (inline && !e.metaKey && !e.ctrlKey && !e.shiftKey) showTask(n.task.id);
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey) showTask(n.task.id);
               }}
             >
               <TaskStatusIcon status={n.task.status} />
@@ -341,63 +344,56 @@ export function AgentsView() {
   return (
     <div ref={viewRef} className={clsx(styles.view, tabOver && styles.dropTarget)}>
       <div className={styles.content}>
-        {inline && (
-          <div className={styles.docked}>
-            <div className={styles.dockedBar}>
-              <IconButton
-                ref={historyRef}
-                icon="history"
-                title="Agent sessions"
-                size="small"
-                aria-haspopup="dialog"
-                aria-expanded={historyOpen}
-                onClick={() => {
-                  setSelected(new Set(docked ? [docked] : []));
-                  setHistoryOpen((open) => !open);
+        <div className={styles.docked}>
+          <div className={styles.dockedBar}>
+            <IconButton
+              ref={historyRef}
+              icon="history"
+              title="Agent sessions"
+              size="small"
+              aria-haspopup="dialog"
+              aria-expanded={historyOpen}
+              onClick={() => {
+                setSelected(new Set(shown ? [shown] : []));
+                setHistoryOpen((open) => !open);
+              }}
+            />
+            <span
+              className={styles.dockedTitle}
+              {...tooltipAttrs(shownTitle ?? undefined)}
+              onPointerDown={(e) => shown && dragTask(e, shown)}
+            >
+              {homeOpen || !shown ? <T>New Agent Task</T> : shownTitle}
+            </span>
+          </div>
+          <div className={styles.dockedSession}>
+            {homeOpen || !shown ? (
+              <HomeEditor docked />
+            ) : (
+              <SessionEditor
+                docked
+                input={{
+                  kind: SESSION_KIND,
+                  key: sessionKey(shown),
+                  data: { task: shown, title: tasks.get(shown)?.title },
                 }}
               />
-              <span
-                className={styles.dockedTitle}
-                {...tooltipAttrs(dockedTitle ?? undefined)}
-                onPointerDown={(e) => docked && dragTask(e, docked)}
-              >
-                {homeOpen ? <T>New Agent Task</T> : dockedTitle}
-              </span>
-            </div>
-            <div className={styles.dockedSession}>
-              {homeOpen ? (
-                <HomeEditor docked />
-              ) : (
-                docked && (
-                  <SessionEditor
-                    docked
-                    input={{
-                      kind: SESSION_KIND,
-                      key: sessionKey(docked),
-                      data: { task: docked, title: tasks.get(docked)?.title },
-                    }}
-                  />
-                )
-              )}
-            </div>
+            )}
           </div>
-        )}
-        {!inline && taskList}
-        {!inline && <ExternalSessions />}
-        {inline && (
-          <Popup
-            open={historyOpen}
-            anchor={historyRef}
-            onClose={() => setHistoryOpen(false)}
-            aria-label={tx("Agent sessions")}
-            className={styles.history}
-          >
-            <div className={styles.historyTitle}>
-              <T>Agent sessions</T>
-            </div>
-            {taskList}
-          </Popup>
-        )}
+        </div>
+        <Popup
+          open={historyOpen}
+          anchor={historyRef}
+          onClose={() => setHistoryOpen(false)}
+          aria-label={tx("Agent sessions")}
+          className={styles.history}
+        >
+          <div className={styles.historyTitle}>
+            <T>Agent sessions</T>
+          </div>
+          {taskList}
+          <ExternalSessions />
+        </Popup>
       </div>
     </div>
   );

@@ -6,6 +6,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import clsx from "clsx";
 import type { AgentCommand, AgentConfigOption, AgentImage } from "@/bindings";
+// Static import on purpose: a dynamic `import()` loads the real Tauri module
+// past `vi.mock` in tests (same reason as `WelcomeView`), breaking suites
+// that mount the composer with `isTauri()` true.
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { call, commands, isTauri } from "@/platform/ipc";
 import { nativeDropPoint } from "@/platform/nativeDrop";
 import { invokeLocal } from "@/platform/tauriCore";
@@ -220,37 +224,35 @@ export function Composer(props: ComposerProps) {
     if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     let disposed = false;
-    void import("@tauri-apps/api/webview").then(({ getCurrentWebview }) =>
-      getCurrentWebview()
-        .onDragDropEvent((event) => {
-          const p = event.payload;
-          if (p.type !== "drop" || !p.paths.length) return;
-          const box = boxRef.current?.getBoundingClientRect();
-          const { x, y } = nativeDropPoint(p.position);
-          if (!box || x < box.left || x > box.right || y < box.top || y > box.bottom) return;
-          const refs: FileRef[] = [];
-          for (const path of p.paths) {
-            if (IMAGE_EXTENSIONS.test(path)) {
-              void invokeLocal<string>("fs_read_image", { path }).then((url) => {
-                const image = imageFromDataUrl(url, basename(path));
-                if (image) addImages([image]);
-              });
-            } else {
-              refs.push({ path, rel: path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path });
-            }
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const p = event.payload;
+        if (p.type !== "drop" || !p.paths.length) return;
+        const box = boxRef.current?.getBoundingClientRect();
+        const { x, y } = nativeDropPoint(p.position);
+        if (!box || x < box.left || x > box.right || y < box.top || y > box.bottom) return;
+        const refs: FileRef[] = [];
+        for (const path of p.paths) {
+          if (IMAGE_EXTENSIONS.test(path)) {
+            void invokeLocal<string>("fs_read_image", { path }).then((url) => {
+              const image = imageFromDataUrl(url, basename(path));
+              if (image) addImages([image]);
+            });
+          } else {
+            refs.push({ path, rel: path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path });
           }
-          if (refs.length) {
-            const current = composerDraft(id);
-            const mentions = refs.map((r) => mentionOf(r.rel)).join(" ");
-            const glue = current.text && !/\s$/.test(current.text) ? " " : "";
-            updateComposer(id, { text: `${current.text}${glue}${mentions} `, files: [...current.files, ...refs] });
-          }
-        })
-        .then((u) => {
-          if (disposed) u();
-          else unlisten = u;
-        }),
-    );
+        }
+        if (refs.length) {
+          const current = composerDraft(id);
+          const mentions = refs.map((r) => mentionOf(r.rel)).join(" ");
+          const glue = current.text && !/\s$/.test(current.text) ? " " : "";
+          updateComposer(id, { text: `${current.text}${glue}${mentions} `, files: [...current.files, ...refs] });
+        }
+      })
+      .then((u) => {
+        if (disposed) u();
+        else unlisten = u;
+      });
     return () => {
       disposed = true;
       unlisten?.();

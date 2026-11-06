@@ -29,6 +29,7 @@ const backend = vi.hoisted(() => ({
   openInput: vi.fn(),
   closeInput: vi.fn(),
   showToolWindow: vi.fn(),
+  hideToolWindow: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", async (original) => ({
@@ -36,6 +37,9 @@ vi.mock("@tauri-apps/api/core", async (original) => ({
   Channel: class {
     onmessage = () => {};
   },
+}));
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: () => Promise.resolve(() => {}) }),
 }));
 vi.mock("@/platform/ipc", async (original) => ({
   ...(await original<typeof import("@/platform/ipc")>()),
@@ -47,6 +51,10 @@ vi.mock("@/platform/ipc", async (original) => ({
     },
     agentProviders: async () => ({ status: "ok", data: [] }),
     agentChanges: async () => ({ status: "ok", data: [] }),
+    agentEntries: async () => ({ status: "ok", data: [] }),
+    vcsBranchInfo: async () => ({ status: "ok", data: { head: "main" } }),
+    agentCommands: async () => ({ status: "ok", data: [] }),
+    agentModels: async () => ({ status: "ok", data: [] }),
   },
 }));
 vi.mock("@/workbench/contributions", async (original) => ({
@@ -57,7 +65,7 @@ vi.mock("@/workbench/contributions", async (original) => ({
     activeInput: () => backend.active,
     openTabs: () => backend.tabs,
   }),
-  toolWindowService: () => ({ show: backend.showToolWindow }),
+  toolWindowService: () => ({ show: backend.showToolWindow, hide: backend.hideToolWindow }),
   notifications: () => ({ notify: backend.notify }),
 }));
 
@@ -229,14 +237,17 @@ describe("agent unread activity", () => {
 });
 
 describe("agent unread indicators", () => {
-  it("shows a dot on the task and a clickable status count even when all tasks are idle", () => {
+  it("shows a dot on the task in history and a clickable status count even when all tasks are idle", () => {
     emit({ type: "task", task: task("one", "ready") });
+    // The sidebar chats with "two", so "one" stays a background task with its unread dot.
+    useAgents.setState({ lastTask: "two" });
     render(
       <>
         <AgentsView />
         <AgentsStatus />
       </>,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Agent sessions" }));
     expect(screen.getByRole("img", { name: "Unread" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "1 unread" }));
     expect(backend.openInput).toHaveBeenCalledWith(expect.objectContaining({ data: { task: "one", title: "one" } }), {
@@ -284,6 +295,7 @@ describe("docking a conversation in the tool window", () => {
       expect.objectContaining({ kind: "agent-session", key: "agent:one" }),
       { focus: true },
     );
+    expect(backend.hideToolWindow).toHaveBeenCalledWith("agents");
   });
 
   it("undocks a removed task", async () => {
@@ -302,6 +314,7 @@ describe("docking a conversation in the tool window", () => {
       expect.objectContaining({ kind: "agent-session", key: "agent:two" }),
       { focus: true },
     );
+    expect(backend.hideToolWindow).toHaveBeenCalledWith("agents");
     backend.openInput.mockClear();
     act(() => dockTask("one"));
     act(() => dropOnEditor({ type: TASK_DRAG, payload: "one" }));
@@ -311,6 +324,7 @@ describe("docking a conversation in the tool window", () => {
       expect.objectContaining({ kind: "agent-session", key: "agent:one" }),
       { focus: true },
     );
+    expect(backend.hideToolWindow).toHaveBeenCalledWith("agents");
     dispose();
   });
 

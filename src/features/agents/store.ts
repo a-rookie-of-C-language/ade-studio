@@ -666,6 +666,8 @@ export function dockTask(task: string) {
 
 export function undockTask() {
   setSessionLocation("editor");
+  // The conversation moved to the center: close the panel it came from.
+  toolWindowService().hide(TOOL_WINDOW);
 }
 
 /** An explicit editor drop also updates where subsequent sessions open. */
@@ -673,6 +675,8 @@ export function openTaskInEditorLocation(task: string) {
   saveSessionLocation("editor");
   useAgents.setState({ docked: null, homeOpen: false });
   openTask(task);
+  // The session now lives in the center: close the sidebar panel behind it.
+  toolWindowService().hide(TOOL_WINDOW);
 }
 
 /** Opens the New Task page; `prompt` pre-fills it. */
