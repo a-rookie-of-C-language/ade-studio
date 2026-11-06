@@ -5,6 +5,7 @@ import { create } from "zustand";
 import type {
   AgentChange,
   AgentCommand,
+  AgentConfigOption,
   AgentEntry,
   AgentEvent,
   ExternalSession,
@@ -410,6 +411,31 @@ export async function refreshProviders() {
 }
 
 export const NO_COMMANDS: readonly AgentCommand[] = [];
+
+/**
+ * Session settings for the pickers on the New Task page: what the agent's
+ * session-free discovery lists (fetched on change), or what it offered last
+ * session (`offered`) until that arrives. Empty before either is known.
+ */
+export function useAgentOptions(
+  provider: string | undefined,
+  offered: readonly AgentConfigOption[],
+): readonly AgentConfigOption[] {
+  const [found, setFound] = useState<{ for: unknown[]; list: readonly AgentConfigOption[] } | null>(null);
+  useEffect(() => {
+    if (!provider || !isTauri()) return;
+    let alive = true;
+    call(commands.agentModels(provider))
+      .then((list) => alive && setFound({ for: [provider], list }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [provider]);
+  // Until discovery for this provider returns, what the last session offered.
+  const current = found && found.for[0] === provider;
+  return current ? found.list : offered;
+}
 
 /**
  * Slash commands to complete: what the agent offered (`offered`; fetched again when it

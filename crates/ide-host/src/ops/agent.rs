@@ -5,8 +5,8 @@ use crate::Host;
 use crate::rpc::Dispatcher;
 use ide_agent::registry::{AgentRegistry, RegistryPaths};
 use ide_agent::{
-    AgentChange, AgentCommand, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider, AgentQueued, AgentTask,
-    ExternalSession, ImportExternalTask, NewAgentTask,
+    AgentChange, AgentCommand, AgentConfigOption, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider,
+    AgentQueued, AgentTask, ExternalSession, ImportExternalTask, NewAgentTask,
 };
 use ide_core::error::ErrorKind;
 use ide_core::{IdeError, IdeEvent, IdeResult, IpcPath, RequestId, SharedSink, TaskId};
@@ -179,6 +179,14 @@ pub async fn commands(
     host.project_or_default(window)?.agents.commands(&provider, task.as_deref()).await
 }
 
+/// Session settings (model, mode, effort…) `provider` advertises without a task,
+/// so the New Task page can show its pickers before the first session.
+pub async fn models(host: &Host, window: &str, provider: String) -> IdeResult<Vec<AgentConfigOption>> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.models(&provider).await
+}
+
 /// Entries of `task`'s conversation, or of its subagent `subagent`'s.
 pub fn entries(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<Vec<AgentEntry>> {
     host.project_or_default(window)?.agents.entries(&task, subagent)
@@ -321,6 +329,7 @@ pub async fn import_external(host: &Host, window: &str, request: ImportExternalT
 pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_subscribe", |c| async move { subscribe(&c.host, &c.window, c.channel("onEvent")?) });
     d.add("agent_providers", |c| async move { providers(&c.host, &c.window) });
+    d.add("agent_models", |c| async move { models(&c.host, &c.window, c.arg("provider")?).await });
     d.add("agent_set_command", |c| async move { set_command(&c.host, &c.window, c.arg("id")?, c.arg("command")?) });
     d.add("agent_set_env", |c| async move { set_env(&c.host, &c.window, c.arg("id")?, c.arg("env")?) });
     d.add("agent_registry_list", |c| async move { registry_list(&c.host, &c.window, c.arg("request")?).await });
