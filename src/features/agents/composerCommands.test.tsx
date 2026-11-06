@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { AgentCommand, AgentProvider } from "@/bindings";
+import type { AgentCommand, AgentConfigOption, AgentProvider } from "@/bindings";
 
 const agentCommands = vi.fn();
+const agentModels = vi.fn();
 const agentCreate = vi.fn();
 const vcsBranches = vi.fn();
 const vcsBranchInfo = vi.fn();
@@ -16,6 +17,7 @@ vi.mock("@/platform/ipc", async (importOriginal) => {
     commands: {
       ...real.commands,
       agentCommands: (provider: string, task: string | null) => agentCommands(provider, task),
+      agentModels: (provider: string) => agentModels(provider),
       agentCreate: (request: unknown) => agentCreate(request),
       vcsBranchInfo: (root: string | null) => vcsBranchInfo(root),
       vcsBranches: (root: string | null) => vcsBranches(root),
@@ -65,6 +67,7 @@ beforeEach(() => {
       Promise.resolve({ status: "ok", data: { head: root === "/project-b" ? "b-main" : "a-main" } }),
     );
   agentCommands.mockReset();
+  agentModels.mockReset().mockRejectedValue(new Error("no backend in tests"));
   agentCreate.mockReset().mockResolvedValue({ status: "error", error: { kind: "invalid", message: "stop here" } });
   useAgents.setState({
     providers: [claude],
@@ -149,6 +152,52 @@ describe("New Task composer commands", () => {
     expect(box).toHaveValue("/compact keep this context");
     await waitFor(() => expect(screen.queryByRole("listbox", { name: "Commands" })).toBeNull());
     expect(agentCreate).not.toHaveBeenCalled();
+  });
+
+  it("hints at the missing model pickers in the toolbar, not as an agent description", async () => {
+    agentCommands.mockResolvedValue({ status: "ok", data: [] });
+    const { container } = render(<HomeEditor />);
+    const hint = await screen.findByText("Models and modes appear after this agent's first task.");
+    // Inline in the pickers row (a span with the full text as tooltip), not a
+    // paragraph under the agent lines where it read as the agent's description.
+    expect(hint.tagName).toBe("SPAN");
+    expect(hint).toHaveAttribute("data-tooltip", "Models and modes appear after this agent's first task.");
+    expect(container.querySelector("p")).toBeNull();
+  });
+
+  it("shows the model picker instead of the hint once the agent reported models", async () => {
+    agentCommands.mockResolvedValue({ status: "ok", data: [] });
+    const model: AgentConfigOption = {
+      id: "model",
+      name: "Model",
+      description: null,
+      category: "model",
+      current: null,
+      values: [{ value: "opus", name: "Opus", description: null }],
+      via: "option",
+    };
+    useAgents.setState({ providers: [{ ...claude, config: [model] }] });
+    render(<HomeEditor />);
+    expect(await screen.findByRole("button", { name: "Model" })).toBeInTheDocument();
+    expect(screen.queryByText("Models and modes appear after this agent's first task.")).toBeNull();
+  });
+
+  it("keeps the remembered models when discovery returns nothing", async () => {
+    agentCommands.mockResolvedValue({ status: "ok", data: [] });
+    agentModels.mockResolvedValue({ status: "ok", data: [] });
+    const model: AgentConfigOption = {
+      id: "model",
+      name: "Model",
+      description: null,
+      category: "model",
+      current: null,
+      values: [{ value: "opus", name: "Opus", description: null }],
+      via: "option",
+    };
+    useAgents.setState({ providers: [{ ...claude, config: [model] }] });
+    render(<HomeEditor />);
+    expect(await screen.findByRole("button", { name: "Model" })).toBeInTheDocument();
+    expect(screen.queryByText("Models and modes appear after this agent's first task.")).toBeNull();
   });
 });
 

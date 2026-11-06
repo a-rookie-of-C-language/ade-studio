@@ -1127,6 +1127,7 @@ async fn reload_providers_updates_registry_install_clears_stale_probes_and_notif
             protocol: "ACP".into(),
             capabilities: AgentCapabilities::default(),
             auth_methods: Vec::new(),
+            models: Vec::new(),
             error: Some("copilot --acp was not found on PATH.".into()),
         },
     );
@@ -1152,6 +1153,92 @@ async fn reload_providers_updates_registry_install_clears_stale_probes_and_notif
 
     let probe = mgr.probe("copilot", false).await.unwrap();
     assert!(probe.error.is_none());
+}
+
+#[test]
+fn init_models_reads_the_initialize_reply() {
+    assert!(init_models(&json!({})).is_empty());
+    assert!(init_models(&json!({"models": [{"name": "Nameless"}]})).is_empty());
+    let models = init_models(&json!({"models": [
+        {"value": "big", "displayName": "Big", "description": "Large"},
+        {"value": "small"},
+    ]}));
+    assert_eq!(
+        models,
+        vec![
+            AgentConfigValue { value: "big".into(), name: "Big".into(), description: Some("Large".into()) },
+            AgentConfigValue { value: "small".into(), name: "small".into(), description: None },
+        ]
+    );
+}
+
+/// Answers `initialize` with a model list, like Claude's native CLI.
+struct InitModels;
+
+impl Handler for InitModels {
+    fn on_notification(&self, _method: &str, _params: Value) {}
+    fn on_request(&self, method: &str, _params: Value) -> Result<Value, (i64, String)> {
+        assert_eq!(method, "initialize");
+        Ok(json!({"protocolVersion": 1, "models": [
+            {"value": "big", "displayName": "Big"},
+            {"value": "small", "displayName": "Small"},
+        ]}))
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn models_offers_the_probe_models_before_the_first_session() {
+    let tmp = tempfile::tempdir().unwrap();
+    let agents_dir = tmp.path().join("agents");
+    std::fs::create_dir_all(&agents_dir).unwrap();
+    let fake_bin = tmp.path().join(if cfg!(windows) { "models.cmd" } else { "models" });
+    std::fs::write(&fake_bin, "").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake_bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    let servers: Arc<Mutex<Vec<Peer>>> = Arc::default();
+    let connector: Connector = {
+        let servers = servers.clone();
+        Arc::new(move |_spec, _cwd, client, _stderr| {
+            let (a, b) = duplex(1 << 20);
+            let (ar, aw) = tokio::io::split(a);
+            let (br, bw) = tokio::io::split(b);
+            servers.lock().push(Peer::connect_framed(br, bw, Arc::new(InitModels), Framing::Lines));
+            Ok(Peer::connect_framed(ar, aw, client, Framing::Lines))
+        })
+    };
+    let mgr = AgentManager::with_connector(
+        AgentPaths {
+            project_root: tmp.path().to_path_buf(),
+            store_dir: tmp.path().join("store"),
+            worktrees_dir: tmp.path().join("worktrees"),
+            models_file: tmp.path().join("models.json"),
+            custom_agents_dir: Some(agents_dir.clone()),
+            home_dir: None,
+        },
+        tokio::runtime::Handle::current(),
+        connector,
+    );
+
+    let toml = format!("name = \"Init Models\"\ncommand = {:?}\n", fake_bin.to_string_lossy());
+    std::fs::write(agents_dir.join("init-models.toml"), toml).unwrap();
+    mgr.reload_providers();
+
+    let probe = mgr.probe("init-models", false).await.unwrap();
+    assert!(probe.error.is_none());
+    assert_eq!(probe.models.len(), 2);
+
+    // The New Task page lists those before the agent ever ran.
+    let options = mgr.models("init-models").await.unwrap();
+    assert_eq!(options.len(), 1);
+    let option = &options[0];
+    assert_eq!(option.id, "model");
+    assert_eq!(option.category.as_deref(), Some("model"));
+    assert_eq!(option.values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), vec!["big", "small"]);
+    assert_eq!(option.values[0].name, "Big");
 }
 
 #[tokio::test(flavor = "multi_thread")]

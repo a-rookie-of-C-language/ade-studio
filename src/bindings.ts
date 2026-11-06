@@ -1536,6 +1536,11 @@ export type AgentProbe = {
 	capabilities: AgentCapabilities,
 	/**  Ways to sign in it offers. */
 	authMethods: string[],
+	/**
+	 *  Models it lists in its `initialize` reply (Claude's native CLI does);
+	 *  empty for agents that only offer models once a session runs.
+	 */
+	models: AgentConfigValue[],
 	/**  Why it could not be started. */
 	error: string | null,
 };

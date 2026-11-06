@@ -67,6 +67,19 @@
   color: var(--danger);
 }
 
+/* Where the model/mode pickers will appear once the agent reported them. */
+.pickerHint {
+  min-width: 0;
+  flex: 1 1 auto;
+  align-self: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+  font-size: var(--fs-small);
+  color: var(--fg-subtle);
+}
+
 .docked {
   justify-content: flex-end;
   padding: 16px 12px 12px;

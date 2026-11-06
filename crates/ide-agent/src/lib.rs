@@ -413,26 +413,20 @@ impl AgentManager {
             return Err(IdeError::unavailable(format!("{} is not installed", spec.name)));
         }
         match &spec.model_discovery {
-            provider::ModelDiscovery::None => Ok(Vec::new()),
+            provider::ModelDiscovery::None => {
+                // Some agents (Claude's native CLI) list their models in the
+                // `initialize` reply, which the probe already fetches and caches:
+                // offer those before the first session instead of nothing.
+                let probe = self.probe(provider, false).await?;
+                Ok(model_option(probe.models))
+            }
             provider::ModelDiscovery::Command { args } => {
                 let command = spec.resolve_command();
                 let args = args.clone();
                 let env = spec.env.clone();
                 let output = blocking(move || run_listing(&command, &args, &env)).await?;
                 let values = parse_model_listing(&output);
-                Ok(if values.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![AgentConfigOption {
-                        id: "model".to_owned(),
-                        name: "Model".to_owned(),
-                        description: None,
-                        category: Some("model".to_owned()),
-                        current: values.first().map(|v| v.value.clone()),
-                        values,
-                        via: AgentConfigVia::Option,
-                    }]
-                })
+                Ok(model_option(values))
             }
             provider::ModelDiscovery::Session => self.discover_models_in_session(&spec).await,
         }
@@ -964,6 +958,7 @@ impl AgentManager {
             },
             capabilities: AgentCapabilities::default(),
             auth_methods: Vec::new(),
+            models: Vec::new(),
             error: None,
         };
         let stderr: Arc<Mutex<Vec<String>>> = Arc::default();
@@ -1007,6 +1002,7 @@ impl AgentManager {
                     .iter()
                     .filter_map(|m| m.get("name").or_else(|| m.get("id")).and_then(Value::as_str).map(str::to_owned))
                     .collect();
+                probe.models = init_models(&reply);
             }
             Err(e) => probe.error = Some(e),
         }
@@ -2140,6 +2136,24 @@ fn parse_model_listing(stdout: &str) -> Vec<AgentConfigValue> {
             AgentConfigValue { value, name: name.to_owned(), description }
         })
         .collect()
+}
+
+/// Wraps session-free model choices as the `model` picker option; empty when
+/// the agent listed none.
+fn model_option(values: Vec<AgentConfigValue>) -> Vec<AgentConfigOption> {
+    if values.is_empty() {
+        Vec::new()
+    } else {
+        vec![AgentConfigOption {
+            id: "model".to_owned(),
+            name: "Model".to_owned(),
+            description: None,
+            category: Some("model".to_owned()),
+            current: values.first().map(|v| v.value.clone()),
+            values,
+            via: AgentConfigVia::Option,
+        }]
+    }
 }
 
 fn file_name(path: &Path) -> String {

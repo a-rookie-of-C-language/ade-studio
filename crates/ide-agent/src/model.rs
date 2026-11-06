@@ -2,6 +2,7 @@
 
 use ide_core::IpcPath;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use specta::Type;
 use std::collections::BTreeMap;
 
@@ -558,8 +559,32 @@ pub struct AgentProbe {
     pub capabilities: AgentCapabilities,
     /// Ways to sign in it offers.
     pub auth_methods: Vec<String>,
+    /// Models it lists in its `initialize` reply (Claude's native CLI does);
+    /// empty for agents that only offer models once a session runs.
+    pub models: Vec<AgentConfigValue>,
     /// Why it could not be started.
     pub error: Option<String>,
+}
+
+/// Models from an agent's `initialize` reply: `models: [{value, displayName?,
+/// description?}]`, as Claude's native CLI reports. Empty when the reply
+/// lists none (agents whose models only materialize per session).
+pub fn init_models(reply: &Value) -> Vec<AgentConfigValue> {
+    reply
+        .get("models")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let text = |k: &str| m.get(k).and_then(Value::as_str).map(str::to_owned);
+            let value = text("value")?;
+            Some(AgentConfigValue {
+                name: text("displayName").or_else(|| text("name")).unwrap_or_else(|| value.clone()),
+                description: text("description"),
+                value,
+            })
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]

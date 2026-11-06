@@ -432,9 +432,11 @@ export function useAgentOptions(
       alive = false;
     };
   }, [provider]);
-  // Until discovery for this provider returns, what the last session offered.
+  // Discovery wins when it lists anything; an empty discovery (native agents
+  // before their first session) keeps what the last session offered, so the
+  // remembered models don't vanish behind the "after the first task" hint.
   const current = found && found.for[0] === provider;
-  return current ? found.list : offered;
+  return current && found.list.length ? found.list : offered;
 }
 
 /**

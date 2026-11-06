@@ -141,7 +141,20 @@ export function HomeEditor({
                   id === ADD_AGENT ? void executeAction("agents.addAgent") : updateDraft({ provider: id, config: {} })
                 }
               />
-              <ConfigPickers config={options} values={draft.config} onChange={setOption} />
+              {options.length ? (
+                <ConfigPickers config={options} values={draft.config} onChange={setOption} />
+              ) : (
+                // In the pickers' own slot, so it can't read as the agent's description.
+                provider?.installed &&
+                !error && (
+                  <span
+                    className={styles.pickerHint}
+                    {...tooltipAttrs(tx("Models and modes appear after this agent's first task."))}
+                  >
+                    <T>Models and modes appear after this agent's first task.</T>
+                  </span>
+                )
+              )}
             </>
           }
           actions={
@@ -251,17 +264,10 @@ export function HomeEditor({
               : [probe.name, probe.version, probe.protocol].filter(Boolean).join(" · ")}
           </p>
         )}
-        {(error || (provider && !provider.installed) || (provider && !options.length)) && (
-          <p
-            className={error || !provider?.installed ? styles.warning : styles.note}
-            role={error ? "alert" : undefined}
-          >
+        {(error || (provider && !provider.installed)) && (
+          <p className={styles.warning} role={error ? "alert" : undefined}>
             {error ??
-              (provider && !provider.installed ? (
-                txTemplate(`${provider.command} was not found on PATH`)
-              ) : (
-                <T>Models and modes appear after this agent's first task.</T>
-              ))}
+              (provider && !provider.installed ? txTemplate(`${provider.command} was not found on PATH`) : null)}
           </p>
         )}
       </div>
