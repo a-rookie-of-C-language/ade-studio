@@ -98,6 +98,9 @@ plain `git merge upstream/main`, `rebase`, or `cherry-pick`.
   tests and their fixtures/snapshots — not just the failing test file. A test that
   cannot compile against local libs (`*_tests`, versioned `with:` maps, changed
   function arities) always means its feature's lib changes are missing.
+  Compile-green is not enough: a kept test must also pass unmodified. If it fails on
+  behaviour the local tree lacks (e.g. docker run targets fall through to SSH remotes
+  locally), the test is dangling too — remove it, don't reimplement the feature.
 - Delete the temp `sync` branch when done so it can never be pushed (it contains
   upstream history and metadata).
 
