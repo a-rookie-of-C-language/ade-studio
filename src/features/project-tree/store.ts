@@ -41,7 +41,7 @@ export interface ViewOptions extends TreeOptions {
   autoscrollFromSource: boolean;
   /** Open the selected file while navigating the tree (preview, no focus change). */
   autoscrollToSource: boolean;
-  /** Single click opens files (as regular tabs). */
+  /** Single click opens files (as regular tabs). On by default: single click opens, double click / Enter focuses. */
   singleClickOpen: boolean;
   /** Single click on a folder row expands / collapses it. */
   singleClickExpand: boolean;
@@ -55,7 +55,7 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   ...DEFAULT_TREE_OPTIONS,
   autoscrollFromSource: false,
   autoscrollToSource: false,
-  singleClickOpen: false,
+  singleClickOpen: true,
   singleClickExpand: false,
   // IDEA's "Enable Preview Tab" is off by default.
   previewTab: false,

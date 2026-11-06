@@ -203,10 +203,20 @@ describe("ProjectView", () => {
     }
   });
 
-  it("opens files on double click and previews on single click only when enabled", async () => {
+  it("opens files on single click by default, double click focuses", async () => {
     const { row, rows } = setup();
     await waitFor(() => expect(rows()).toContain("README.md"));
     const content = row("README.md").querySelector("[data-project-path]")!;
+    // Single click opens by default (regular tab, tree keeps focus).
+    fireEvent.click(content, { detail: 1 });
+    expect(openFile).toHaveBeenLastCalledWith("/w/acme/README.md", { preview: undefined, focus: false });
+    openFile.mockClear();
+    // Double click / Enter still focuses the editor.
+    fireEvent.doubleClick(row("README.md"));
+    expect(openFile).toHaveBeenLastCalledWith("/w/acme/README.md", { preview: undefined, focus: true });
+    // Opting out restores the old double-click-only behaviour.
+    act(() => setViewOption("singleClickOpen", false));
+    openFile.mockClear();
     fireEvent.click(content, { detail: 1 });
     expect(openFile).not.toHaveBeenCalled();
     fireEvent.doubleClick(row("README.md"));
@@ -217,7 +227,10 @@ describe("ProjectView", () => {
     openFile.mockClear();
     fireEvent.click(content, { detail: 3 });
     expect(openFile).not.toHaveBeenCalled();
-    act(() => setViewOption("previewTab", false));
+    act(() => {
+      setViewOption("previewTab", false);
+      setViewOption("singleClickOpen", true);
+    });
   });
 
   it("expands and collapses folders on single click only when enabled", async () => {
@@ -563,6 +576,11 @@ describe("Show Members", () => {
       APP,
       expect.objectContaining({ focus: true, selection: expect.objectContaining({ line: 10 }) }),
     );
+    act(() => {
+      setViewOption("previewTab", false);
+      setViewOption("singleClickOpen", true);
+      setViewOption("showMembers", false);
+    });
   });
 
   it("refreshes once per editor save and defers collapsed or disabled outlines", async () => {
