@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentEntry } from "@/bindings";
 import {
   buildTrajectory,
+  describeTrajectoryRecord,
   buildTrajectorySpans,
   buildSequenceSpans,
   matchTrajectoryEntry,
@@ -30,6 +31,18 @@ const tool = (title: string): AgentEntry => ({
   locations: [],
   output: null,
   diffs: [],
+});
+const timedTool = (title: string, startedMs: number, endedMs: number | null): AgentEntry => ({
+  type: "tool",
+  id: title,
+  title,
+  kind: "read",
+  status: endedMs == null ? "running" : "completed",
+  locations: [],
+  output: null,
+  diffs: [],
+  startedMs,
+  endedMs,
 });
 
 describe("buildTrajectory", () => {
@@ -109,6 +122,34 @@ describe("spans and domain", () => {
     expect(spans[1]!.turn).toBe(0);
     expect(spans[1]!.endMs).toBeNull();
     expect(trajectoryDomain(spans, 5000)).toEqual({ start: 1000, end: 5000 });
+  });
+
+  it("spans timed tool calls with their ledger index", () => {
+    const entries: AgentEntry[] = [
+      user("a", 1000, 9000),
+      timedTool("read x", 1500, 2500),
+      tool("untimed"),
+      {
+        type: "subagent",
+        id: "child",
+        title: "Explore",
+        description: null,
+        status: "running",
+        error: null,
+        prompt: "look",
+        reply: null,
+        tools: 2,
+        activity: "reading",
+        startedMs: 3000,
+        endedMs: null,
+        cancellable: true,
+      },
+    ];
+    const { turns } = buildTrajectory(entries);
+    const spans = buildTrajectorySpans(entries, turns);
+    expect(spans.map((s) => s.key)).toEqual(["turn-0", "tool-1", "subagent-child"]);
+    expect(spans[1]).toMatchObject({ kind: "tool", turn: 0, index: 1, startMs: 1500, endMs: 2500 });
+    expect(trajectoryDomain(spans, 9000)).toEqual({ start: 1000, end: 9000 });
   });
 
   it("has no domain without timed records", () => {
@@ -267,5 +308,102 @@ describe("sequence spans", () => {
     };
     expect(matchTrajectoryEntry(entry, "lexer")).toBe(true);
     expect(matchTrajectoryEntry(entry, "lexer missing")).toBe(false);
+  });
+});
+
+describe("describeTrajectoryRecord", () => {
+  it("details a timed tool call with locations and diffs", () => {
+    const entry: AgentEntry = {
+      type: "tool",
+      id: "t1",
+      title: "edit lexer",
+      kind: "edit",
+      status: "completed",
+      locations: ["src/lexer.ts"],
+      output: "patched",
+      diffs: [{ path: "src/lexer.ts", added: 3, removed: 1 }],
+      startedMs: 2000,
+      endedMs: 8000,
+    };
+    expect(describeTrajectoryRecord(entry)).toEqual({
+      kind: "tool",
+      title: "edit lexer",
+      status: "completed",
+      startMs: 2000,
+      endMs: 8000,
+      durationMs: 6000,
+      facts: [
+        { key: "kind", value: "edit" },
+        { key: "locations", value: "src/lexer.ts" },
+        { key: "changes", value: "+3 -1 src/lexer.ts" },
+      ],
+      texts: [{ key: "output", format: "pre", text: "patched" }],
+    });
+  });
+
+  it("leaves running records open-ended", () => {
+    const detail = describeTrajectoryRecord(timedTool("read x", 1500, null));
+    expect(detail.startMs).toBe(1500);
+    expect(detail.endMs).toBeNull();
+    expect(detail.durationMs).toBeNull();
+    expect(detail.status).toBe("running");
+    expect(detail.texts).toEqual([]);
+  });
+
+  it("details user turns, subagents and permissions", () => {
+    const turn = describeTrajectoryRecord(user("go", 1000, 5000));
+    expect(turn.startMs).toBe(1000);
+    expect(turn.endMs).toBe(5000);
+    expect(turn.durationMs).toBe(4000);
+    expect(turn.texts).toEqual([{ key: "text", format: "plain", text: "go" }]);
+
+    const child = describeTrajectoryRecord({
+      type: "subagent",
+      id: "c",
+      title: null,
+      description: "Explore",
+      status: "done",
+      error: null,
+      prompt: "look",
+      reply: "**found**",
+      tools: 2,
+      activity: "reading",
+      startedMs: 1100,
+      endedMs: 1900,
+      cancellable: false,
+    });
+    expect(child.title).toBe("Explore");
+    expect(child.facts).toEqual([
+      { key: "calls", value: "2" },
+      { key: "activity", value: "reading" },
+    ]);
+    expect(child.texts).toEqual([
+      { key: "prompt", format: "plain", text: "look" },
+      { key: "reply", format: "markdown", text: "**found**" },
+    ]);
+
+    const pending = describeTrajectoryRecord({ type: "permission", id: 7, title: "Run?", options: [], chosen: null });
+    expect(pending.facts).toEqual([]);
+    const chosen = describeTrajectoryRecord({
+      type: "permission",
+      id: 7,
+      title: "Run?",
+      options: [{ id: "a", name: "Allow once", kind: "allow_once" }],
+      chosen: "Allow once",
+    });
+    expect(chosen.facts).toEqual([
+      { key: "choice", value: "Allow once" },
+      { key: "options", value: "Allow once" },
+    ]);
+  });
+
+  it("renders agent replies as markdown and plans as plain text", () => {
+    expect(describeTrajectoryRecord({ type: "agent", text: "**hi**" }).texts).toEqual([
+      { key: "text", format: "markdown", text: "**hi**" },
+    ]);
+    expect(describeTrajectoryRecord({ type: "agent", text: "" }).texts).toEqual([]);
+    expect(describeTrajectoryRecord({ type: "plan", items: [{ content: "x", status: "pending" }] }).texts).toEqual([
+      { key: "text", format: "plain", text: "[pending] x" },
+    ]);
   });
 });

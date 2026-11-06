@@ -158,18 +158,65 @@ export async function refreshConnection(): Promise<void> {
   if (!isTauri()) return;
   const seq = ++checkSeq;
   useGhRepository.setState({ checking: true });
-  let availability: GhAvailability;
   const found = await projectGitHubRemotes();
   if (seq !== checkSeq) return;
+  await finishRefresh(found, projectRoot(), seq);
+}
+
+/**
+ * Connects an explicit local root (Cowork has no open project, so there are
+ * no project repositories to scan): that root's GitHub remotes, then the same
+ * auto-connect as `refreshConnection`. The saved choice is kept per root.
+ *
+ * When the root has no GitHub remote, gh is asked in the root itself (not the
+ * backend's fallback directory), so its answer is about the task's directory.
+ */
+export async function refreshConnectionForRoot(root: string): Promise<void> {
+  if (!isTauri()) return;
+  const seq = ++checkSeq;
+  useGhRepository.setState({ checking: true });
+  // Cowork windows have no project, so `vcsRemotes` only sees repositories
+  // opened as an external log: open the task's root first (a no-op when it is
+  // already open, an error when it is not a git worktree at all).
+  const opened = await call(commands.vcsOpenExternalLog(root)).catch(() => null);
+  const at = opened ? String(opened) : root;
+  let remotes: Remote[];
+  try {
+    remotes = await call(commands.vcsRemotes(at));
+  } catch (e) {
+    // Not a git checkout at all: gh has nothing to answer about this directory.
+    if (seq !== checkSeq) return;
+    useGhRepository.setState({
+      availability: { kind: "notGitHub", message: `${at}: ${errorMessage(e)}` },
+      remotes: [],
+      defaultRemote: null,
+      checking: false,
+    });
+    disconnect({ forget: false });
+    return;
+  }
+  if (seq !== checkSeq) return;
+  await finishRefresh({ remotes: githubRemotes(remotes, at), all: new Map([[at, remotes]]) }, at, seq, at);
+}
+
+async function finishRefresh(
+  found: { remotes: GHRemote[]; all: Map<string | null, Remote[]> },
+  selectionRoot: string | null,
+  seq: number,
+  probeFallback: string | null = null,
+): Promise<void> {
+  let availability: GhAvailability;
   const current = useGhRepository.getState().connection?.coordinates ?? null;
-  const saved = parseNameWithOwner(loadSelection(projectRoot()));
+  const saved = parseNameWithOwner(loadSelection(selectionRoot));
   // gh resolves its repository in a local one; ask in the one likely to be connected.
   const probe =
     (
       found.remotes.find((r) => sameRepository(r, current)) ??
       found.remotes.find((r) => sameRepository(r, saved)) ??
       found.remotes[0]
-    )?.root ?? null;
+    )?.root ??
+    probeFallback ??
+    null;
   try {
     availability = await call(commands.ghAvailability(probe));
   } catch (e) {

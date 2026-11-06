@@ -127,3 +127,57 @@
 .errorBody {
   overflow-wrap: anywhere;
 }
+
+/* Session sidecar card (Cowork): the context card's look, a bounded list. */
+.sidecar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-popup);
+  background: var(--bg-elev);
+  padding: 10px 12px 12px;
+}
+
+.sidecarHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidecarTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.sidecarRepo {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-subtle);
+  font-weight: 400;
+  font-size: var(--fs-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidecarHead > button:last-child {
+  margin-left: auto;
+  flex: none;
+}
+
+.sidecarBody {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 320px;
+}
+
+.sidecarHint {
+  color: var(--fg-subtle);
+  font-size: var(--fs-small);
+  overflow-wrap: anywhere;
+}

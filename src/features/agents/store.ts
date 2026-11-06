@@ -5,8 +5,10 @@ import { create } from "zustand";
 import type {
   AgentChange,
   AgentCommand,
+  AgentConfigOption,
   AgentEntry,
   AgentEvent,
+  ExternalSession,
   AgentImage,
   AgentLimit,
   AgentProvider,
@@ -79,6 +81,10 @@ interface AgentsState {
   homeOpen: boolean;
   /** Task shown inline in the Cowork home when no project is open (Welcome has no editor tabs). */
   coworkTask: string | null;
+  /** Sessions created outside OpenIDEA (another Codex or Claude client), newest first. */
+  external: ExternalSession[];
+  /** Why the external sessions could not be loaded. */
+  externalError: string | null;
 }
 
 const DRAFT_KEY = "openidea.agents.draft.v2";
@@ -134,6 +140,8 @@ export const useAgents = create<AgentsState>(() => ({
   homeOpen: false,
   coworkTask: null,
   scrollPositions: new Map(),
+  external: [],
+  externalError: null,
 }));
 
 export function updateDraft(patch: Partial<Draft>) {
@@ -218,6 +226,7 @@ export async function connect(): Promise<void> {
     changes: new Map(),
     providers,
   });
+  void refreshExternal();
   // Restored tabs of tasks deleted meanwhile close, like editors of deleted files.
   const editors = editorService();
   for (const t of editors.openTabs?.() ?? []) {
@@ -241,7 +250,40 @@ export function disconnect() {
     homeOpen: false,
     coworkTask: null,
     scrollPositions: new Map(),
+    external: [],
+    externalError: null,
   });
+}
+
+/** Lists sessions created outside OpenIDEA (another Codex or Claude client). */
+export async function refreshExternal(provider?: string): Promise<void> {
+  if (!isTauri()) return;
+  const gen = generation;
+  try {
+    const sessions = await call(commands.agentExternalSessions(provider ?? null));
+    if (gen === generation) useAgents.setState({ external: sessions, externalError: null });
+  } catch (e) {
+    if (gen === generation) useAgents.setState({ externalError: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Imports an external session as a task of the project and resumes it under its own
+ * session id. Importing the same session twice returns the first task.
+ */
+export async function importExternal(session: ExternalSession): Promise<AgentTask> {
+  const projectRoot = useProject.getState().project?.root ?? null;
+  const task = await call(
+    commands.agentImportExternal({
+      provider: session.provider,
+      sessionId: session.sessionId,
+      title: session.title,
+      cwd: session.cwd,
+      projectRoot,
+    }),
+  );
+  void refreshExternal();
+  return task;
 }
 
 function onEvent(e: AgentEvent) {
@@ -369,6 +411,31 @@ export async function refreshProviders() {
 }
 
 export const NO_COMMANDS: readonly AgentCommand[] = [];
+
+/**
+ * Session settings for the pickers on the New Task page: what the agent's
+ * session-free discovery lists (fetched on change), or what it offered last
+ * session (`offered`) until that arrives. Empty before either is known.
+ */
+export function useAgentOptions(
+  provider: string | undefined,
+  offered: readonly AgentConfigOption[],
+): readonly AgentConfigOption[] {
+  const [found, setFound] = useState<{ for: unknown[]; list: readonly AgentConfigOption[] } | null>(null);
+  useEffect(() => {
+    if (!provider || !isTauri()) return;
+    let alive = true;
+    call(commands.agentModels(provider))
+      .then((list) => alive && setFound({ for: [provider], list }))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [provider]);
+  // Until discovery for this provider returns, what the last session offered.
+  const current = found && found.for[0] === provider;
+  return current ? found.list : offered;
+}
 
 /**
  * Slash commands to complete: what the agent offered (`offered`; fetched again when it
@@ -516,6 +583,12 @@ export async function startTask(
       config: Object.entries(config).map(([id, value]) => ({ id, value })),
       isolation,
       base: isolation === "worktree" ? draft.base : null,
+      // Idempotency key: a retried click replays to the first task instead of
+      // starting a duplicate (the backend returns it on the launch receipt).
+      operationId:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`,
     }),
   );
   // Its events can arrive before this reply: keep the newer state they carried.

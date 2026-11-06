@@ -8,6 +8,7 @@ pub mod environment;
 mod formatter;
 mod java_runtime;
 mod kotlin_bridge;
+pub mod mobile;
 pub mod notebook;
 pub mod ops;
 pub mod plugins;

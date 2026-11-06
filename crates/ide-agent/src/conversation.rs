@@ -107,7 +107,7 @@ impl Conversation {
                 out.push((parent, index));
                 if stopped && let Some(child) = self.timeline_mut(&Some(id.to_owned())) {
                     let id = Some(id.to_owned());
-                    out.extend(child.end_turn(None).into_iter().map(|i| (id.clone(), i)));
+                    out.extend(child.end_turn(Some(now)).into_iter().map(|i| (id.clone(), i)));
                 }
             }
             "session_message" | "session_message_chunk" => {
@@ -135,7 +135,7 @@ impl Conversation {
             }
             _ => {
                 let Some(timeline) = self.timeline_mut(&owner) else { return out };
-                out.extend(timeline.apply(update).changed.into_iter().map(|i| (owner.clone(), i)));
+                out.extend(timeline.apply(update, now).changed.into_iter().map(|i| (owner.clone(), i)));
                 if let Some(id) = owner.as_deref()
                     && matches!(kind, "tool_call" | "tool_call_update")
                 {
@@ -176,11 +176,11 @@ impl Conversation {
 
     /// Settles everything left open once the agent is gone, subagents included.
     pub fn settle(&mut self, now: f64) -> Vec<(Session, usize)> {
-        let mut out: Vec<(Session, usize)> = self.main.end_turn(None).into_iter().map(|i| (None, i)).collect();
+        let mut out: Vec<(Session, usize)> = self.main.end_turn(Some(now)).into_iter().map(|i| (None, i)).collect();
         out.extend(self.main.stop_subagents(now).into_iter().map(|i| (None, i)));
         for s in &mut self.subagents {
             let id = Some(s.id.clone());
-            let mut changed = s.timeline.end_turn(None);
+            let mut changed = s.timeline.end_turn(Some(now));
             changed.extend(s.timeline.stop_subagents(now));
             out.extend(changed.into_iter().map(|i| (id.clone(), i)));
         }
@@ -235,6 +235,10 @@ mod tests {
         let changed = c.apply(Some("root"), &done, 20.0);
         // Its tool calls left open are settled when it stops.
         assert_eq!(changed, vec![(None, 0), (sub.clone(), 2)]);
+        assert!(matches!(
+            card(&c, &sub, 2),
+            AgentEntry::Tool { status: AgentToolStatus::Failed, started_ms: Some(12.0), ended_ms: Some(20.0), .. }
+        ));
         let reply = json!({"sessionUpdate": "session_message", "messageId": "toolu_1:reply", "senderSessionId": "child",
             "recipientSessionId": "root", "content": [{"type": "text", "text": "In "}, {"type": "text", "text": "parser.rs"}]});
         c.apply(Some("root"), &reply, 20.0);
@@ -288,7 +292,13 @@ mod tests {
         );
         let settled = c.settle(9.0);
         assert_eq!(settled, vec![(None, 0), (a.clone(), 1)]);
-        assert!(matches!(c.main.entries[0], AgentEntry::Subagent { status: AgentSubagentStatus::Cancelled, .. }));
-        assert!(matches!(card(&c, &a, 1), AgentEntry::Tool { status: AgentToolStatus::Failed, .. }));
+        assert!(matches!(
+            c.main.entries[0],
+            AgentEntry::Subagent { status: AgentSubagentStatus::Cancelled, ended_ms: Some(9.0), .. }
+        ));
+        assert!(matches!(
+            card(&c, &a, 1),
+            AgentEntry::Tool { status: AgentToolStatus::Failed, started_ms: Some(4.0), ended_ms: Some(9.0), .. }
+        ));
     }
 }

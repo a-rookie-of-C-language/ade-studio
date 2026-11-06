@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "OpenIDEA Mobile",
+    "slug": "openidea-mobile",
+    "scheme": "openidea",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-secure-store"],
+    "ios": { "bundleIdentifier": "dev.openidea.mobile" },
+    "android": { "package": "dev.openidea.mobile" }
+  }
+}

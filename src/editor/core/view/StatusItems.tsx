@@ -371,6 +371,23 @@ export function IndentStatus() {
   );
 }
 
+/** Soft-wrap widget: wraps (or unwraps) the active file (`editor.toggleSoftWrap`). */
+export function SoftWrapStatus() {
+  const meta = useActiveMeta();
+  if (!meta) return null;
+  return (
+    <BarButton
+      tooltip="Soft-Wrap"
+      aria-label="Soft-Wrap"
+      aria-pressed={meta.softWrap}
+      shortcut={shortcutLabel("editor.toggleSoftWrap")}
+      onClick={() => void executeAction("editor.toggleSoftWrap")}
+    >
+      <Icon name="soft-wrap" size={14} />
+    </BarButton>
+  );
+}
+
 /** IDEA's read-only attribute widget: the lock toggles the file's writable bit (asking first). */
 export function ReadOnlyStatus() {
   const meta = useActiveMeta();

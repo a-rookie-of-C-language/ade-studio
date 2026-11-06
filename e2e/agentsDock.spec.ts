@@ -37,7 +37,7 @@ async function seedAndDock(page: Page) {
     });
     store.dockTask(task.id);
   }, TASK);
-  await page.locator("span[title='Repro task']").first().waitFor();
+  await page.locator("span[data-tooltip='Repro task']").first().waitFor();
 }
 
 test("drags the docked conversation back onto the editor", async ({ page }) => {
@@ -48,7 +48,7 @@ test("drags the docked conversation back onto the editor", async ({ page }) => {
   await page.getByRole("tab", { name: "README.md" }).waitFor();
   await seedAndDock(page);
 
-  const title = page.locator("span[title='Repro task']").first();
+  const title = page.locator("span[data-tooltip='Repro task']").first();
   const to = await page.getByRole("tabpanel").first().boundingBox();
   const from = await title.boundingBox();
   await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
@@ -68,7 +68,7 @@ test("drags the docked conversation back onto the empty editor", async ({ page }
   await seedAndDock(page);
   await expect(page.locator("[data-editor-area] [role='tabpanel']")).toHaveCount(0);
 
-  const title = page.locator("span[title='Repro task']").first();
+  const title = page.locator("span[data-tooltip='Repro task']").first();
   const to = await page.getByText("Drop files here to open them").boundingBox();
   const from = await title.boundingBox();
   await page.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
@@ -115,5 +115,5 @@ test("docks a session tab dropped on the tool window", async ({ page }) => {
   // Docked: the tab closes and the tool window gives itself to the conversation.
   await expect(page.getByRole("tab", { name: "Repro task" })).toHaveCount(0);
   await expect(page.getByRole("tree", { name: "Agent tasks" })).toHaveCount(0);
-  await expect(page.locator("span[title='Repro task']").first()).toBeVisible();
+  await expect(page.locator("span[data-tooltip='Repro task']").first()).toBeVisible();
 });

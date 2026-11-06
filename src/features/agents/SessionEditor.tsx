@@ -15,7 +15,13 @@ import type { AgentChange, AgentEntry, AgentImage, AgentLimit, AgentRetry, Agent
 import { executeAction } from "@/platform/actions";
 import { call, commands, onIdeEvent } from "@/platform/ipc";
 import { basename, relativeDir, useProject } from "@/platform/project";
-import { editorService, notifications, type EditorInput } from "@/workbench/contributions";
+import {
+  editorService,
+  notifications,
+  sessionSidecarCards,
+  useSessionSidecarCards,
+  type EditorInput,
+} from "@/workbench/contributions";
 import {
   Button,
   EmptyState,
@@ -43,6 +49,7 @@ import {
   costLabel,
   emptyDraft,
   formatTokens,
+  launchLabel,
   limitLabel,
   retryParts,
   usageLabel,
@@ -134,6 +141,7 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
   const openSubagent = (sub: string) => setPath((p) => [...p, sub]);
   const [finding, setFinding] = useState(false);
   const [findFocus, setFindFocus] = useState(0);
+  const sidecarCards = useSessionSidecarCards((s) => s.cards);
   const [showTrajectory, setShowTrajectory] = useState(false);
   const [session] = useState<FocusedSession>(() => ({
     openFind: () => {
@@ -216,6 +224,9 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
         <div className={styles.sidecar} data-reserved="right-quarter">
           <EnvironmentCard task={task} />
           <ContextCard task={task} />
+          {sessionSidecarCards(sidecarCards).map((card) => (
+            <card.component key={card.id} task={task} />
+          ))}
         </div>
       )}
       {changesOpen && (
@@ -392,6 +403,7 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
   const work = show?.showWorkTime !== false && entries ? workTime(entries, busy ? now : null) : 0;
   return (
     <span className={styles.meters}>
+      <LaunchEnv task={task} />
       {limits.map((l) => (
         <Limit key={l.window} limit={l} now={now} />
       ))}
@@ -399,6 +411,22 @@ function Meters({ task, entries }: { task: AgentTask; entries: AgentEntry[] | nu
         <span {...tooltipAttrs("What the session has cost so far, as the agent reports it")}>{costLabel(cost)}</span>
       )}
       {work >= 1000 && <span {...tooltipAttrs("Time the agent spent on this task")}>{formatDuration(work)}</span>}
+    </span>
+  );
+}
+
+/**
+ * Where the task runs, above the context meter: the agent and the binary and
+ * surface the backend launched, or unknown when it reported nothing (tasks
+ * saved before the launch receipt). Installed state and fallback cause show
+ * only when the backend reports them.
+ */
+function LaunchEnv({ task }: { task: AgentTask }) {
+  const label = launchLabel(task.launch, providerName(task.provider));
+  return (
+    <span className={styles.meter} title={label.detail} aria-label={label.detail}>
+      <Icon name={providerIcon(task.provider)} size={13} />
+      {label.short}
     </span>
   );
 }

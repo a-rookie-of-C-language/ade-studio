@@ -221,8 +221,9 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let names = |c: Vec<AgentCommand>| c.into_iter().map(|c| c.name).collect::<Vec<_>>();
 
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
-    // Before any session: only the skills on disk.
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["triage"]);
+    // Before any session: the skills on disk, plus Claude Code's CLI `/compact`
+    // (which it omits from its own command list). Builtins merge first.
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["compact", "triage"]);
     let task = mgr_a
         .create(NewAgentTask {
             project_root: None,
@@ -231,12 +232,13 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
             config: Vec::new(),
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
     wait_for(&mgr_a, &task.id, AgentStatus::NeedsInput).await;
-    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "triage"]);
-    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", None).await.unwrap()), ["review", "compact", "triage"]);
+    assert_eq!(names(mgr_a.commands("claude", Some(&task.id)).await.unwrap()), ["review", "compact", "triage"]);
     // Other agents get only what they offered.
     assert!(mgr_a.commands("codex", None).await.unwrap().is_empty());
     mgr_a.cancel(&task.id, None).unwrap();
@@ -248,7 +250,7 @@ async fn commands_are_remembered_per_project_and_merged_with_skills_on_disk() {
     let claude = mgr_b.providers().into_iter().find(|p| p.id == "claude").unwrap();
     assert_eq!(claude.config.len(), 2);
     assert!(claude.commands.is_empty());
-    assert!(mgr_b.commands("claude", None).await.unwrap().is_empty());
+    assert_eq!(names(mgr_b.commands("claude", None).await.unwrap()), ["compact"]);
     let mgr_a = manager_at(&a, &models, Arc::new(FakeAgent::default()));
     assert_eq!(names(mgr_a.providers().into_iter().find(|p| p.id == "claude").unwrap().commands), ["review"]);
 }
@@ -258,11 +260,14 @@ async fn builtin_commands_only_fill_verified_gaps_and_preserve_advertised_metada
     let tmp = tempfile::tempdir().unwrap();
     let agent = Arc::new(FakeAgent::default());
     let mgr = manager_at(tmp.path(), &tmp.path().join("models.json"), agent);
-    for provider in ["claude", "claude-acp", "opencode2", "codex", "custom"] {
+    for provider in ["opencode2", "codex", "custom"] {
         assert!(mgr.commands(provider, None).await.unwrap().is_empty(), "{provider}");
     }
-    let commands = mgr.commands("opencode", None).await.unwrap();
-    assert_eq!(commands.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["compact"]);
+    // The CLI `/compact` these agents omit from their own command lists.
+    for provider in ["opencode", "claude", "claude-acp"] {
+        let commands = mgr.commands(provider, None).await.unwrap();
+        assert_eq!(commands.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["compact"], "{provider}");
+    }
     let task = mgr
         .create(NewAgentTask {
             project_root: None,
@@ -271,6 +276,7 @@ async fn builtin_commands_only_fill_verified_gaps_and_preserve_advertised_metada
             config: Vec::new(),
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -328,6 +334,7 @@ async fn a_task_runs_asks_for_permission_and_survives_a_restart() {
             config: vec![AgentConfigChoice { id: "model".into(), value: "small".into() }],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -451,6 +458,7 @@ async fn messages_sent_while_busy_are_queued_and_send_now_interrupts() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -506,6 +514,7 @@ async fn subagents_get_their_own_conversation() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -600,6 +609,7 @@ async fn cancelling_resolves_the_open_permission_and_delete_forgets_the_task() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -621,7 +631,8 @@ async fn cancelling_resolves_the_open_permission_and_delete_forgets_the_task() {
             provider: "codex".into(),
             config: vec![],
             isolation: Isolation::Local,
-            base: None
+            base: None,
+            operation_id: None,
         })
         .await
         .is_err()
@@ -668,6 +679,7 @@ async fn real_claude_task_in_a_worktree() {
             config: vec![AgentConfigChoice { id: "model".into(), value: "haiku".into() }],
             isolation: Isolation::Worktree,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -717,6 +729,7 @@ async fn forks_rollbacks_and_steering() {
         config: Vec::new(),
         isolation: Isolation::Local,
         base: None,
+        operation_id: None,
     };
     let task = mgr.create(new("again")).await.unwrap();
     wait_for(&mgr, &task.id, AgentStatus::Ready).await;
@@ -769,6 +782,7 @@ async fn usage_limits_and_late_settings() {
             config: vec![AgentConfigChoice { id: "effort".into(), value: "high".into() }],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -824,6 +838,7 @@ async fn usage_cleared_drops_the_stale_share() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -841,6 +856,55 @@ async fn usage_cleared_drops_the_stale_share() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn session_stats_sum_usage_retries_and_turn_timing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let agent = Arc::new(FakeAgent::default());
+    let mgr = manager(tmp.path(), agent.clone());
+    let task = mgr
+        .create(NewAgentTask {
+            project_root: None,
+            // Works until cancelled, so the turn stays open for the updates below.
+            prompt: text("wait"),
+            provider: "claude".into(),
+            config: vec![],
+            isolation: Isolation::Local,
+            base: None,
+            operation_id: None,
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    let stats = || mgr.task(&task.id).unwrap().state.lock().task.stats.clone();
+    assert_eq!(*stats(), AgentSessionStats::default());
+    // A retry announced before any output counts once output arrives; the first
+    // output also times first-token latency.
+    agent.update("s1", json!({"sessionUpdate": RETRY_UPDATE, "attempt": 1}));
+    agent.say("s1", "working");
+    // Two measured requests add their splits to the session totals; a split-less
+    // report counts for the meter but adds nothing.
+    let first = json!({"sessionUpdate": "usage_update", "used": 10, "size": 1000, "inputTokens": 8,
+        "outputTokens": 2, "cacheReadTokens": 4, "cost": {"amount": 0.01, "currency": "USD"}});
+    let bare = json!({"sessionUpdate": "usage_update", "used": 50, "size": 1000});
+    let second = json!({"sessionUpdate": "usage_update", "used": 12, "size": 1000, "inputTokens": 9,
+        "outputTokens": 3, "cacheReadTokens": 5});
+    agent.update("s1", first);
+    agent.update("s1", bare);
+    agent.update("s1", second);
+    tokio::time::sleep(FLUSH_DELAY * 3).await;
+    let st = stats();
+    assert_eq!((st.input_tokens, st.output_tokens, st.cache_read_tokens), (17, 5, 9));
+    assert_eq!(st.cost_usd, Some(0.01));
+    assert_eq!(st.retries, 1);
+    assert_eq!(st.ttft_samples, 1);
+    // Stopping the turn counts the request without a failure.
+    mgr.cancel(&task.id, None).unwrap();
+    wait_for(&mgr, &task.id, AgentStatus::Ready).await;
+    let st = stats();
+    assert_eq!((st.requests, st.failures), (1, 0));
+    mgr.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn cursor_approval_switch_resolves_pending_and_survives_restart() {
     let tmp = tempfile::tempdir().unwrap();
     let agent = Arc::new(FakeAgent::default());
@@ -852,6 +916,7 @@ async fn cursor_approval_switch_resolves_pending_and_survives_restart() {
         config: Vec::new(),
         isolation: Isolation::Local,
         base: None,
+        operation_id: None,
     };
     let task = mgr.create(new()).await.unwrap();
     wait_for(&mgr, &task.id, AgentStatus::NeedsInput).await;
@@ -898,6 +963,7 @@ async fn cursor_approval_choice_applies_before_first_prompt() {
             config: vec![AgentConfigChoice { id: config::CURSOR_APPROVAL.into(), value: "bypass".into() }],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -918,6 +984,7 @@ async fn archived_tasks_can_be_restored_and_continue_their_session() {
             config: vec![],
             isolation: Isolation::Local,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -969,6 +1036,7 @@ async fn task_project_root_controls_local_and_worktree_repositories() {
                 config: vec![],
                 isolation,
                 base: None,
+                operation_id: None,
             })
             .await
             .unwrap();
@@ -1095,6 +1163,7 @@ async fn idle_agents_stop_and_resume_their_session_on_the_next_message() {
         config: Vec::new(),
         isolation: Isolation::Local,
         base: None,
+        operation_id: None,
     };
     let live =
         |mgr: &AgentManager, id: &str| mgr.task(id).unwrap().live.lock().as_ref().is_some_and(|l| !l.peer.is_closed());
@@ -1214,6 +1283,7 @@ async fn delete_running_agent(no_load: bool) {
             config: vec![],
             isolation: Isolation::Worktree,
             base: None,
+            operation_id: None,
         })
         .await
         .unwrap();
@@ -1248,4 +1318,61 @@ async fn delete_running_agent(no_load: bool) {
         String::from_utf8_lossy(&cmd.output().unwrap().stdout).contains(&format!("\"{pid}\""))
     };
     assert!(!alive, "the agent (pid {pid}) is still running");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn launch_receipt_records_surface_and_replays_operation_id() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mgr = manager(tmp.path(), Arc::new(FakeAgent::default()));
+    let req = |op: Option<String>| NewAgentTask {
+        project_root: None,
+        prompt: text("Fix the lexer"),
+        provider: "claude".into(),
+        config: Vec::new(),
+        isolation: Isolation::Local,
+        base: None,
+        operation_id: op,
+    };
+    // One in-flight handshake at a time: the fake agent answers the permission
+    // request inline, so overlapping turns can starve the runtime.
+    let first = mgr.create(req(Some("op-1".into()))).await.unwrap();
+    let receipt = first.launch.as_ref().expect("launch receipt");
+    assert_eq!(receipt.provider, "claude");
+    assert_eq!(receipt.program, "claude");
+    assert_eq!(receipt.surface, AgentSurface::Chat);
+    assert!(receipt.fallback.is_none());
+    assert_eq!(receipt.operation_id.as_deref(), Some("op-1"));
+    wait_for(&mgr, &first.id, AgentStatus::NeedsInput).await;
+    // Replaying the same `operationId` returns the first task instead of a duplicate.
+    let replayed = mgr.create(req(Some("op-1".into()))).await.unwrap();
+    assert_eq!(replayed.id, first.id);
+    // A different key starts a new task.
+    let second = mgr.create(req(Some("op-2".into()))).await.unwrap();
+    assert_ne!(second.id, first.id);
+    assert_eq!(second.launch.as_ref().and_then(|l| l.operation_id.clone()).as_deref(), Some("op-2"));
+    wait_for(&mgr, &second.id, AgentStatus::NeedsInput).await;
+    mgr.cancel(&first.id, None).unwrap();
+    mgr.cancel(&second.id, None).unwrap();
+    wait_for(&mgr, &first.id, AgentStatus::Ready).await;
+    wait_for(&mgr, &second.id, AgentStatus::Ready).await;
+    mgr.shutdown();
+}
+
+#[test]
+fn model_listing_keeps_one_choice_per_line() {
+    let values = parse_model_listing("# header\n\nopenai/gpt-5 400k context\nanthropic/claude-opus\n");
+    assert_eq!(values.len(), 2);
+    assert_eq!(values[0].value, "openai/gpt-5");
+    assert_eq!(values[0].name, "openai/gpt-5");
+    assert_eq!(values[0].description.as_deref(), Some("400k context"));
+    assert_eq!(values[1].value, "anthropic/claude-opus");
+    assert_eq!(values[1].description, None);
+    assert!(parse_model_listing("").is_empty());
+}
+
+#[test]
+fn opencode_question_forms_are_withheld_from_the_timeline() {
+    assert!(withheld_updates("opencode", "toolCallQuestion"));
+    assert!(!withheld_updates("opencode", "agent_message_chunk"));
+    assert!(!withheld_updates("claude", "toolCallQuestion"));
 }

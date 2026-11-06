@@ -161,7 +161,13 @@ export const DEFAULT_SETTINGS: ValidSettings = {
   spelling: { ideWords: [], projectWords: [], customDictionaries: [] },
   tools: {},
   languageServers: {},
-  agents: { showContextUsage: true, showWorkTime: true, showUsageLimits: true, showCost: false },
+  agents: {
+    showContextUsage: true,
+    showWorkTime: true,
+    showUsageLimits: true,
+    showCost: false,
+    binaries: {},
+  },
   ...DEFAULT_WORKFLOW,
 };
 
@@ -279,6 +285,12 @@ export function validateSettings(raw: Settings | unknown): ValidSettings {
       showWorkTime: bool(agents.showWorkTime, d.agents.showWorkTime),
       showUsageLimits: bool(agents.showUsageLimits, d.agents.showUsageLimits),
       showCost: bool(agents.showCost, d.agents.showCost),
+      binaries: Object.fromEntries(
+        Object.entries(obj(agents.binaries)).flatMap(([id, b]) => {
+          const path = obj(b).path;
+          return typeof path === "string" ? [[id, { path }]] : [];
+        }),
+      ),
     },
     ...validateWorkflow(root),
   };

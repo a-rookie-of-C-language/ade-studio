@@ -53,6 +53,8 @@ const entries = (): AgentEntry[] => [
     locations: [],
     output: "line one\nline two",
     diffs: [],
+    startedMs: 2000,
+    endedMs: 8000,
   },
   { type: "user", text: "also update Cargo docs", attachments: [], sentMs: 10_000, doneMs: null },
   { type: "error", message: "Denied" },
@@ -199,6 +201,19 @@ describe("TrajectoryView sequence mode", () => {
     expect(screen.getByLabelText("Sequence overview")).toBeTruthy();
   });
 
+  it("shows timed tool calls in the timing overview and jumps to their record", () => {
+    renderView();
+    expect(screen.getByText("6s")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Collapse turn" })[0]!);
+    expect(screen.queryByText("read lexer file")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show actual timing" }));
+    const overview = screen.getByLabelText("Timing overview");
+    const spans = within(overview).getAllByRole("button");
+    expect(spans).toHaveLength(3);
+    fireEvent.click(spans[1]!);
+    expect(screen.getByText("read lexer file")).toBeTruthy();
+  });
+
   it("renders steered follow-ups and extra turn counts", () => {
     const steered: AgentEntry[] = [
       { type: "user", text: "go", attachments: [], sentMs: 1000, doneMs: null },
@@ -225,5 +240,88 @@ describe("TrajectoryView sequence mode", () => {
     expect(screen.getByText("Steered")).toBeTruthy();
     expect(screen.getByText("1 subagent")).toBeTruthy();
     expect(screen.getByText("1 permission")).toBeTruthy();
+  });
+});
+
+describe("TrajectoryView inspector", () => {
+  it("opens the inspector from a record number and closes it", () => {
+    renderView();
+    fireEvent.click(within(document.getElementById("traj-record-2")!).getByText("#3"));
+    const dialog = screen.getByRole("dialog", { name: "Record 3" });
+    expect(within(dialog).getByText("Started")).toBeTruthy();
+    expect(within(dialog).getByText("6s")).toBeTruthy();
+    expect(within(dialog).getByText("Output")).toBeTruthy();
+    expect(dialog.querySelector("pre")?.textContent).toContain("line one");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("toggles the inspector by clicking the record number again", () => {
+    renderView();
+    const badge = () => within(document.getElementById("traj-record-2")!).getByText("#3");
+    fireEvent.click(badge());
+    expect(screen.getByRole("dialog", { name: "Record 3" })).toBeTruthy();
+    fireEvent.click(badge());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes the inspector with Escape", () => {
+    renderView();
+    fireEvent.click(within(document.getElementById("traj-record-2")!).getByText("#3"));
+    const dialog = screen.getByRole("dialog", { name: "Record 3" });
+    expect(dialog).toBeTruthy();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows the waiting state for pending permissions", () => {
+    render(
+      <TrajectoryView
+        task={task()}
+        entries={[
+          { type: "user", text: "go", attachments: [], sentMs: 1000, doneMs: null },
+          { type: "permission", id: 7, title: "Run?", options: [], chosen: null },
+        ]}
+        onOpenSubagent={vi.fn()}
+      />,
+    );
+    fireEvent.click(within(document.getElementById("traj-record-1")!).getByText("#2"));
+    const dialog = screen.getByRole("dialog", { name: "Record 2" });
+    expect(within(dialog).getByText("Run?")).toBeTruthy();
+    expect(within(dialog).getByText("Waiting for your answer")).toBeTruthy();
+  });
+
+  it("shows task and result sections for subagents", () => {
+    const onOpen = vi.fn();
+    render(
+      <TrajectoryView
+        task={task()}
+        entries={[
+          { type: "user", text: "go", attachments: [], sentMs: 1000, doneMs: 2000 },
+          {
+            type: "subagent",
+            id: "child",
+            title: "Explore",
+            description: null,
+            status: "done",
+            error: null,
+            prompt: "look around",
+            reply: "found it",
+            tools: 3,
+            activity: null,
+            startedMs: 1100,
+            endedMs: 1900,
+            cancellable: false,
+          },
+        ]}
+        onOpenSubagent={onOpen}
+      />,
+    );
+    fireEvent.click(within(document.getElementById("traj-record-1")!).getByText("#2"));
+    const dialog = screen.getByRole("dialog", { name: "Record 2" });
+    expect(within(dialog).getByText("look around")).toBeTruthy();
+    expect(within(dialog).getByText("found it")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Explore" }));
+    expect(onOpen).toHaveBeenCalledWith("child");
   });
 });

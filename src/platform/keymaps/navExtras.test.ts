@@ -26,4 +26,9 @@ describe("IDEA macOS bindings for navigation and editor extras", () => {
     expect(intellijMacos[id]).toContain(key);
     expect(vscodeMacos[id]).toBeDefined();
   });
+
+  it("soft-wrap toggles with Alt+Z in the default and VS Code keymaps", () => {
+    expect(intellijMacos["editor.toggleSoftWrap"]).toEqual(["Alt+Z"]);
+    expect(vscodeMacos["editor.toggleSoftWrap"]).toEqual(["Alt+Z"]);
+  });
 });

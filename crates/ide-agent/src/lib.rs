@@ -10,6 +10,7 @@
 mod acp;
 mod config;
 mod conversation;
+mod external;
 mod model;
 mod native;
 mod provider;
@@ -22,7 +23,7 @@ pub use model::*;
 
 use conversation::{Conversation, SavedSubagent, Session};
 use ide_core::{IdeError, IdeResult, IpcPath};
-use ide_jsonrpc::{Framing, Handler, Peer, RpcError, codes};
+use ide_jsonrpc::{Framing, Handler, NoopHandler, Peer, RpcError, codes};
 use ide_vcs::Repo;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
@@ -243,6 +244,11 @@ struct Task {
     cancel_pending: AtomicBool,
     /// The agent reported something for the current turn.
     turn_started: AtomicBool,
+    /// When the current turn's prompt was sent (ms since the epoch); first output
+    /// of the turn records its first-token latency against it.
+    turn_start_ms: Mutex<Option<f64>>,
+    /// The current turn already produced output.
+    turn_output_seen: AtomicBool,
     /// Turns sent so far: an idle release scheduled before the latest one is void.
     turns: AtomicU64,
     /// Settings already sent this session (`(option, value)`), so a refusal is not retried.
@@ -397,6 +403,80 @@ impl AgentManager {
         Ok(skills::merge(offered, found))
     }
 
+    /// The settings `provider` advertises without a task: its session-free model
+    /// discovery lists. `Command` agents list only models (wrapped as a `model`
+    /// option); `Session` agents open a disposable session and return its whole
+    /// `configOptions` (model, mode, effort…).
+    pub async fn models(&self, provider: &str) -> IdeResult<Vec<AgentConfigOption>> {
+        let spec = self.shared.spec(provider).ok_or_else(|| IdeError::invalid(format!("unknown agent {provider}")))?;
+        if !provider::installed(&spec) {
+            return Err(IdeError::unavailable(format!("{} is not installed", spec.name)));
+        }
+        match &spec.model_discovery {
+            provider::ModelDiscovery::None => Ok(Vec::new()),
+            provider::ModelDiscovery::Command { args } => {
+                let command = spec.resolve_command();
+                let args = args.clone();
+                let env = spec.env.clone();
+                let output = blocking(move || run_listing(&command, &args, &env)).await?;
+                let values = parse_model_listing(&output);
+                Ok(if values.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![AgentConfigOption {
+                        id: "model".to_owned(),
+                        name: "Model".to_owned(),
+                        description: None,
+                        category: Some("model".to_owned()),
+                        current: values.first().map(|v| v.value.clone()),
+                        values,
+                        via: AgentConfigVia::Option,
+                    }]
+                })
+            }
+            provider::ModelDiscovery::Session => self.discover_models_in_session(&spec).await,
+        }
+    }
+
+    /// `ModelDiscovery::Session`: spawns the agent's ACP server in a throwaway
+    /// directory, opens `session/new`, reads `configOptions`/`models`, then
+    /// kills the peer. The conversation is discarded.
+    async fn discover_models_in_session(&self, spec: &provider::ProviderSpec) -> IdeResult<Vec<AgentConfigOption>> {
+        let dir = std::env::temp_dir().join(format!("openidea-models-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).map_err(|e| IdeError::internal(e.to_string()))?;
+        let cwd = dir.clone();
+        let spec = spec.clone();
+        let name = spec.name.clone();
+        let connector = self.shared.connector.clone();
+        let result = async move {
+            let on_stderr: Box<dyn Fn(String) + Send + Sync> = Box::new(|_| {});
+            let peer = connector(&spec, &cwd, Arc::new(NoopHandler), on_stderr)
+                .map_err(|e| format!("Couldn't start {}: {e}", spec.name))?;
+            let _: Value = peer
+                .request(
+                    "initialize",
+                    json!({
+                        "protocolVersion": 1,
+                        "clientCapabilities": {},
+                        "clientInfo": { "name": "OpenIDEA", "version": env!("CARGO_PKG_VERSION") },
+                    }),
+                    None,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+            let cwd_s = cwd.to_string_lossy().into_owned();
+            let v: Value = peer
+                .request("session/new", json!({ "cwd": cwd_s, "mcpServers": [] }), None)
+                .await
+                .map_err(|e| e.to_string())?;
+            peer.kill();
+            Ok::<Vec<AgentConfigOption>, String>(config::options_of(&v))
+        }
+        .await;
+        let _ = std::fs::remove_dir_all(&dir);
+        result.map_err(|e| IdeError::unavailable(format!("model discovery failed for {name}: {e}")))
+    }
+
     fn task(&self, id: &str) -> IdeResult<Arc<Task>> {
         self.tasks.read().get(id).cloned().ok_or_else(|| IdeError::not_found(format!("no agent task {id}")))
     }
@@ -415,6 +495,20 @@ impl AgentManager {
             .shared
             .spec(&req.provider)
             .ok_or_else(|| IdeError::invalid(format!("unknown agent {}", req.provider)))?;
+        // Idempotent replay: the same `operationId` returns the first task instead of
+        // a duplicate (Orca launch semantics). Only in-memory tasks are scanned; the
+        // receipt is persisted on the task, so reloaded tasks match too.
+        if let Some(op) = req.operation_id.as_deref()
+            && !op.is_empty()
+            && let Some(task) = self
+                .tasks
+                .read()
+                .values()
+                .map(|t| t.state.lock().task.clone())
+                .find(|t| t.launch.as_ref().is_some_and(|l| l.operation_id.as_deref() == Some(op)))
+        {
+            return Ok(task);
+        }
         let prompt = clean(req.prompt).ok_or_else(|| IdeError::invalid("describe the task first"))?;
         let title = title_of(&prompt);
         let root = req.project_root.clone().map(|p| p.0).unwrap_or_else(|| self.shared.paths.project_root.clone());
@@ -449,6 +543,7 @@ impl AgentManager {
             }
         }
         let now = now_ms();
+        let launch = Some(Box::new(provider::launch_receipt(&spec, req.operation_id.clone())));
         let task = AgentTask {
             project_root,
             id: uuid::Uuid::new_v4().simple().to_string(),
@@ -467,10 +562,12 @@ impl AgentManager {
             config,
             commands: self.shared.known_commands(&spec.id),
             usage: None,
+            stats: Box::default(),
             queue: Vec::new(),
             capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
             resets_ms: None,
             retry: None,
+            launch,
         };
         let file = TaskFile {
             task: task.clone(),
@@ -487,6 +584,133 @@ impl AgentManager {
         handle.emit_task();
         handle.persist();
         self.shared.runtime.spawn(async move { handle.run(prompt).await });
+        Ok(task)
+    }
+
+    /// Sessions created outside OpenIDEA (another Codex or Claude client), newest
+    /// first; `provider` narrows to `codex` or `claude`. Read-only: the agents'
+    /// own history on disk is listed, never modified. `imported` marks sessions an
+    /// OpenIDEA task already resumes.
+    pub async fn external_sessions(&self, provider: Option<String>) -> Vec<ExternalSession> {
+        let wanted: Vec<String> = match provider {
+            Some(p) => vec![p],
+            None => vec!["codex".to_owned(), "claude".to_owned()],
+        };
+        let imported: HashSet<String> =
+            self.tasks.read().values().filter_map(|t| t.state.lock().session_id.clone()).collect();
+        let home = self.shared.paths.home_dir.clone();
+        let specs: Vec<(String, Vec<(String, String)>)> =
+            wanted.into_iter().filter_map(|p| self.shared.spec(&p).map(|s| (s.id, s.env))).collect();
+        let mut out: Vec<ExternalSession> = blocking(move || {
+            let mut sessions = Vec::new();
+            for (id, env) in &specs {
+                sessions.extend(external::list(id, home.as_deref(), env));
+            }
+            sessions.sort_by(|a, b| b.updated_ms.total_cmp(&a.updated_ms));
+            sessions.truncate(external::MAX_SESSIONS);
+            Ok(sessions)
+        })
+        .await
+        .unwrap_or_default();
+        for s in &mut out {
+            s.imported = imported.contains(&s.session_id);
+        }
+        out
+    }
+
+    /// Imports an external session as a task of this project and resumes it under
+    /// its own session id. The task starts in the session's directory when it still
+    /// exists, else in the project root; its history loads in the background, so the
+    /// task is `Starting` until the agent replays it (`Ready`) or reports why it
+    /// can't (`Failed`). Importing the same session twice returns the first task.
+    pub async fn import_external(&self, req: ImportExternalTask) -> IdeResult<AgentTask> {
+        if req.session_id.trim().is_empty() {
+            return Err(IdeError::invalid("unknown session"));
+        }
+        let spec = self
+            .shared
+            .spec(&req.provider)
+            .ok_or_else(|| IdeError::invalid(format!("unknown agent {}", req.provider)))?;
+        if !matches!(
+            (spec.id.as_str(), spec.driver),
+            ("codex", provider::Driver::Codex) | ("claude", provider::Driver::Claude)
+        ) {
+            return Err(IdeError::invalid(format!("{} sessions can't be imported", spec.name)));
+        }
+        let home = self.shared.paths.home_dir.clone();
+        let env = spec.env.clone();
+        let provider = spec.id.clone();
+        let session_id = req.session_id.clone();
+        let still_there = blocking(move || Ok(external::exists(&provider, &session_id, home.as_deref(), &env)))
+            .await
+            .unwrap_or(false);
+        if !still_there {
+            return Err(IdeError::invalid("that session is no longer on this machine"));
+        }
+        if let Some(task) =
+            self.tasks.read().values().find(|t| t.state.lock().session_id.as_deref() == Some(req.session_id.as_str()))
+        {
+            return Ok(task.state.lock().task.clone());
+        }
+        let root = req.project_root.clone().map(|p| p.0).unwrap_or_else(|| self.shared.paths.project_root.clone());
+        let cwd = req.cwd.clone().map(|p| p.0).filter(|p| p.is_dir()).unwrap_or_else(|| root.clone());
+        let title = req.title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| "Imported session".into());
+        let config = self.shared.known_config(&spec.id);
+        let now = now_ms();
+        let task = AgentTask {
+            project_root: Some(IpcPath(root)),
+            id: uuid::Uuid::new_v4().simple().to_string(),
+            title,
+            provider: spec.id.clone(),
+            model: model_of(&config),
+            status: AgentStatus::Starting,
+            isolation: Isolation::Local,
+            cwd: IpcPath(cwd.clone()),
+            branch: None,
+            base: None,
+            base_commit: None,
+            error: None,
+            created_ms: now,
+            updated_ms: now,
+            config,
+            commands: self.shared.known_commands(&spec.id),
+            usage: None,
+            stats: Box::default(),
+            queue: Vec::new(),
+            capabilities: self.shared.probes.lock().get(&spec.id).map(|p| p.capabilities).unwrap_or_default(),
+            resets_ms: None,
+            retry: None,
+            // Imported sessions were launched outside the IDE; there is no receipt to report.
+            launch: None,
+        };
+        let before = blocking(move || Ok(worktree::snapshot(&cwd).unwrap_or_default())).await.unwrap_or_default();
+        let file = TaskFile {
+            task: task.clone(),
+            session_id: Some(req.session_id.clone()),
+            entries: Vec::new(),
+            wanted: Vec::new(),
+            before,
+            subagents: Vec::new(),
+            pending_rollback: 0,
+        };
+        let handle = Task::restore(file, self.shared.clone());
+        handle.state.lock().busy = true;
+        self.tasks.write().insert(task.id.clone(), handle.clone());
+        handle.emit_task();
+        handle.persist();
+        // No prompt is sent: loading the session replays its history into the task.
+        self.shared.runtime.spawn(async move {
+            match handle.ensure_session().await {
+                Ok(_) => {
+                    handle.state.lock().busy = false;
+                    handle.set_status(AgentStatus::Ready, None);
+                }
+                Err(e) => {
+                    handle.state.lock().busy = false;
+                    handle.set_status(AgentStatus::Failed, Some(e));
+                }
+            }
+        });
         Ok(task)
     }
 
@@ -662,6 +886,8 @@ impl AgentManager {
                 created_ms: now,
                 updated_ms: now,
                 usage: None,
+                // A fork reads the copied conversation, but its own spend starts over.
+                stats: Box::default(),
                 queue: Vec::new(),
                 resets_ms: None,
                 retry: None,
@@ -924,6 +1150,8 @@ impl Task {
             send_now: AtomicBool::new(false),
             cancel_pending: AtomicBool::new(false),
             turn_started: AtomicBool::new(false),
+            turn_start_ms: Mutex::new(None),
+            turn_output_seen: AtomicBool::new(false),
             turns: AtomicU64::new(0),
             config_sent: Mutex::new(HashSet::new()),
             dirty: Mutex::new(BTreeSet::new()),
@@ -1042,6 +1270,21 @@ impl Task {
             tokio::time::sleep(TURN_GRACE).await;
             let changed = self.state.lock().conversation.end_turn(Some(now_ms()));
             self.mark_dirty(changed);
+            // One turn ran: count the request, its active time and its outcome.
+            let failed = result.is_err();
+            {
+                let end = now_ms();
+                let mut s = self.state.lock();
+                s.task.stats.requests += 1;
+                if let Some(start) = *self.turn_start_ms.lock() {
+                    s.task.stats.active_ms += (end - start).max(0.0) as u64;
+                }
+                if failed {
+                    s.task.stats.failures += 1;
+                }
+            }
+            *self.turn_start_ms.lock() = None;
+            self.emit_task();
             let send_now = self.send_now.swap(false, Ordering::AcqRel);
             let next = {
                 let mut s = self.state.lock();
@@ -1165,6 +1408,8 @@ impl Task {
     async fn turn(self: &Arc<Self>, prompt: &AgentPrompt) -> Result<String, Failure> {
         self.turns.fetch_add(1, Ordering::AcqRel);
         self.turn_started.store(false, Ordering::Release);
+        *self.turn_start_ms.lock() = Some(now_ms());
+        self.turn_output_seen.store(false, Ordering::Release);
         self.state.lock().task.resets_ms = None;
         let attachments = prompt
             .files
@@ -1429,6 +1674,11 @@ impl Task {
     /// Applies a `session/update` of session `session` (the task's, or one of its subagents').
     fn on_update(self: &Arc<Self>, session: Option<&str>, update: &Value) {
         let kind = update.get("sessionUpdate").and_then(Value::as_str).unwrap_or_default();
+        // Agent-private update kinds that map to nothing useful here
+        // (e.g. OpenCode's question forms): drop before the timeline sees them.
+        if withheld_updates(&self.state.lock().task.provider, kind) {
+            return;
+        }
         // A subagent's title, settings and usage are its own, not the task's.
         if self.state.lock().conversation.owner(session).is_some() {
             if !SESSION_STATE.contains(&kind) && !self.replaying.load(Ordering::Acquire) {
@@ -1482,7 +1732,23 @@ impl Task {
                     true
                 }
                 "usage_update" => {
-                    s.task.usage = config::usage_of(update).or(s.task.usage.take());
+                    // Every live report is one measured request: add its splits to the
+                    // session totals. Replays resend history, so they never count.
+                    let usage = config::usage_of(update);
+                    if let Some(u) = &usage
+                        && !self.replaying.load(Ordering::Acquire)
+                    {
+                        let st = &mut s.task.stats;
+                        st.input_tokens += u64::from(u.input_tokens.unwrap_or(0));
+                        st.output_tokens += u64::from(u.output_tokens.unwrap_or(0));
+                        st.cache_read_tokens += u64::from(u.cache_read_tokens.unwrap_or(0));
+                        st.cache_write_tokens += u64::from(u.cache_write_tokens.unwrap_or(0));
+                        st.reasoning_tokens += u64::from(u.reasoning_tokens.unwrap_or(0));
+                        if let Some(cost) = u.cost.as_deref() {
+                            st.cost_usd = Some(cost.amount);
+                        }
+                    }
+                    s.task.usage = usage.or(s.task.usage.take());
                     true
                 }
                 // The last shown share went stale (model change, compaction): drop
@@ -1523,8 +1789,36 @@ impl Task {
     }
 
     fn apply(self: &Arc<Self>, session: Option<&str>, kind: &str, update: &Value) {
+        // The task's own session (its id, or none) — not a subagent's, whose
+        // spend and timing belong to its own card, not the session totals.
+        let own = self.state.lock().conversation.owner(session).is_none();
         // Output again: the retried request went through.
+        if own && self.state.lock().task.retry.is_some() {
+            self.state.lock().task.stats.retries += 1;
+        }
         self.set_retry(None);
+        // First output of the turn: time to first token.
+        if own
+            && matches!(
+                kind,
+                "agent_message_chunk"
+                    | "agent_thought_chunk"
+                    | "session_message"
+                    | "session_message_chunk"
+                    | "tool_call"
+                    | "tool_call_update"
+                    | "plan"
+            )
+            && !self.turn_output_seen.swap(true, Ordering::AcqRel)
+            && let Some(start) = *self.turn_start_ms.lock()
+        {
+            let ttft = now_ms() - start;
+            if ttft >= 0.0 {
+                let mut s = self.state.lock();
+                s.task.stats.ttft_ms += ttft as u64;
+                s.task.stats.ttft_samples += 1;
+            }
+        }
         let applied = self.state.lock().conversation.apply(session, update, now_ms());
         self.mark_dirty(applied);
         // A subagent can start or finish after the turn that started it: saved right away.
@@ -1788,8 +2082,64 @@ fn builtin_commands(provider: &str) -> &'static [(&'static str, &'static str)] {
     match provider {
         // OpenCode ACP handles `/compact` via session.summarize but omits it from its command list.
         "opencode" => &[("compact", "compact the conversation")],
+        // Claude Code's CLI `/compact`.
+        "claude" | "claude-acp" => &[("compact", "compact the conversation")],
         _ => &[],
     }
+}
+
+/// Whether a `session/update` kind from `provider` is agent-private noise that maps
+/// to nothing useful here: dropped before the timeline sees it.
+fn withheld_updates(provider: &str, kind: &str) -> bool {
+    match provider {
+        // OpenCode 1.x hangs on question forms and waits forever for permission answers;
+        // its `toolCallQuestion` updates are noise here (question tool disabled via env).
+        "opencode" => kind == "toolCallQuestion",
+        _ => false,
+    }
+}
+
+/// Runs the provider's model-listing command and captures its stdout
+/// (`ModelDiscovery::Command`, like OpenCode 1.x's `opencode models --verbose`).
+fn run_listing(command: &str, args: &[String], env: &[(String, String)]) -> IdeResult<String> {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(command);
+    ide_core::process::prepare(&mut cmd);
+    cmd.args(args)
+        .envs(ide_core::process::shell_env())
+        .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let output = cmd.output().map_err(|e| IdeError::unavailable(format!("`{command}` failed to start: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(IdeError::unavailable(format!(
+            "`{command} {}` exited with {}: {}",
+            args.join(" "),
+            output.status,
+            stderr.trim()
+        )));
+    }
+    String::from_utf8(output.stdout).map_err(|e| IdeError::internal(format!("`{command}` output was not UTF-8: {e}")))
+}
+
+/// Parses `command`'s stdout into model choices. The listing format is one
+/// model per line; `--verbose` variants add columns we ignore (`name`, `id`,
+/// or `id  name` depending on the agent — we keep the whole line as the value
+/// and its first column as the name).
+fn parse_model_listing(stdout: &str) -> Vec<AgentConfigValue> {
+    stdout
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|line| {
+            let (name, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(a, b)| (a, b.trim()));
+            let (value, description) =
+                if rest.is_empty() { (line.to_owned(), None) } else { (name.to_owned(), Some(rest.to_owned())) };
+            AgentConfigValue { value, name: name.to_owned(), description }
+        })
+        .collect()
 }
 
 fn file_name(path: &Path) -> String {

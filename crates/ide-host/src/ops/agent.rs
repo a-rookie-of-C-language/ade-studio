@@ -5,8 +5,8 @@ use crate::Host;
 use crate::rpc::Dispatcher;
 use ide_agent::registry::{AgentRegistry, RegistryPaths};
 use ide_agent::{
-    AgentChange, AgentCommand, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider, AgentQueued, AgentTask,
-    NewAgentTask,
+    AgentChange, AgentCommand, AgentConfigOption, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider,
+    AgentQueued, AgentTask, ExternalSession, ImportExternalTask, NewAgentTask,
 };
 use ide_core::error::ErrorKind;
 use ide_core::{IdeError, IdeEvent, IdeResult, IpcPath, RequestId, SharedSink, TaskId};
@@ -179,6 +179,14 @@ pub async fn commands(
     host.project_or_default(window)?.agents.commands(&provider, task.as_deref()).await
 }
 
+/// Session settings (model, mode, effort…) `provider` advertises without a task,
+/// so the New Task page can show its pickers before the first session.
+pub async fn models(host: &Host, window: &str, provider: String) -> IdeResult<Vec<AgentConfigOption>> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    project.agents.models(&provider).await
+}
+
 /// Entries of `task`'s conversation, or of its subagent `subagent`'s.
 pub fn entries(host: &Host, window: &str, task: String, subagent: Option<String>) -> IdeResult<Vec<AgentEntry>> {
     host.project_or_default(window)?.agents.entries(&task, subagent)
@@ -294,10 +302,34 @@ pub async fn base_text(host: &Host, window: &str, task: String, path: IpcPath) -
     project.agents.base_text(&task, path.into_path_buf()).await
 }
 
+/// Sessions created outside OpenIDEA (another Codex or Claude client), newest first;
+/// `provider` narrows to `codex` or `claude`. Read-only: lists the agents' own
+/// history on disk, never modifies it.
+pub async fn external_sessions(host: &Host, window: &str, provider: Option<String>) -> IdeResult<Vec<ExternalSession>> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    Ok(project.agents.external_sessions(provider).await)
+}
+
+/// Imports an external session as a task of the project and resumes it under its own
+/// session id. The task starts in the session's directory when it still exists, else
+/// in the project root; its history loads in the background. Importing the same
+/// session twice returns the first task.
+pub async fn import_external(host: &Host, window: &str, request: ImportExternalTask) -> IdeResult<AgentTask> {
+    let project = host.project_or_default(window)?;
+    project.require_trust()?;
+    let mut request = request;
+    if request.project_root.is_none() {
+        request.project_root = Some(IpcPath(project.root.clone()));
+    }
+    project.agents.import_external(request).await
+}
+
 /// Commands of this module the remote server answers.
 pub(crate) fn register(d: &mut Dispatcher) {
     d.add("agent_subscribe", |c| async move { subscribe(&c.host, &c.window, c.channel("onEvent")?) });
     d.add("agent_providers", |c| async move { providers(&c.host, &c.window) });
+    d.add("agent_models", |c| async move { models(&c.host, &c.window, c.arg("provider")?).await });
     d.add("agent_set_command", |c| async move { set_command(&c.host, &c.window, c.arg("id")?, c.arg("command")?) });
     d.add("agent_set_env", |c| async move { set_env(&c.host, &c.window, c.arg("id")?, c.arg("env")?) });
     d.add("agent_registry_list", |c| async move { registry_list(&c.host, &c.window, c.arg("request")?).await });
@@ -334,6 +366,11 @@ pub(crate) fn register(d: &mut Dispatcher) {
     );
     d.add("agent_changes", |c| async move { changes(&c.host, &c.window, c.arg("task")?).await });
     d.add("agent_base_text", |c| async move { base_text(&c.host, &c.window, c.arg("task")?, c.arg("path")?).await });
+    d.add(
+        "agent_external_sessions",
+        |c| async move { external_sessions(&c.host, &c.window, c.arg("provider")?).await },
+    );
+    d.add("agent_import_external", |c| async move { import_external(&c.host, &c.window, c.arg("request")?).await });
 }
 
 /// Whether `root` is the agent-first home's default workspace
@@ -357,10 +394,14 @@ fn validate_project_root(
         return Err(IdeError::invalid("Choose an absolute project root"));
     }
     let requested = dunce::canonicalize(requested)?;
-    let window_root = dunce::canonicalize(root)?;
-    if requested == window_root
-        || ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested))
-    {
+    // The home window's default workspace may not exist on disk yet (it is
+    // created on first Start): only match the window root and its members
+    // when the root resolves, otherwise fall through to the home flow below.
+    let window_root = dunce::canonicalize(root).ok();
+    let is_window_root = window_root.as_ref().is_some_and(|w| requested == *w);
+    let is_member = window_root.is_some()
+        && ide_workspace::workspace::Workspace::load(root)?.is_some_and(|w| w.projects.contains(&requested));
+    if is_window_root || is_member {
         return Ok(requested);
     }
     // No explicit project (the agent-first home): the user picked this folder as
@@ -429,6 +470,9 @@ mod tests {
     fn default_workspace_project_is_not_explicit() {
         // `project_or_default` opens this for the home window before the first
         // Start; picking another folder must still validate as the home flow.
+        // The app creates the dir on startup (`ensure_default_project`), so the
+        // test does the same: fresh machines (CI) have no `~/.openidea/workspace`.
+        std::fs::create_dir_all(Host::default_workspace()).unwrap();
         assert!(is_default_project(&Host::default_workspace()));
         let tmp = tempfile::tempdir().unwrap();
         assert!(!is_default_project(tmp.path()));

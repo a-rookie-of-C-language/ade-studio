@@ -1,9 +1,10 @@
 /** Agents tool window: tasks grouped by what they need from the user. */
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import clsx from "clsx";
-import type { AgentStatus as Status, AgentTask } from "@/bindings";
+import type { AgentStatus as Status, AgentTask, ExternalSession } from "@/bindings";
 import { EDITOR_TAB_MIME, maybeEditorService, type EditorInput } from "@/workbench/contributions";
 import {
+  Checkbox,
   EmptyState,
   Icon,
   IconButton,
@@ -17,7 +18,7 @@ import {
   tooltipAttrs,
 } from "@/ui";
 import { SESSION_KIND, TASK_DRAG, age, branchLabel, groupTasks, sessionKey, type TaskGroup } from "./model";
-import { openHome, useAgents } from "./store";
+import { importExternal, openHome, openTask, refreshExternal, useAgents } from "./store";
 import { taskMenu } from "./taskActions";
 import { SessionEditor } from "./SessionEditor";
 import { HomeEditor } from "./HomeEditor";
@@ -25,6 +26,7 @@ import styles from "./Agents.module.css";
 import { basename, useProject } from "@/platform/project";
 import { useTx } from "@/platform/i18n";
 import { executeAction } from "@/platform/actions";
+import { showError } from "@/workbench/messages";
 
 export function AgentsHeaderActions() {
   return <IconButton icon="plus" action="agents.newTask" size="small" />;
@@ -81,6 +83,104 @@ export function TaskStatusIcon({ status }: { status: Status }) {
     case "archived":
       return <Icon name="minus" size={13} className={styles.archived} label="Archived" />;
   }
+}
+
+const normPath = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+
+/** Sessions created outside OpenIDEA (another Codex or Claude client): import one to
+ * resume it as a task of this project, under its own session id. */
+function ExternalSessions() {
+  const tx = useTx();
+  const project = useProject((s) => s.project);
+  const external = useAgents((s) => s.external);
+  const externalError = useAgents((s) => s.externalError);
+  const providers = useAgents((s) => s.providers);
+  const [projectOnly, setProjectOnly] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const providerName = (id: string) => providers.find((p) => p.id === id)?.name ?? id;
+  const visible = useMemo(() => {
+    if (!projectOnly || !project) return external;
+    const root = normPath(project.root);
+    return external.filter(
+      (s) => s.cwd != null && (normPath(s.cwd) === root || normPath(s.cwd).startsWith(`${root}/`)),
+    );
+  }, [external, projectOnly, project]);
+  const doImport = (s: ExternalSession) => {
+    if (busy.has(s.sessionId)) return;
+    setBusy((b) => new Set(b).add(s.sessionId));
+    const done = () =>
+      setBusy((b) => {
+        const next = new Set(b);
+        next.delete(s.sessionId);
+        return next;
+      });
+    importExternal(s).then(
+      (task) => {
+        done();
+        openTask(task.id);
+      },
+      async (e: unknown) => {
+        done();
+        await showError(tx("Couldn't import the session"), e instanceof Error ? e.message : String(e));
+      },
+    );
+  };
+  return (
+    <div className={styles.external}>
+      <div className={styles.externalBar}>
+        <IconButton
+          icon={collapsed ? "chevron-right" : "chevron-down"}
+          title={tx("External sessions")}
+          size="small"
+          onClick={() => setCollapsed((c) => !c)}
+        />
+        <span className={styles.groupLabel}>
+          <T>External sessions</T>
+        </span>
+        <span className={styles.count}>{visible.length}</span>
+        <span className={styles.externalSpacer} />
+        {project && <Checkbox checked={projectOnly} onChange={setProjectOnly} aria-label={tx("Only this project")} />}
+        <IconButton
+          icon="refresh"
+          title={tx("Refresh external sessions")}
+          size="small"
+          onClick={() => void refreshExternal()}
+        />
+      </div>
+      {!collapsed &&
+        (externalError ? (
+          <div className={styles.externalError}>
+            <T>Cannot load external sessions</T>
+            {externalError ? `: ${externalError}` : ""}
+          </div>
+        ) : visible.length === 0 ? (
+          <div className={styles.externalEmpty}>
+            <T>No external sessions yet</T>
+          </div>
+        ) : (
+          <ul className={styles.externalList}>
+            {visible.map((s) => (
+              <li key={`${s.provider}:${s.sessionId}`} className={styles.row} {...tooltipAttrs(s.cwd ?? s.sessionId)}>
+                <Icon name="toolwindow-agents" size={13} label={providerName(s.provider)} />
+                <span className={styles.title}>{s.title}</span>
+                {s.cwd && <span className={styles.taskProject}>{basename(s.cwd)}</span>}
+                <span className={styles.detail}>{providerName(s.provider)}</span>
+                <span className={styles.age}>{age(s.updatedMs ?? 0)}</span>
+                <button
+                  type="button"
+                  className={styles.link}
+                  disabled={busy.has(s.sessionId)}
+                  onClick={() => doImport(s)}
+                >
+                  {s.imported ? <T>Open</T> : <T>Import</T>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </div>
+  );
 }
 
 export function AgentsView() {
@@ -283,6 +383,7 @@ export function AgentsView() {
           </div>
         )}
         {!inline && taskList}
+        {!inline && <ExternalSessions />}
         {inline && (
           <Popup
             open={historyOpen}

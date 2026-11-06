@@ -83,6 +83,8 @@ export interface DocMeta {
   dirty: boolean;
   banner: Banner;
   indent: { tabSize: number; insertSpaces: boolean };
+  /** Soft wraps currently on for this file (settings, or a per-file toggle). */
+  softWrap: boolean;
 }
 
 /** Reactive per-path document metadata (tabs, status bar, banners). */
@@ -250,9 +252,11 @@ export class DocModel {
       dirty: info.dirty,
       banner: bannerFor(info),
       indent: { tabSize: 4, insertSpaces: true },
+      softWrap: false,
     };
     this.detectedIndent = info.readOnly && !info.text.length ? null : detectIndent(info.text.slice(0, 200_000));
     this.meta.indent = this.effectiveIndent();
+    this.meta.softWrap = this.softWrapOn();
     useDocMeta.setState({ [this.path]: this.meta });
     this.sync = new DocSync(
       info.version,
@@ -453,7 +457,10 @@ export class DocModel {
   applySettings() {
     const editor = this.settings();
     const indent = this.effectiveIndent();
-    this.setMeta({ indent: { tabSize: indent.tabSize, insertSpaces: indent.insertSpaces } });
+    this.setMeta({
+      indent: { tabSize: indent.tabSize, insertSpaces: indent.insertSpaces },
+      softWrap: this.softWrapOn(),
+    });
     const effects = [
       compartments.indent.reconfigure(indentExtension(indent, this.formatIndent())),
       compartments.wrap.reconfigure(wrapExtension(editor, this.path, this.softWrapOverride)),

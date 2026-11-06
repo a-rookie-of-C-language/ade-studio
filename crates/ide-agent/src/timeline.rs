@@ -50,7 +50,7 @@ impl Timeline {
     }
 
     /// Applies one `session/update` `update` object.
-    pub fn apply(&mut self, update: &Value) -> Applied {
+    pub fn apply(&mut self, update: &Value, now: f64) -> Applied {
         let mut out = Applied::default();
         let kind = update.get("sessionUpdate").and_then(Value::as_str).unwrap_or_default();
         match kind {
@@ -60,6 +60,14 @@ impl Timeline {
             }
             "tool_call" => {
                 let id = str_field(update, "toolCallId");
+                let kept = match self.tools.get(&id) {
+                    Some(&i) => match &self.entries[i] {
+                        AgentEntry::Tool { started_ms, ended_ms, .. } => Some((*started_ms, *ended_ms)),
+                        _ => None,
+                    },
+                    None => None,
+                };
+                let (started_ms, ended_ms) = kept.unwrap_or((Some(now), None));
                 let entry = AgentEntry::Tool {
                     id: id.clone(),
                     title: str_field(update, "title"),
@@ -68,6 +76,8 @@ impl Timeline {
                     locations: locations(update.get("locations")),
                     output: None,
                     diffs: Vec::new(),
+                    started_ms,
+                    ended_ms,
                 };
                 let index = match self.tools.get(&id) {
                     Some(&i) => {
@@ -80,12 +90,12 @@ impl Timeline {
                         i
                     }
                 };
-                self.merge_tool(index, update);
+                self.merge_tool(index, update, now);
                 out.changed.push(index);
             }
             "tool_call_update" => {
                 let Some(&index) = self.tools.get(&str_field(update, "toolCallId")) else { return out };
-                self.merge_tool(index, update);
+                self.merge_tool(index, update, now);
                 out.changed.push(index);
             }
             "plan" => {
@@ -126,8 +136,9 @@ impl Timeline {
         self.entries.len() - 1
     }
 
-    fn merge_tool(&mut self, index: usize, update: &Value) {
-        let AgentEntry::Tool { title, kind, status, locations: locs, output, diffs, .. } = &mut self.entries[index]
+    fn merge_tool(&mut self, index: usize, update: &Value, now: f64) {
+        let AgentEntry::Tool { title, kind, status, locations: locs, output, diffs, started_ms, ended_ms, .. } =
+            &mut self.entries[index]
         else {
             return;
         };
@@ -140,6 +151,11 @@ impl Timeline {
         if let Some(s) = tool_status(update.get("status")) {
             *status = s;
         }
+        if started_ms.is_none() {
+            *started_ms = Some(now);
+        }
+        let running = matches!(*status, AgentToolStatus::Pending | AgentToolStatus::Running);
+        *ended_ms = if running { None } else { (*ended_ms).or(Some(now)) };
         if update.get("locations").is_some_and(Value::is_array) {
             *locs = locations(update.get("locations"));
         }
@@ -279,7 +295,7 @@ impl Timeline {
                 && matches!(status, AgentSubagentStatus::Running | AgentSubagentStatus::NeedsInput)
             {
                 *status = AgentSubagentStatus::Cancelled;
-                *ended_ms = Some(now);
+                *ended_ms = (*ended_ms).or(Some(now));
                 changed.push(i);
             }
         }
@@ -290,17 +306,23 @@ impl Timeline {
     /// and records when the turn ended (`done`) on the message that started it.
     pub fn end_turn(&mut self, done: Option<f64>) -> Vec<usize> {
         let mut changed = Vec::new();
-        let started = self.entries.iter().rposition(|e| matches!(e, AgentEntry::User { .. }));
+        // The turn header reads the starter's timestamps; a steered follow-up must not take its place.
+        let started = self
+            .entries
+            .iter()
+            .rposition(|e| matches!(e, AgentEntry::User { steered: false, .. }))
+            .or_else(|| self.entries.iter().rposition(|e| matches!(e, AgentEntry::User { .. })));
         for (i, e) in self.entries.iter_mut().enumerate() {
             match e {
                 AgentEntry::User { done_ms, .. } if Some(i) == started && done.is_some() && done_ms.is_none() => {
                     *done_ms = done;
                     changed.push(i);
                 }
-                AgentEntry::Tool { status, .. }
+                AgentEntry::Tool { status, ended_ms, .. }
                     if matches!(status, AgentToolStatus::Pending | AgentToolStatus::Running) =>
                 {
                     *status = AgentToolStatus::Failed;
+                    *ended_ms = (*ended_ms).or(done);
                     changed.push(i);
                 }
                 AgentEntry::Permission { chosen, .. } if chosen.is_none() => {
@@ -391,10 +413,10 @@ mod tests {
     fn chunks_merge_into_one_message_until_another_entry_comes() {
         let mut t = Timeline::default();
         let chunk = |s: &str| json!({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": s}});
-        assert_eq!(t.apply(&chunk("Hel")).changed, vec![0]);
-        assert_eq!(t.apply(&chunk("lo")).changed, vec![0]);
-        t.apply(&json!({"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "hmm"}}));
-        t.apply(&chunk("again"));
+        assert_eq!(t.apply(&chunk("Hel"), 1.0).changed, vec![0]);
+        assert_eq!(t.apply(&chunk("lo"), 2.0).changed, vec![0]);
+        t.apply(&json!({"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "hmm"}}), 3.0);
+        t.apply(&chunk("again"), 4.0);
         assert_eq!(
             t.entries,
             vec![
@@ -408,21 +430,100 @@ mod tests {
     #[test]
     fn tool_calls_update_in_place() {
         let mut t = Timeline::default();
-        t.apply(&json!({"sessionUpdate": "tool_call", "toolCallId": "c1", "title": "Edit a.rs", "kind": "edit",
-            "status": "pending", "locations": [{"path": "/p/a.rs", "line": 3}]}));
-        let applied = t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c1", "status": "completed",
-        "content": [
-            {"type": "diff", "path": "/p/a.rs", "oldText": "a\nb\n", "newText": "a\nB\nc\n"},
-            {"type": "content", "content": {"type": "text", "text": "done"}}
-        ]}));
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c1", "title": "Edit a.rs", "kind": "edit",
+"status": "pending", "locations": [{"path": "/p/a.rs", "line": 3}]}),
+            10.0,
+        );
+        let applied = t.apply(
+            &json!({"sessionUpdate": "tool_call_update", "toolCallId": "c1", "status": "completed",
+            "content": [
+                {"type": "diff", "path": "/p/a.rs", "oldText": "a\nb\n", "newText": "a\nB\nc\n"},
+                {"type": "content", "content": {"type": "text", "text": "done"}}
+            ]}),
+            20.0,
+        );
         assert_eq!(applied.changed, vec![0]);
-        let AgentEntry::Tool { status, diffs, output, locations, .. } = &t.entries[0] else { panic!() };
+        let AgentEntry::Tool { status, diffs, output, locations, started_ms, ended_ms, .. } = &t.entries[0] else {
+            panic!()
+        };
         assert_eq!(*status, AgentToolStatus::Completed);
         assert_eq!(diffs, &vec![AgentToolDiff { path: IpcPath("/p/a.rs".into()), added: 2, removed: 1 }]);
         assert_eq!(output.as_deref(), Some("done"));
         assert_eq!(locations, &vec![IpcPath("/p/a.rs".into())]);
+        assert_eq!((*started_ms, *ended_ms), (Some(10.0), Some(20.0)));
         // Unknown calls are ignored.
-        assert!(t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "zz"})).changed.is_empty());
+        assert!(t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "zz"}), 30.0).changed.is_empty());
+    }
+
+    #[test]
+    fn tool_calls_record_timing() {
+        let mut t = Timeline::default();
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}),
+            10.0,
+        );
+        t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "in_progress"}), 12.0);
+        // Re-announcing the call keeps its first start.
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}),
+            14.0,
+        );
+        let applied =
+            t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed"}), 20.0);
+        assert_eq!(applied.changed, vec![0]);
+        let AgentEntry::Tool { started_ms, ended_ms, status, .. } = &t.entries[0] else { panic!() };
+        assert_eq!((*started_ms, *ended_ms, *status), (Some(10.0), Some(20.0), AgentToolStatus::Completed));
+        // Settling an open turn stamps the tools it left running.
+        let mut t = Timeline::default();
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "r", "title": "Run", "status": "in_progress"}),
+            5.0,
+        );
+        t.end_turn(Some(9.0));
+        let AgentEntry::Tool { started_ms, ended_ms, status, .. } = &t.entries[0] else { panic!() };
+        assert_eq!((*started_ms, *ended_ms, *status), (Some(5.0), Some(9.0), AgentToolStatus::Failed));
+    }
+
+    #[test]
+    fn stop_subagents_stamps_only_what_still_works() {
+        let mut t = Timeline::default();
+        t.subagent("done", &json!({"state": {"state": "idle"}}), 7.0);
+        t.subagent("open", &json!({"state": {"state": "running"}}), 5.0);
+        assert_eq!(t.stop_subagents(9.0), vec![1]);
+        let AgentEntry::Subagent { ended_ms: ended_done, .. } = &t.entries[0] else { panic!() };
+        let AgentEntry::Subagent { status, ended_ms: ended_open, .. } = &t.entries[1] else { panic!() };
+        assert!(matches!(status, AgentSubagentStatus::Cancelled));
+        assert_eq!((*ended_done, *ended_open), (Some(7.0), Some(9.0)));
+    }
+
+    #[test]
+    fn entries_saved_before_timing_still_settle() {
+        let entry: AgentEntry = serde_json::from_value(json!({
+            "type": "tool", "id": "c", "title": "Run", "kind": "run",
+            "status": "completed", "locations": [], "output": null, "diffs": []
+        }))
+        .unwrap();
+        assert!(matches!(entry, AgentEntry::Tool { started_ms: None, ended_ms: None, .. }));
+        let mut t = Timeline::from_entries(vec![entry]);
+        // A late terminal update stamps the end; the start stays a point, never open-ended.
+        t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed"}), 9.0);
+        assert!(matches!(t.entries[0], AgentEntry::Tool { started_ms: Some(9.0), ended_ms: Some(9.0), .. }));
+    }
+
+    #[test]
+    fn timing_survives_a_save_and_load_round_trip() {
+        let mut t = Timeline::default();
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}),
+            10.0,
+        );
+        t.apply(&json!({"sessionUpdate": "tool_call_update", "toolCallId": "c", "status": "completed"}), 20.0);
+        let saved = serde_json::to_value(&t.entries).unwrap();
+        let loaded: Vec<AgentEntry> = serde_json::from_value(saved).unwrap();
+        assert_eq!(loaded, t.entries);
+        let again = Timeline::from_entries(loaded);
+        assert_eq!(again.tools.get("c"), Some(&0));
     }
 
     #[test]
@@ -430,10 +531,13 @@ mod tests {
         let mut t = Timeline::default();
         let plan =
             |s: &str| json!({"sessionUpdate": "plan", "entries": [{"content": "x", "priority": "high", "status": s}]});
-        t.apply(&plan("pending"));
+        t.apply(&plan("pending"), 1.0);
         t.push(AgentEntry::Agent { text: "between".into() });
-        assert_eq!(t.apply(&plan("completed")).changed, vec![0]);
-        t.apply(&json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}));
+        assert_eq!(t.apply(&plan("completed"), 2.0).changed, vec![0]);
+        t.apply(
+            &json!({"sessionUpdate": "tool_call", "toolCallId": "c", "title": "Run", "status": "in_progress"}),
+            3.0,
+        );
         t.push(AgentEntry::Permission { id: 1, title: "Run?".into(), options: vec![], chosen: None });
         assert_eq!(t.end_turn(None), vec![2, 3]);
         let again = Timeline::from_entries(t.entries.clone());
@@ -460,6 +564,25 @@ mod tests {
         assert!(matches!(t.entries[2], AgentEntry::User { done_ms: Some(5.0), .. }));
         // Settled once: a later end (a restart) doesn't move it.
         assert_eq!(t.end_turn(Some(9.0)), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn end_turn_answers_the_starter_not_a_steered_follow_up() {
+        let user = |sent: f64, steered: bool| AgentEntry::User {
+            text: "q".into(),
+            attachments: vec![],
+            images: vec![],
+            sent_ms: Some(sent),
+            done_ms: None,
+            steered,
+        };
+        let mut t = Timeline::default();
+        t.push(user(1.0, false));
+        t.push(AgentEntry::Agent { text: "a".into() });
+        t.push(user(2.0, true));
+        assert_eq!(t.end_turn(Some(5.0)), vec![0]);
+        assert!(matches!(t.entries[0], AgentEntry::User { done_ms: Some(5.0), .. }));
+        assert!(matches!(t.entries[2], AgentEntry::User { done_ms: None, steered: true, .. }));
     }
 
     #[test]

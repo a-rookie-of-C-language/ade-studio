@@ -18,6 +18,7 @@ import {
   registerCloneSource,
   registerEditorKind,
   registerOverlay,
+  registerSessionSidecarCard,
   registerToolWindow,
 } from "@/workbench/contributions";
 import { activateReviewDiff, toggleReviewDiffViewed } from "./diff";
@@ -394,13 +395,18 @@ export function activate(): () => void {
       order: 10,
       component: lazyComponent(() => import("./clone/GitHubCloneSource").then((m) => m.GitHubCloneSource)),
     }),
+    registerSessionSidecarCard({
+      id: "github.issues",
+      order: 10,
+      component: lazyComponent(() => import("./issues/IssuesSidecarCard").then((m) => m.IssuesSidecarCard)),
+    }),
     registerToolWindow({
       id: WINDOW,
       title: "Pull Requests",
       icon: "toolwindow-pull-requests",
       anchor: "left",
       order: 2,
-      stripe: "onUse",
+      stripe: "shown",
       component: PullRequestsToolWindow,
       headerContent: PullRequestsTabs,
       headerActions: PullRequestsHeaderActions,

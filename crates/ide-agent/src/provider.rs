@@ -2,7 +2,7 @@
 //! `<config>/agents/<id>.toml` (written by hand, or by installing one from the ACP
 //! Registry, see `registry`).
 
-use crate::{AgentCommandReadOnlyReason, AgentProvider, AgentSource};
+use crate::{AgentCommandReadOnlyReason, AgentLaunchReceipt, AgentProvider, AgentSource, AgentSurface};
 use ide_core::{IdeError, IdeResult};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -29,9 +29,32 @@ pub(crate) struct ProviderSpec {
     pub command: String,
     pub args: Vec<String>,
     pub env: Vec<(String, String)>,
+    /// Extra directories to search after `PATH` when resolving `command`
+    /// (e.g. `~/.opencode/bin`).
+    pub install_dirs: Vec<PathBuf>,
     /// How to sign in when the agent reports it needs authentication.
     pub login_hint: String,
+    /// Session-free model discovery; the New Task page uses it to fill the model
+    /// dropdown when the agent has no remembered config.
+    pub model_discovery: ModelDiscovery,
     pub source: AgentSource,
+}
+
+/// How the agent lists its models before a session exists.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) enum ModelDiscovery {
+    /// No session-free listing; the New Task page shows remembered config only.
+    #[default]
+    None,
+    /// Run the agent's binary with `args` and parse its stdout, one model per
+    /// line (like OpenCode 1.x's `opencode models --verbose`).
+    Command { args: Vec<String> },
+    /// Start a disposable ACP session and read its `models`/`configOptions`
+    /// (agents whose model list only materializes after a session starts).
+    /// No current built-in uses it (the opencode2/grok rows were not ported),
+    /// but `AgentManager::models` supports it for future agents.
+    #[allow(dead_code)]
+    Session,
 }
 
 /// `(id, name, driver, command line, sign-in hint)`. npm adapters are pinned so a
@@ -75,10 +98,64 @@ fn builtins() -> Vec<ProviderSpec> {
             command: cmd[0].into(),
             args: cmd[1..].iter().map(|a| (*a).to_owned()).collect(),
             env: Vec::new(),
+            install_dirs: Vec::new(),
             login_hint: (*hint).into(),
+            model_discovery: ModelDiscovery::None,
             source: AgentSource::Builtin,
         })
         .collect()
+}
+
+impl ProviderSpec {
+    /// Per-agent tweaks applied after the table entry (extra env, install dirs, ...).
+    fn tuned(mut self) -> Self {
+        // OpenCode installs its own binary outside PATH; its ACP server is `opencode acp`.
+        // OPENCODE_CLIENT=acp tells it an ACP client is driving (question tool off).
+        if self.id == "opencode" {
+            if let Some(home) = home_dir() {
+                self.install_dirs.push(home.join(".opencode").join("bin"));
+            }
+            self.env.push(("OPENCODE_CLIENT".into(), "acp".into()));
+            self.env.push(("OPENCODE_ENABLE_QUESTION_TOOL".into(), "false".into()));
+            // 1.x lists models on the CLI; 2.x needs a disposable session instead.
+            self.model_discovery = ModelDiscovery::Command { args: vec!["models".into(), "--verbose".into()] };
+        }
+        self
+    }
+
+    /// Resolves `command` to an executable path: itself when it is a path, the entries of
+    /// `install_dirs`, then `PATH`. Returns the command unchanged when nothing resolves
+    /// (the spawn error will say the same thing).
+    pub(crate) fn resolve_command(&self) -> String {
+        resolve(&self.command, &self.install_dirs).unwrap_or_else(|| self.command.clone())
+    }
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from)
+}
+
+/// `command` as an executable: a path, or a name looked up in `dirs` then `PATH`.
+pub(crate) fn resolve(command: &str, extra_dirs: &[PathBuf]) -> Option<String> {
+    let p = Path::new(command);
+    if p.components().count() > 1 {
+        return is_executable(p).then(|| command.to_owned());
+    }
+    let find_in = |dir: &Path| {
+        let c = dir.join(command);
+        let exts: &[&str] = if cfg!(windows) { &["exe", "cmd", "bat"] } else { &[] };
+        if is_executable(&c) || exts.iter().any(|e| is_executable(&c.with_extension(e))) {
+            Some(c.to_string_lossy().into_owned())
+        } else {
+            None
+        }
+    };
+    for dir in extra_dirs {
+        if let Some(found) = find_in(dir) {
+            return Some(found);
+        }
+    }
+    std::env::var_os("PATH").and_then(|path| std::env::split_paths(&path).find_map(|dir| find_in(&dir)))
 }
 
 /// Whether `id` names a built-in agent that needs no registry install (native drivers
@@ -123,11 +200,26 @@ pub(crate) fn describe(spec: &ProviderSpec) -> AgentProvider {
         command_overridden: builtin.as_ref().is_some_and(|b| b.command != spec.command),
         command_editable: reason.is_none(),
         command_read_only_reason: reason,
-        installed: installed(&spec.command),
+        installed: installed(spec),
         env: spec.env.iter().cloned().collect(),
         config: vec![],
         commands: vec![],
         source: spec.source.clone(),
+    }
+}
+
+/// Honest launch receipt: what was actually started, on which surface, and with
+/// which idempotency key. No terminal fallback is invented: every task starts on
+/// `Chat`, and a missing binary is reported by `create` instead of a fake receipt.
+pub(crate) fn launch_receipt(spec: &ProviderSpec, operation_id: Option<String>) -> AgentLaunchReceipt {
+    AgentLaunchReceipt {
+        provider: spec.id.clone(),
+        program: spec.command.clone(),
+        args: spec.args.clone(),
+        surface: AgentSurface::Chat,
+        installed: installed(spec),
+        fallback: None,
+        operation_id,
     }
 }
 
@@ -157,6 +249,7 @@ fn update_builtin(custom_dir: &Path, id: &str, change: impl FnOnce(&mut CustomAg
             command: builtin.command.clone(),
             args: builtin.args.clone(),
             env: BTreeMap::new(),
+            install_dirs: Vec::new(),
             registry: None,
         }
     };
@@ -193,6 +286,9 @@ pub(crate) struct CustomAgent {
     pub args: Vec<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    /// Extra directories to search after `PATH` when resolving `command`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub install_dirs: Vec<PathBuf>,
     /// Set when the agent was installed from the ACP Registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry: Option<RegistryRef>,
@@ -263,7 +359,9 @@ pub(crate) fn load(custom_dir: Option<&Path>) -> Vec<ProviderSpec> {
             command: agent.command,
             args: agent.args,
             env,
+            install_dirs: agent.install_dirs,
             login_hint: "Sign in with the agent's own command line first.".into(),
+            model_discovery: ModelDiscovery::None,
             source,
             id,
         };
@@ -278,22 +376,12 @@ pub(crate) fn load(custom_dir: Option<&Path>) -> Vec<ProviderSpec> {
             None => specs.push(spec),
         }
     }
-    specs
+    specs.into_iter().map(ProviderSpec::tuned).collect()
 }
 
-/// Whether `command` resolves to an executable (a path, or a name on `PATH`).
-pub(crate) fn installed(command: &str) -> bool {
-    let p = Path::new(command);
-    if p.components().count() > 1 {
-        return is_executable(p);
-    }
-    let exts: &[&str] = if cfg!(windows) { &["exe", "cmd", "bat"] } else { &[] };
-    std::env::var_os("PATH").is_some_and(|path| {
-        std::env::split_paths(&path).any(|dir| {
-            let c = dir.join(command);
-            is_executable(&c) || exts.iter().any(|e| is_executable(&c.with_extension(e)))
-        })
-    })
+/// Whether the spec's command resolves to an executable (its install dirs or `PATH`).
+pub(crate) fn installed(spec: &ProviderSpec) -> bool {
+    resolve(&spec.command, &spec.install_dirs).is_some()
 }
 
 fn is_executable(p: &Path) -> bool {
@@ -375,8 +463,22 @@ mod tests {
         assert_eq!((gemini.name.as_str(), gemini.args.as_slice()), ("gemini", &["--acp".to_owned()][..]));
         assert!(!specs.iter().any(|s| s.id == "broken"));
         assert_eq!(specs.iter().filter(|s| s.id == "claude").count(), 1);
-        assert!(!installed("/definitely/not/here"));
-        assert!(installed("sh"));
+        assert!(resolve("/definitely/not/here", &[]).is_none());
+        assert!(resolve("sh", &[]).is_some());
+    }
+
+    #[test]
+    fn opencode_gets_launch_specs() {
+        let specs = load(None);
+        let opencode = specs.iter().find(|s| s.id == "opencode").unwrap();
+        assert!(opencode.env.contains(&("OPENCODE_CLIENT".to_owned(), "acp".to_owned())));
+        assert!(opencode.env.contains(&("OPENCODE_ENABLE_QUESTION_TOOL".to_owned(), "false".to_owned())));
+        assert!(
+            matches!(&opencode.model_discovery, ModelDiscovery::Command { args } if args == &["models", "--verbose"])
+        );
+        let others = specs.iter().find(|s| s.id == "codex").unwrap();
+        assert!(others.env.is_empty());
+        assert_eq!(others.model_discovery, ModelDiscovery::None);
     }
 
     #[test]
@@ -412,6 +514,7 @@ mod tests {
             command: "amp".into(),
             args: vec![],
             env: BTreeMap::new(),
+            install_dirs: Vec::new(),
             registry: Some(RegistryRef { id: "amp-acp".into(), version: "1.0.0".into() }),
         }
         .write(&path)
@@ -437,6 +540,7 @@ mod tests {
                 command: "/old/claude".into(),
                 args: vec![],
                 env: BTreeMap::new(),
+                install_dirs: Vec::new(),
                 registry: None,
             };
             match field {
@@ -490,6 +594,7 @@ mod tests {
             command: "/data/agents/tools/amp-acp/0.10.0/amp-acp".into(),
             args: vec!["acp".into()],
             env: BTreeMap::from([("K".to_owned(), "v".to_owned())]),
+            install_dirs: Vec::new(),
             registry: Some(RegistryRef { id: "amp-acp".into(), version: "0.10.0".into() }),
         };
         agent.write(&path).unwrap();
@@ -499,5 +604,26 @@ mod tests {
         let spec = load(Some(path.parent().unwrap())).into_iter().find(|s| s.id == "amp-acp").unwrap();
         assert_eq!(spec.source, AgentSource::Registry { version: "0.10.0".into(), update: None });
         assert!(toml::from_str::<CustomAgent>("command = \"x\"\n[registry]\nid = \"x\"\n").is_err());
+    }
+
+    #[test]
+    fn resolve_searches_install_dirs_before_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("myagent");
+        std::fs::write(&exe, "x").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let exe_s = exe.to_string_lossy().into_owned();
+        // A path resolves to itself.
+        assert_eq!(resolve(&exe_s, &[]), Some(exe_s.clone()));
+        // A bare name resolves through the extra dirs, in order.
+        assert_eq!(resolve("myagent", &[other.path().to_path_buf(), dir.path().to_path_buf()]), Some(exe_s));
+        // Unknown names and missing paths resolve to nothing.
+        assert!(resolve("definitely-not-an-agent-binary", &[dir.path().to_path_buf()]).is_none());
+        assert!(resolve(&dir.path().join("missing").to_string_lossy(), &[]).is_none());
     }
 }

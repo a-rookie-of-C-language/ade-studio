@@ -180,6 +180,48 @@
   height: min(420px, 65vh);
   overflow: hidden;
 }
+
+/* Sessions created outside OpenIDEA, listed below the project's own tasks. */
+.external {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding: 4px 0 8px;
+}
+.externalBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+}
+.externalSpacer {
+  flex: 1;
+}
+.externalList {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.externalList .link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.externalEmpty,
+.externalError {
+  padding: 8px 12px;
+  color: var(--fg-subtle);
+  font-size: var(--fs-small);
+}
+.externalError {
+  color: var(--danger);
+}
 .historyTitle {
   flex: none;
   padding: 8px 12px;

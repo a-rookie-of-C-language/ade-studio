@@ -16,7 +16,16 @@ import { canSend, emptyDraft } from "./composerModel";
 import { ConfigPickers } from "./ConfigPickers";
 import { providerIcon } from "./model";
 import { ADD_AGENT, providerOptions as agentOptions } from "./providerOptions";
-import { HOME, NO_COMMANDS, refreshProviders, startTask, updateDraft, useAgentCommands, useAgents } from "./store";
+import {
+  HOME,
+  NO_COMMANDS,
+  refreshProviders,
+  startTask,
+  updateDraft,
+  useAgentCommands,
+  useAgentOptions,
+  useAgents,
+} from "./store";
 import styles from "./Home.module.css";
 
 export function HomeEditor({
@@ -82,6 +91,7 @@ export function HomeEditor({
   const provider = providers.find((p) => p.id === draft.provider) ?? providers[0];
   const probe = useProbe(provider?.installed ? provider.id : null, provider?.command);
   const agentCommands = useAgentCommands(provider?.id, null, provider?.commands ?? NO_COMMANDS);
+  const options = useAgentOptions(provider?.id, provider?.config ?? []);
   const providerOptions: SelectOption[] = agentOptions(providers, tx, providerIcon);
   // Without git under the project there are no worktrees: force the local checkout.
   const isGit = project?.workspace ? repoState?.root === root && repoState.isGit : (project?.isGit ?? false);
@@ -116,7 +126,7 @@ export function HomeEditor({
           projectRoot={homeRoot}
           commands={agentCommands}
           history={history}
-          config={provider?.config ?? []}
+          config={options}
           onConfig={setOption}
           onSubmit={start}
           disabled={!canStart}
@@ -131,7 +141,7 @@ export function HomeEditor({
                   id === ADD_AGENT ? void executeAction("agents.addAgent") : updateDraft({ provider: id, config: {} })
                 }
               />
-              <ConfigPickers config={provider?.config ?? []} values={draft.config} onChange={setOption} />
+              <ConfigPickers config={options} values={draft.config} onChange={setOption} />
             </>
           }
           actions={
@@ -241,7 +251,7 @@ export function HomeEditor({
               : [probe.name, probe.version, probe.protocol].filter(Boolean).join(" · ")}
           </p>
         )}
-        {(error || (provider && !provider.installed) || (provider && !provider.config.length)) && (
+        {(error || (provider && !provider.installed) || (provider && !options.length)) && (
           <p
             className={error || !provider?.installed ? styles.warning : styles.note}
             role={error ? "alert" : undefined}

@@ -22,7 +22,11 @@ fn root(window: &Window, state: &AppState, repo: Option<PathBuf>) -> IdeResult<P
     match repo {
         Some(at) => match repos.at_root(&at) {
             Some(r) => Ok(r.root().to_path_buf()),
-            None => Err(IdeError::unavailable(format!("{} is not a git repository of the project", at.display()))),
+            // Windows without project repositories (like Cowork) read a repository
+            // opened as an external log; anything else is not ours to run gh in.
+            None => project
+                .with_log_repo_at(Some(at.as_path()), |r| Ok(r.root().to_path_buf()))
+                .map_err(|_| IdeError::unavailable(format!("{} is not a git repository of the project", at.display()))),
         },
         None => Ok(repos.primary().map_or_else(|| project.root.clone(), |r| r.root().to_path_buf())),
     }

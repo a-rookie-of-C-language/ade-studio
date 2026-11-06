@@ -3,8 +3,8 @@
 use crate::state::AppState;
 use ide_agent::registry::AgentRegistry;
 use ide_agent::{
-    AgentChange, AgentCommand, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider, AgentQueued, AgentTask,
-    NewAgentTask,
+    AgentChange, AgentCommand, AgentConfigOption, AgentEntry, AgentEvent, AgentProbe, AgentPrompt, AgentProvider,
+    AgentQueued, AgentTask, ExternalSession, ImportExternalTask, NewAgentTask,
 };
 use ide_core::{IdeResult, IpcPath, RequestId};
 use ide_host::ops::agent;
@@ -34,6 +34,18 @@ pub fn agent_subscribe(
 #[specta::specta]
 pub fn agent_providers(window: Window, state: State<'_, AppState>) -> IdeResult<Vec<AgentProvider>> {
     agent::providers(&state.host, window.label())
+}
+
+/// Session settings (model, mode, effort…) `provider` advertises without a task,
+/// so the New Task page shows its pickers before the first session.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_models(
+    window: Window,
+    state: State<'_, AppState>,
+    provider: String,
+) -> IdeResult<Vec<AgentConfigOption>> {
+    agent::models(&state.host, window.label(), provider).await
 }
 
 /// Overrides built-in agent `id`'s command with `command` (its agent file keeps the
@@ -277,4 +289,29 @@ pub async fn agent_base_text(
     path: IpcPath,
 ) -> IdeResult<Option<String>> {
     agent::base_text(&state.host, window.label(), task, path).await
+}
+
+/// Sessions created outside OpenIDEA (another Codex or Claude client), newest first;
+/// `provider` narrows to `codex` or `claude`. Read-only: lists the agents' own
+/// history on disk, never modifies it.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_external_sessions(
+    window: Window,
+    state: State<'_, AppState>,
+    provider: Option<String>,
+) -> IdeResult<Vec<ExternalSession>> {
+    agent::external_sessions(&state.host, window.label(), provider).await
+}
+
+/// Imports an external session as a task of the project and resumes it under its own
+/// session id. Importing the same session twice returns the first task.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_import_external(
+    window: Window,
+    state: State<'_, AppState>,
+    request: ImportExternalTask,
+) -> IdeResult<AgentTask> {
+    agent::import_external(&state.host, window.label(), request).await
 }

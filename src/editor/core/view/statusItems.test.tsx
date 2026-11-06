@@ -1,8 +1,12 @@
 import { Profiler } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { OutlineItem } from "@/platform/ipc";
 import type { EditorStatus } from "../controller";
+import type { DocMeta } from "../model/document";
+
+const executeAction = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock("@/platform/actions", () => ({ executeAction }));
 
 vi.mock("../controller", async () => {
   const { create } = await import("zustand");
@@ -14,7 +18,7 @@ vi.mock("../controller", async () => {
 });
 
 const { useEditorStatus } = await import("../controller");
-const { useOutline } = await import("../model/document");
+const { useOutline, useDocMeta } = await import("../model/document");
 const { Breadcrumbs, CodeBreadcrumbs } = await import("./StatusItems");
 const { NavBarPopup } = await import("./NavBarPopup");
 
@@ -92,4 +96,38 @@ it("shows the member and its directories in workspace breadcrumbs", async () => 
   expect(screen.getByRole("navigation", { name: "Breadcrumbs" }).textContent).toBe("bsrcfile.ts");
   view.unmount();
   useProject.setState({ project: null });
+});
+
+describe("soft-wrap status widget", () => {
+  const docMeta = (softWrap: boolean): DocMeta =>
+    ({
+      doc: 1,
+      path: PATH,
+      language: "typescript",
+      uiMode: "TypeScript",
+      encoding: "UTF-8",
+      lineEnding: "lf",
+      readOnly: false,
+      dirty: false,
+      banner: null,
+      indent: { tabSize: 2, insertSpaces: true },
+      softWrap,
+    }) as DocMeta;
+
+  it("reflects the wrap state and runs editor.toggleSoftWrap on click", async () => {
+    const { SoftWrapStatus } = await import("./StatusItems");
+    executeAction.mockClear();
+    act(() => useEditorStatus.setState({ status: caret(0, 0) }));
+    useDocMeta.setState({ [PATH]: docMeta(false) });
+    const view = render(<SoftWrapStatus />);
+    const button = screen.getByRole("button", { name: "Soft-Wrap" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(button);
+    expect(executeAction).toHaveBeenCalledWith("editor.toggleSoftWrap");
+    act(() => useDocMeta.setState({ [PATH]: docMeta(true) }));
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    view.unmount();
+    act(() => useEditorStatus.setState({ status: null }));
+    useDocMeta.setState({}, true);
+  });
 });

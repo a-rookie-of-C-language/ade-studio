@@ -266,7 +266,7 @@ describe("new comments", () => {
     expect(buttons.map((b) => b.textContent)).toEqual(["Add Single Comment", "Start Review"]);
     // The range is outlined; on the changes it can be adjusted.
     expect(document.querySelectorAll(".cm-merge-b .cm-reviewRange")).toHaveLength(3);
-    expect(document.querySelector<HTMLElement>(".cm-reviewHandle")?.title).toBe(
+    expect(document.querySelector<HTMLElement>(".cm-reviewHandle")?.dataset.tooltip).toBe(
       "Drag to select several lines for commenting",
     );
     fireEvent.change(within(box).getByRole("textbox"), { target: { value: "Looks odd" } });
@@ -333,7 +333,7 @@ describe("new comments", () => {
     await waitFor(() => expect(inlay("T1")).toBeNull());
     act(() => void requestNewComment(N, PATH, "c1", newCommentLocation("right", 2, 2)));
     const box = await newCommentBox();
-    expect(document.querySelector<HTMLElement>(".cm-reviewHandle")?.title).toBe(
+    expect(document.querySelector<HTMLElement>(".cm-reviewHandle")?.dataset.tooltip).toBe(
       "Comment range cannot be adjusted while reviewing a single commit",
     );
     fireEvent.change(within(box).getByRole("textbox"), { target: { value: "here" } });

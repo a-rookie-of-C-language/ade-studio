@@ -1,8 +1,8 @@
 /** Turn-aware ledger over a task's entries: turns, tool records and a timing overview.
  *
- * Frontend-only: the backend keeps no per-record timing yet, so the overview
- * spans user turns and subagents (the entries that carry timestamps) while
- * tool calls appear as records inside their turn.
+ * The timing overview spans turns, timed tool calls and subagents; tool calls
+ * also appear as records inside their turn, and the sequence overview gives
+ * every record an equal-width lane.
  */
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
@@ -16,9 +16,14 @@ import {
   buildTrajectory,
   buildTrajectorySpans,
   buildSequenceSpans,
+  describeTrajectoryRecord,
   matchTrajectoryEntry,
   trajectoryCopyText,
   trajectoryDomain,
+  turnOfIndex,
+  type TrajectoryInspector,
+  type TrajectoryInspectorFact,
+  type TrajectoryInspectorText,
 } from "./trajectory";
 import styles from "./TrajectoryView.module.css";
 
@@ -57,6 +62,7 @@ export function TrajectoryView({
   const [follow, setFollow] = useState(true);
   const [mode, setMode] = useState<"sequence" | "time">("sequence");
   const [collapsed, setCollapsed] = useState<ReadonlySet<number>>(() => new Set());
+  const [selected, setSelected] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const trajectory = useMemo(() => buildTrajectory(entries ?? []), [entries]);
@@ -92,6 +98,10 @@ export function TrajectoryView({
       return new Set(trajectory.turns.map((t) => t.turn));
     });
 
+  const toggleInspect = (index: number) => setSelected((s) => (s === index ? null : index));
+  const selectedEntry = selected != null ? (entries ?? [])[selected] : undefined;
+  const selectedDetail = selectedEntry ? describeTrajectoryRecord(selectedEntry) : null;
+  const selectedTurn = selected != null ? turnOfIndex(trajectory.turns, selected) : null;
   useLayoutEffect(() => {
     const el = listRef.current;
     if (el && follow && stick.current) el.scrollTop = el.scrollHeight;
@@ -148,7 +158,12 @@ export function TrajectoryView({
     document.getElementById(anchorOf(turn))?.scrollIntoView?.({ block: "nearest" });
   };
   return (
-    <div className={styles.view}>
+    <div
+      className={styles.view}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") setSelected(null);
+      }}
+    >
       <Toolbar
         query={query}
         onQuery={setQuery}
@@ -195,13 +210,19 @@ export function TrajectoryView({
                 className={clsx(
                   styles.span,
                   s.kind === "subagent" && styles.spanSubagent,
+                  s.kind === "tool" && styles.spanTool,
                   s.endMs == null && styles.spanRunning,
                 )}
                 style={{ left: `${left}%`, width: `${width}%` }}
-                title={`${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`}
+                title={
+                  s.title
+                    ? `${s.title} · ${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
+                    : `${formatSentAt(s.startMs)} - ${formatSentAt(s.endMs ?? now)}`
+                }
                 aria-label={s.kind === "turn" ? tx`Turn ${s.turn! + 1}` : (s.title ?? tx("Subagent"))}
                 onClick={() => {
                   if (s.kind === "turn" && s.turn != null) goToTurn(s.turn);
+                  else if (s.kind === "tool") goToRecord(s.index, s.turn);
                   else if (s.subagent) onOpenSubagent(s.subagent);
                 }}
               />
@@ -224,8 +245,19 @@ export function TrajectoryView({
           <div className={styles.rows}>
             {entries.slice(0, trajectory.prefaceEnd).map((entry, i) =>
               matching && !matching.has(i) ? null : (
-                <div key={i} id={recordAnchorOf(i)} className={styles.recordAnchor}>
-                  <Row task={task} entry={entry} index={i} onOpenSubagent={onOpenSubagent} />
+                <div
+                  key={i}
+                  id={recordAnchorOf(i)}
+                  className={clsx(styles.recordAnchor, selected === i && styles.recordSelected)}
+                >
+                  <Row
+                    task={task}
+                    entry={entry}
+                    index={i}
+                    selected={selected === i}
+                    onInspect={toggleInspect}
+                    onOpenSubagent={onOpenSubagent}
+                  />
                 </div>
               ),
             )}
@@ -293,8 +325,19 @@ export function TrajectoryView({
                   {entries.slice(t.startIndex + 1, t.endIndex).map((entry, k) => {
                     const index = t.startIndex + 1 + k;
                     return matching && !matching.has(index) ? null : (
-                      <div key={index} id={recordAnchorOf(index)} className={styles.recordAnchor}>
-                        <Row task={task} entry={entry} index={index} onOpenSubagent={onOpenSubagent} />
+                      <div
+                        key={index}
+                        id={recordAnchorOf(index)}
+                        className={clsx(styles.recordAnchor, selected === index && styles.recordSelected)}
+                      >
+                        <Row
+                          task={task}
+                          entry={entry}
+                          index={index}
+                          selected={selected === index}
+                          onInspect={toggleInspect}
+                          onOpenSubagent={onOpenSubagent}
+                        />
                       </div>
                     );
                   })}
@@ -304,6 +347,17 @@ export function TrajectoryView({
           );
         })}
       </div>
+      {selected != null && selectedEntry && selectedDetail && (
+        <Inspector
+          task={task}
+          index={selected}
+          turn={selectedTurn}
+          entry={selectedEntry}
+          detail={selectedDetail}
+          onClose={() => setSelected(null)}
+          onOpenSubagent={onOpenSubagent}
+        />
+      )}
     </div>
   );
 }
@@ -370,9 +424,33 @@ function Toolbar({
   );
 }
 
-/** The record's 1-based ledger number, stable across filtering and folding. */
-function RecordIndex({ index }: { index: number }) {
-  return <span className={styles.rowIndex}>#{index + 1}</span>;
+/** The record's 1-based ledger number; doubles as the inspector toggle. */
+function RecordIndex({
+  index,
+  selected,
+  onInspect,
+}: {
+  index: number;
+  selected: boolean;
+  onInspect: (index: number) => void;
+}) {
+  const tx = useTx();
+  return (
+    <button
+      type="button"
+      className={clsx(styles.rowIndex, selected && styles.rowIndexSelected)}
+      title={tx("Inspect record")}
+      aria-pressed={selected}
+      onClick={(e) => {
+        // Inside a <summary> this would also fold the row; keep it an inspection only.
+        e.preventDefault();
+        e.stopPropagation();
+        onInspect(index);
+      }}
+    >
+      #{index + 1}
+    </button>
+  );
 }
 
 /** Hover action copying the record's full text; absent when there is nothing to copy. */
@@ -394,11 +472,15 @@ function Row({
   task,
   entry,
   index,
+  selected,
+  onInspect,
   onOpenSubagent,
 }: {
   task: AgentTask;
   entry: AgentEntry;
   index: number;
+  selected: boolean;
+  onInspect: (index: number) => void;
   onOpenSubagent: (id: string) => void;
 }) {
   const copy = trajectoryCopyText(entry);
@@ -409,19 +491,21 @@ function Row({
         <div className={styles.row}>
           <RowCopy text={copy} />
           <div className={styles.messageLabel}>
-            <RecordIndex index={index} /> <T>Steered</T>
+            <RecordIndex index={index} selected={selected} onInspect={onInspect} /> <T>Steered</T>
           </div>
           <div className={styles.messageText}>{entry.text}</div>
         </div>
       );
     case "agent":
-      return <AgentRow task={task} text={entry.text} index={index} copy={copy} />;
+      return (
+        <AgentRow task={task} text={entry.text} index={index} copy={copy} selected={selected} onInspect={onInspect} />
+      );
     case "thought":
       return (
         <details className={styles.row}>
           <RowCopy text={copy} />
           <summary className={styles.rowHead}>
-            <RecordIndex index={index} />
+            <RecordIndex index={index} selected={selected} onInspect={onInspect} />
             <span className={styles.thoughtSummary}>
               <T>Thinking</T>
             </span>
@@ -430,13 +514,13 @@ function Row({
         </details>
       );
     case "tool":
-      return <ToolRow entry={entry} index={index} copy={copy} />;
+      return <ToolRow entry={entry} index={index} copy={copy} selected={selected} onInspect={onInspect} />;
     case "plan":
       return (
         <div className={styles.row}>
           <RowCopy text={copy} />
           <div className={styles.rowHead}>
-            <RecordIndex index={index} />
+            <RecordIndex index={index} selected={selected} onInspect={onInspect} />
             <T>Plan</T>
           </div>
           {entry.items.map((item, i) => (
@@ -451,13 +535,23 @@ function Row({
         </div>
       );
     case "subagent":
-      return <SubagentRow task={task} entry={entry} index={index} copy={copy} onOpen={onOpenSubagent} />;
+      return (
+        <SubagentRow
+          task={task}
+          entry={entry}
+          index={index}
+          copy={copy}
+          selected={selected}
+          onInspect={onInspect}
+          onOpen={onOpenSubagent}
+        />
+      );
     case "message":
       return (
         <div className={styles.row}>
           <RowCopy text={copy} />
           <div className={styles.messageLabel}>
-            <RecordIndex index={index} />{" "}
+            <RecordIndex index={index} selected={selected} onInspect={onInspect} />{" "}
             {entry.incoming ? <T>Task from the parent agent</T> : <T>Report to the parent agent</T>}
           </div>
           {entry.incoming ? (
@@ -472,7 +566,7 @@ function Row({
         <div className={styles.row}>
           <RowCopy text={copy} />
           <div className={styles.rowHead}>
-            <RecordIndex index={index} />
+            <RecordIndex index={index} selected={selected} onInspect={onInspect} />
             <Icon name="warning" size={13} />
             <span className={styles.rowTitle}>{entry.title}</span>
             <span className={styles.rowMeta}>{entry.chosen ?? <T>Waiting for your answer</T>}</span>
@@ -483,7 +577,7 @@ function Row({
       return (
         <div className={styles.errorRow} role="alert">
           <Icon name="error" size={14} />
-          <RecordIndex index={index} />
+          <RecordIndex index={index} selected={selected} onInspect={onInspect} />
           <span>{entry.message}</span>
           <RowCopy text={copy} />
         </div>
@@ -491,14 +585,28 @@ function Row({
   }
 }
 
-function AgentRow({ task, text, index, copy }: { task: AgentTask; text: string; index: number; copy: string | null }) {
+function AgentRow({
+  task,
+  text,
+  index,
+  copy,
+  selected,
+  onInspect,
+}: {
+  task: AgentTask;
+  text: string;
+  index: number;
+  copy: string | null;
+  selected: boolean;
+  onInspect: (index: number) => void;
+}) {
   const firstLine = text.split("\n", 1)[0]!.slice(0, 140);
   if (text.length <= 140 && !text.includes("\n"))
     return (
       <div className={styles.row}>
         <RowCopy text={copy} />
         <div className={styles.lineHead}>
-          <RecordIndex index={index} />
+          <RecordIndex index={index} selected={selected} onInspect={onInspect} />
           <div className={styles.lineBody}>
             <Markdown text={text} cwd={task.cwd} />
           </div>
@@ -509,7 +617,7 @@ function AgentRow({ task, text, index, copy }: { task: AgentTask; text: string; 
     <details className={styles.row}>
       <RowCopy text={copy} />
       <summary className={styles.rowHead}>
-        <RecordIndex index={index} />
+        <RecordIndex index={index} selected={selected} onInspect={onInspect} />
         <span className={styles.rowTitle}>{firstLine}</span>
       </summary>
       <Markdown text={text} cwd={task.cwd} />
@@ -521,14 +629,22 @@ function ToolRow({
   entry,
   index,
   copy,
+  selected,
+  onInspect,
 }: {
   entry: Extract<AgentEntry, { type: "tool" }>;
   index: number;
   copy: string | null;
+  selected: boolean;
+  onInspect: (index: number) => void;
 }) {
+  const durationMs =
+    entry.startedMs != null && entry.endedMs != null && entry.endedMs > entry.startedMs
+      ? entry.endedMs - entry.startedMs
+      : null;
   const head = (
     <>
-      <RecordIndex index={index} />
+      <RecordIndex index={index} selected={selected} onInspect={onInspect} />
       <Icon name={TOOL_ICONS[entry.kind] ?? "run"} size={14} />
       <span className={styles.rowTitle}>{entry.title || entry.kind}</span>
       {entry.diffs.map((d) => (
@@ -538,6 +654,7 @@ function ToolRow({
       ))}
       {(entry.status === "running" || entry.status === "pending") && <Spinner size={12} />}
       {entry.status === "failed" && <Icon name="error" size={12} />}
+      {durationMs != null && <span className={styles.rowMeta}>{formatDuration(durationMs)}</span>}
     </>
   );
   if (!entry.output) {
@@ -567,12 +684,16 @@ function SubagentRow({
   entry,
   index,
   copy,
+  selected,
+  onInspect,
   onOpen,
 }: {
   task: AgentTask;
   entry: SubagentEntry;
   index: number;
   copy: string | null;
+  selected: boolean;
+  onInspect: (index: number) => void;
   onOpen: (id: string) => void;
 }) {
   const tx = useTx();
@@ -584,7 +705,7 @@ function SubagentRow({
       <RowCopy text={copy} />
       <div className={styles.rowHead}>
         <SubagentStatusIcon status={entry.status} />
-        <RecordIndex index={index} />
+        <RecordIndex index={index} selected={selected} onInspect={onInspect} />
         <button
           type="button"
           className={styles.subagentOpen}
@@ -635,4 +756,143 @@ function SubagentStatusIcon({ status }: { status: SubagentEntry["status"] }) {
     case "failed":
       return <Icon name="close" size={13} className={styles.muted} label="Failed" />;
   }
+}
+
+/** Localized label of one inspector fact. */
+function InspectorFactLabel({ factKey }: { factKey: TrajectoryInspectorFact["key"] }) {
+  const tx = useTx();
+  switch (factKey) {
+    case "kind":
+      return tx("Kind");
+    case "locations":
+      return tx("Locations");
+    case "changes":
+      return tx("Changes");
+    case "calls":
+      return tx("Tool calls");
+    case "activity":
+      return tx("Latest activity");
+    case "error":
+      return tx("Error");
+    case "attachments":
+      return tx("Attachments");
+    case "choice":
+      return tx("Choice");
+    case "options":
+      return tx("Options");
+  }
+}
+
+/** Localized section title of one inspector text ("text" renders untitled). */
+function InspectorTextTitle({ textKey }: { textKey: TrajectoryInspectorText["key"] }) {
+  const tx = useTx();
+  switch (textKey) {
+    case "output":
+      return tx("Output");
+    case "prompt":
+      return tx("Task");
+    case "reply":
+      return tx("Result");
+    case "text":
+      return null;
+  }
+}
+
+/** Full detail behind one ledger record: timing, facts, texts and follow-up actions. */
+function Inspector({
+  task,
+  index,
+  turn,
+  entry,
+  detail,
+  onClose,
+  onOpenSubagent,
+}: {
+  task: AgentTask;
+  index: number;
+  turn: number | null;
+  entry: AgentEntry;
+  detail: TrajectoryInspector;
+  onClose: () => void;
+  onOpenSubagent: (id: string) => void;
+}) {
+  const tx = useTx();
+  const num = index + 1;
+  return (
+    <section className={styles.inspector} role="dialog" aria-label={tx`Record ${num}`}>
+      <div className={styles.inspectorHead}>
+        <span className={styles.rowIndex}>#{num}</span>
+        {detail.title ? (
+          <span className={styles.inspectorTitle}>{detail.title}</span>
+        ) : (
+          <code className={styles.code}>{detail.kind}</code>
+        )}
+        {detail.status && <code className={styles.code}>{detail.status}</code>}
+        {turn != null && <span className={styles.turnMeta}>{tx`Turn ${turn + 1}`}</span>}
+        <span className={styles.inspectorSpacer} />
+        <IconButton icon="close" title={tx("Close")} size="small" onClick={onClose} />
+      </div>
+      {(detail.startMs != null || detail.facts.length > 0) && (
+        <dl className={styles.facts}>
+          {detail.startMs != null && (
+            <div className={styles.fact}>
+              <dt>{tx("Started")}</dt>
+              <dd>{formatSentAt(detail.startMs)}</dd>
+            </div>
+          )}
+          {detail.startMs != null && (
+            <div className={styles.fact}>
+              <dt>{tx("Ended")}</dt>
+              <dd>{detail.endMs != null ? formatSentAt(detail.endMs) : tx("Running")}</dd>
+            </div>
+          )}
+          {detail.durationMs != null && (
+            <div className={styles.fact}>
+              <dt>{tx("Duration")}</dt>
+              <dd>{formatDuration(detail.durationMs)}</dd>
+            </div>
+          )}
+          {detail.facts.map((f) => (
+            <div key={f.key} className={styles.fact}>
+              <dt>
+                <InspectorFactLabel factKey={f.key} />
+              </dt>
+              <dd className={styles.factValue}>{f.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {entry.type === "permission" && !detail.facts.some((f) => f.key === "choice") && (
+        <div className={styles.pending}>{tx("Waiting for your answer")}</div>
+      )}
+      {detail.texts.map((t) => (
+        <div key={t.key} className={styles.section}>
+          {t.key !== "text" && (
+            <div className={styles.sectionTitle}>
+              <InspectorTextTitle textKey={t.key} />
+            </div>
+          )}
+          {t.format === "markdown" ? (
+            <Markdown text={t.text} cwd={task.cwd} />
+          ) : t.format === "pre" ? (
+            <pre className={styles.output}>{t.text}</pre>
+          ) : (
+            <div className={styles.messageText}>{t.text}</div>
+          )}
+        </div>
+      ))}
+      {entry.type === "subagent" && (
+        <div>
+          <button
+            type="button"
+            className={styles.subagentOpen}
+            onClick={() => onOpenSubagent(entry.id)}
+            title={tx("Open the subagent's conversation")}
+          >
+            {subagentTitle(entry)}
+          </button>
+        </div>
+      )}
+    </section>
+  );
 }
