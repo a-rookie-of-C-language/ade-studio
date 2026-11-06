@@ -95,6 +95,91 @@
   white-space: nowrap;
 }
 
+/* Session stats: cumulative token / request / cost / timing totals. Shares the context card's look. */
+.statsCard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-popup);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.statsHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.statsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+}
+.stat {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 12px;
+}
+.stat:nth-child(even) {
+  border-left: 1px solid var(--border);
+}
+.stat:nth-child(n + 3) {
+  border-top: 1px solid var(--border);
+}
+.statFull {
+  grid-column: 1 / -1;
+}
+.statLabel {
+  color: var(--fg-muted);
+  font-size: var(--fs-small);
+}
+.statValue {
+  color: var(--fg-strong);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+}
+.statValueOk {
+  color: var(--success);
+}
+.statUnit {
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--fg-strong);
+}
+.statSub {
+  color: var(--fg-muted);
+  font-size: var(--fs-small);
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.statFailures {
+  color: var(--danger);
+}
+.statBar {
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.statBar > span {
+  display: block;
+  height: 100%;
+  background: var(--success);
+}
+
 .conversation[hidden] {
   display: none;
 }
@@ -766,17 +851,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.usageHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.usageTitle {
-  font-weight: 600;
 }
 
 .usageTotal {

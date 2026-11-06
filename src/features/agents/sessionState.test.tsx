@@ -460,6 +460,94 @@ describe("meters in the task header", () => {
     fireEvent.click(screen.getByRole("button", { name: "Environment" }));
     expect(within(card).queryByText("/project")).toBeNull();
   });
+
+  it("shows cumulative session stats in the sidecar card", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      stats: {
+        requests: 3800,
+        failures: 106,
+        retries: 44,
+        inputTokens: 13_000_000,
+        outputTokens: 1_400_000,
+        cacheReadTokens: 336_000_000,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        costUsd: 1.85,
+        activeMs: 9_210_526,
+        ttftMs: 16_780_800,
+        ttftSamples: 3648,
+      },
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByRole("region", { name: "Session stats" });
+    expect(within(card).getByText("350.4M")).toBeInTheDocument();
+    expect(within(card).getByText("3.8k")).toBeInTheDocument();
+    expect(within(card).getByText("106 failures")).toBeInTheDocument();
+    expect(card.textContent).toContain("Success 97.2%");
+    expect(within(card).getByText("44 retried")).toBeInTheDocument();
+    expect(within(card).getByText("$1.85")).toBeInTheDocument();
+    expect(within(card).getByText("96.3%")).toBeInTheDocument();
+    expect(within(card).getByText("152 tokens/s")).toBeInTheDocument();
+    expect(within(card).getByText("First-token avg 4.6 seconds · 3,648 samples")).toBeInTheDocument();
+  });
+
+  it("hides the session stats card while the session reported nothing", async () => {
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    expect(screen.queryByRole("region", { name: "Session stats" })).toBeNull();
+  });
+
+  it("collapses the context card but keeps its usage summary", async () => {
+    const reported: AgentTask = { ...task("A"), usage: { used: 150_000, size: 200_000 } };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByRole("region", { name: "Context" });
+    expect(within(card).getByText("Free space")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: /^Context/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // The header summary stays; the detail rows hide.
+    expect(within(card).getByText(/used/)).toBeInTheDocument();
+    expect(within(card).queryByText("Free space")).toBeNull();
+    fireEvent.click(toggle);
+    expect(within(card).getByText("Free space")).toBeInTheDocument();
+  });
+
+  it("collapses the session stats card", async () => {
+    const reported: AgentTask = {
+      ...task("A"),
+      stats: {
+        requests: 10,
+        failures: 1,
+        retries: 0,
+        inputTokens: 1_000,
+        outputTokens: 500,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        costUsd: null,
+        activeMs: 0,
+        ttftMs: 0,
+        ttftSamples: 0,
+      },
+    };
+    useAgents.setState({ tasks: new Map([["A", reported]]) });
+    render(<SessionEditor input={input("A")} />);
+    await screen.findByText("Answer A");
+    const card = screen.getByRole("region", { name: "Session stats" });
+    expect(within(card).getByText("Tokens")).toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Session stats" });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(card).queryByText("Tokens")).toBeNull();
+    fireEvent.click(toggle);
+    expect(within(card).getByText("Tokens")).toBeInTheDocument();
+  });
 });
 
 describe("message index", () => {

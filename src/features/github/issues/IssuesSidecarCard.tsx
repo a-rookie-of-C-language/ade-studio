@@ -5,11 +5,12 @@
  * open project (`projectOpen`), so the context menu calls the same helpers
  * directly instead of going through action ids.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import clsx from "clsx";
 import type { AgentTask } from "@/bindings";
 import { useTx } from "@/platform/i18n";
 import { useProject } from "@/platform/project";
-import { Button, EmptyState, IconButton, T, type MenuItem } from "@/ui";
+import { Button, EmptyState, Icon, IconButton, T, type MenuItem } from "@/ui";
 import { connect, refreshConnectionForRoot, sameRepository, useGhRepository } from "../data/repository";
 import { copyIssueUrl, openIssueInBrowser, reloadIssues, resetIssues, startIssueWorktree } from "./data";
 import { IssuesPanel } from "./IssuesPanel";
@@ -62,6 +63,7 @@ function ConnectionHint({ root }: { root: string }) {
 }
 
 export function IssuesSidecarCard({ task }: { task: AgentTask }) {
+  const [open, setOpen] = useState(true);
   const tx = useTx();
   const project = useProject((s) => s.project);
   const root = task.projectRoot ?? task.cwd ?? null;
@@ -92,18 +94,23 @@ export function IssuesSidecarCard({ task }: { task: AgentTask }) {
   return (
     <section className={styles.sidecar} aria-label={tx("Issues")}>
       <div className={styles.sidecarHead}>
-        <span className={styles.sidecarTitle}>
+        <button type="button" className={styles.sidecarToggle} aria-expanded={open} onClick={() => setOpen(!open)}>
           <T>Issues</T>
           {connection && <span className={styles.sidecarRepo}>{connection.coordinates.name}</span>}
-        </span>
+          <Icon name="chevron-down" size={14} className={clsx(styles.sidecarChevron, !open && styles.collapsed)} />
+        </button>
         <IconButton icon="refresh" title={tx("Refresh Issues List")} size="small" onClick={() => void reloadIssues()} />
       </div>
-      {connection ? (
-        <div className={styles.sidecarBody}>
-          <IssuesPanel menu={directMenu} />
-        </div>
-      ) : (
-        <ConnectionHint root={root} />
+      {open && (
+        <>
+          {connection ? (
+            <div className={styles.sidecarBody}>
+              <IssuesPanel menu={directMenu} />
+            </div>
+          ) : (
+            <ConnectionHint root={root} />
+          )}
+        </>
       )}
     </section>
   );

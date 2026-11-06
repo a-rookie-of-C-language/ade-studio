@@ -48,6 +48,7 @@ import {
   canSend,
   costLabel,
   emptyDraft,
+  formatCount,
   formatTokens,
   launchLabel,
   limitLabel,
@@ -224,6 +225,7 @@ function TaskSession({ id, docked }: { id: string; docked: boolean }) {
         <div className={styles.sidecar} data-reserved="right-quarter">
           <EnvironmentCard task={task} />
           <ContextCard task={task} />
+          <SessionStatsCard task={task} />
           {sessionSidecarCards(sidecarCards).map((card) => (
             <card.component key={card.id} task={task} />
           ))}
@@ -461,14 +463,6 @@ function UsageDetails({ task, onDone }: { task: AgentTask; onDone?: () => void }
   };
   return (
     <>
-      <div className={styles.usageHead}>
-        <span className={styles.usageTitle}>
-          <T>Context</T>
-        </span>
-        <span className={styles.usageTotal}>
-          {label.short} <T>used</T>
-        </span>
-      </div>
       <div className={styles.usageNumbers}>{label.detail}</div>
       <div className={styles.usageBarLarge} aria-hidden>
         <span style={{ width: label.short }} />
@@ -538,11 +532,118 @@ function UsageDetails({ task, onDone }: { task: AgentTask; onDone?: () => void }
 
 /** Persistent context card for the reserved right quarter. */
 function ContextCard({ task }: { task: AgentTask }) {
+  const [open, setOpen] = useState(true);
   const show = useProject((s) => s.settings?.agents);
   if (show?.showContextUsage === false || !task.usage) return null;
+  const label = usageLabel(task.usage as AgentUsage);
   return (
     <section className={styles.contextCard} aria-label={tx("Context")}>
-      <UsageDetails task={task} />
+      <button type="button" className={styles.environmentHead} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <T>Context</T>
+        <span className={styles.usageTotal}>
+          {label.short} <T>used</T>
+        </span>
+        <Icon name="chevron-down" size={14} className={clsx(styles.environmentChevron, !open && styles.collapsed)} />
+      </button>
+      {open && <UsageDetails task={task} />}
+    </section>
+  );
+}
+
+/**
+ * Cumulative session totals for the reserved right quarter: tokens, requests,
+ * cost, cache hits and timing, all from `task.stats` (plus the last reported
+ * cost). Unknown numbers render as an em dash; the card hides while the
+ * session reported nothing yet. Byte traffic is not tracked, so it is not shown.
+ */
+function SessionStatsCard({ task }: { task: AgentTask }) {
+  const [open, setOpen] = useState(true);
+  const stats = task.stats;
+  const input = stats?.inputTokens ?? 0;
+  const output = stats?.outputTokens ?? 0;
+  const cacheRead = stats?.cacheReadTokens ?? 0;
+  const total = input + output + cacheRead + (stats?.cacheWriteTokens ?? 0) + (stats?.reasoningTokens ?? 0);
+  const requests = stats?.requests ?? 0;
+  const failures = stats?.failures ?? 0;
+  const retries = stats?.retries ?? 0;
+  const costUsd = stats?.costUsd ?? null;
+  const fallbackCost = task.usage?.cost ?? null;
+  if (!stats || (requests === 0 && total === 0 && costUsd == null && fallbackCost == null)) return null;
+  const success = requests > 0 ? `${(((requests - failures) / requests) * 100).toFixed(1)}%` : null;
+  const hitBase = input + cacheRead;
+  const hit = hitBase > 0 ? (cacheRead / hitBase) * 100 : null;
+  const activeMs = stats.activeMs ?? 0;
+  const speed = activeMs > 0 && output > 0 ? Math.round((output / activeMs) * 1000) : null;
+  const ttftSamples = stats.ttftSamples ?? 0;
+  const ttftAvg = ttftSamples > 0 ? (stats.ttftMs ?? 0) / ttftSamples / 1000 : null;
+  const speedText = speed != null ? speed.toLocaleString("en-US") : null;
+  const ttftAvgText = ttftAvg != null ? ttftAvg.toFixed(1) : null;
+  const samplesText = ttftSamples.toLocaleString("en-US");
+  const cost =
+    costUsd != null
+      ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(costUsd)
+      : fallbackCost
+        ? costLabel(fallbackCost)
+        : null;
+  return (
+    <section className={styles.statsCard} aria-label={tx("Session stats")}>
+      <button type="button" className={styles.statsHead} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <T>Session stats</T>
+        <Icon name="chevron-down" size={14} className={clsx(styles.environmentChevron, !open && styles.collapsed)} />
+      </button>
+      {open && (
+        <div className={styles.statsGrid}>
+          <div className={styles.stat}>
+            <span className={styles.statLabel}>
+              <T>Tokens</T>
+            </span>
+            <span className={styles.statValue}>{formatTokens(total)}</span>
+            <span className={styles.statSub}>
+              <T>Input</T> {formatTokens(input)} · <T>Output</T> {formatTokens(output)} · <T>Cache</T>{" "}
+              {formatTokens(cacheRead)}
+            </span>
+          </div>
+          <div className={styles.stat}>
+            <span className={styles.statLabel}>
+              <T>Requests</T>
+            </span>
+            <span className={styles.statValue}>{formatCount(requests)}</span>
+            <span className={styles.statSub}>
+              <span className={styles.statFailures}>{tx`${failures} failures`}</span>
+              {success ? <span> · {tx`Success ${success}`}</span> : null}
+            </span>
+            {retries > 0 ? <span className={styles.statSub}>{tx`${retries} retried`}</span> : null}
+          </div>
+          <div className={styles.stat}>
+            <span className={styles.statLabel}>
+              <T>Cost</T>
+            </span>
+            <span className={`${styles.statValue} ${cost ? styles.statValueOk : ""}`}>{cost ?? "—"}</span>
+          </div>
+          <div className={styles.stat}>
+            <span className={styles.statLabel}>
+              <T>Cache hit rate</T>
+            </span>
+            <span className={styles.statValue}>{hit != null ? `${hit.toFixed(1)}%` : "—"}</span>
+            {hit != null ? (
+              <span className={styles.statBar} aria-hidden>
+                <span style={{ width: `${Math.min(100, hit)}%` }} />
+              </span>
+            ) : null}
+          </div>
+          <div className={`${styles.stat} ${styles.statFull}`}>
+            <span className={styles.statLabel}>
+              <T>Output speed</T>
+            </span>
+            <span className={styles.statValue}>{speedText ? tx`${speedText} tokens/s` : "—"}</span>
+            {ttftAvgText ? (
+              <span className={styles.statSub}>
+                {tx`First-token avg ${ttftAvgText} seconds · ${samplesText} samples`}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

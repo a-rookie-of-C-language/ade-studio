@@ -177,4 +177,18 @@ describe("IssuesSidecarCard", () => {
     ]);
     expect(resolved.every((i) => i.kind !== "item" || !i.disabled)).toBe(true);
   });
+
+  it("collapses the issues list", async () => {
+    await act(async () => {
+      render(<IssuesSidecarCard task={task()} />);
+    });
+    expect(screen.getByText("Issue 1")).toBeTruthy();
+    const toggle = screen.getByRole("button", { name: /^Issues/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Issue 1")).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText("Issue 1")).toBeTruthy();
+  });
 });

@@ -146,12 +146,36 @@
   min-width: 0;
 }
 
-.sidecarTitle {
+.sidecarToggle {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidecarChevron {
+  margin-left: auto;
+  flex: none;
+  transition: transform 0.15s ease;
+}
+
+.sidecarChevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidecarChevron {
+    transition: none;
+  }
 }
 
 .sidecarRepo {
