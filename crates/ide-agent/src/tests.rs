@@ -1458,6 +1458,13 @@ fn model_listing_keeps_one_choice_per_line() {
 }
 
 #[test]
+fn model_listing_strips_terminal_styling() {
+    let values = parse_model_listing("\u{1b}[1mopenai/gpt-5\u{1b}[0m 400k context\nanthropic/claude[1m]\n");
+    assert_eq!(values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), ["openai/gpt-5", "anthropic/claude"]);
+    assert_eq!(values[0].description.as_deref(), Some("400k context"));
+}
+
+#[test]
 fn opencode_question_forms_are_withheld_from_the_timeline() {
     assert!(withheld_updates("opencode", "toolCallQuestion"));
     assert!(!withheld_updates("opencode", "agent_message_chunk"));

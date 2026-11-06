@@ -1,7 +1,9 @@
 //! A session's settings as ACP config options: model, permission mode and effort, from
 //! what Claude Code reports in its `initialize` and `get_settings` responses.
 
+use crate::model::clean_text;
 use serde_json::{Value, json};
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Model {
@@ -40,13 +42,13 @@ const MODES: [(&str, &str, &str); 5] = [
 impl Settings {
     /// From the `initialize` response and `get_settings`' `applied` and `effective`.
     pub fn from_cli(init: &Value, settings: &Value) -> Self {
-        let models: Vec<Model> = init
+        let mut models: Vec<Model> = init
             .get("models")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
             .filter_map(|m| {
-                let s = |k: &str| m.get(k).and_then(Value::as_str).map(str::to_owned);
+                let s = |k: &str| m.get(k).and_then(Value::as_str).and_then(clean_text);
                 let value = s("value")?;
                 Some(Model {
                     name: s("displayName").unwrap_or_else(|| value.clone()),
@@ -57,7 +59,7 @@ impl Settings {
                             .and_then(Value::as_array)
                             .into_iter()
                             .flatten()
-                            .filter_map(|l| l.as_str().map(str::to_owned))
+                            .filter_map(|l| l.as_str().and_then(clean_text))
                             .collect()
                     } else {
                         Vec::new()
@@ -67,13 +69,24 @@ impl Settings {
                 })
             })
             .collect();
+        // Third-party routers may list the same model twice (once styled): keep the first.
+        let mut seen = HashSet::new();
+        models.retain(|m| seen.insert(m.value.clone()));
         let applied = settings.pointer("/applied/model").and_then(Value::as_str);
         let configured = settings.pointer("/effective/model").and_then(Value::as_str);
         let mut out = Self {
             models,
             model: String::new(),
-            effort: settings.pointer("/applied/effort").and_then(Value::as_str).unwrap_or("default").to_owned(),
-            mode: init.get("current_permission_mode").and_then(Value::as_str).unwrap_or("default").to_owned(),
+            effort: settings
+                .pointer("/applied/effort")
+                .and_then(Value::as_str)
+                .and_then(clean_text)
+                .unwrap_or_else(|| "default".to_owned()),
+            mode: init
+                .get("current_permission_mode")
+                .and_then(Value::as_str)
+                .and_then(clean_text)
+                .unwrap_or_else(|| "default".to_owned()),
             commands: commands(init.get("commands"), &[]),
         };
         out.model = out.model_value(configured, applied);
@@ -94,8 +107,16 @@ impl Settings {
         if let Some(m) = self.models.iter().find(|m| runs(m)) {
             return m.value.clone();
         }
-        self.models.push(Model { value: applied.to_owned(), name: applied.to_owned(), ..Model::default() });
-        applied.to_owned()
+        // The CLI runs a model it did not list (or reported with styling residue): offer
+        // the cleaned id instead of sending the raw text back to it.
+        match clean_text(applied) {
+            Some(clean) if !self.models.iter().any(|m| m.value == clean) => {
+                self.models.push(Model { value: clean.clone(), name: clean.clone(), ..Model::default() });
+                clean
+            }
+            Some(clean) => clean,
+            None => self.models.first().map(|m| m.value.clone()).unwrap_or_default(),
+        }
     }
 
     fn current_model(&self) -> Option<&Model> {
@@ -215,6 +236,20 @@ mod tests {
         assert_eq!(flag.model, "default", "`--model` wins over the settings file");
         let s = Settings::from_cli(&init(), &json!({"applied": {"model": "claude-x-1"}}));
         assert_eq!(s.model, "claude-x-1");
+    }
+
+    #[test]
+    fn styled_models_are_cleaned() {
+        let s = Settings::from_cli(
+            &json!({"models": [
+                {"value": "opencode-go/x[1m]", "displayName": "X"},
+                {"value": "opus", "displayName": "Opus"}]}),
+            &json!({"applied": {"model": "opencode-go/x[1m]"}}),
+        );
+        assert!(s.models.iter().all(|m| !m.value.contains('[')));
+        assert_eq!(s.model, "opencode-go/x");
+        assert!(s.valid("model", "opencode-go/x"));
+        assert!(!s.valid("model", "opencode-go/x[1m]"));
     }
 
     #[test]

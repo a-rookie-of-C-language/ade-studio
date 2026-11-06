@@ -621,6 +621,12 @@ impl Session {
             st.chosen.clone()
         };
         for (option, value) in chosen {
+            // A choice remembered from an older listing may no longer exist; sending it
+            // would fail the session, so only offered values are re-applied.
+            if !self.st.lock().settings.valid(&option, &value) {
+                tracing::warn!("claude session {}: skipping unknown {option} value {value}", self.id);
+                continue;
+            }
             if let Err(e) = self.apply(&proc, &option, &value).await {
                 tracing::warn!("claude session {}: setting {option} to {value}: {e}", self.id);
             }

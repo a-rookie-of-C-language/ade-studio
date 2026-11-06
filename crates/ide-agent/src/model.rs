@@ -4,7 +4,7 @@ use ide_core::IpcPath;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -576,7 +576,7 @@ pub fn init_models(reply: &Value) -> Vec<AgentConfigValue> {
         .into_iter()
         .flatten()
         .filter_map(|m| {
-            let text = |k: &str| m.get(k).and_then(Value::as_str).map(str::to_owned);
+            let text = |k: &str| m.get(k).and_then(Value::as_str).and_then(clean_text);
             let value = text("value")?;
             Some(AgentConfigValue {
                 name: text("displayName").or_else(|| text("name")).unwrap_or_else(|| value.clone()),
@@ -585,6 +585,169 @@ pub fn init_models(reply: &Value) -> Vec<AgentConfigValue> {
             })
         })
         .collect()
+}
+
+/// Visible text of a model id, display name or description reported by an agent.
+///
+/// Third-party CLIs and routers style their listings with terminal escapes; when the
+/// escape byte is lost upstream (JSON transport, table scraping) the `[1m`-style
+/// residue stays behind as literal text and poisons remembered ids. Both forms are
+/// removed here, with any other control characters. `None` when nothing printable
+/// remains.
+pub(crate) fn clean_text(raw: &str) -> Option<String> {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            match chars.next() {
+                // CSI: parameters and intermediates, then a final byte.
+                Some('[') => {
+                    for c in chars.by_ref() {
+                        if ('@'..='~').contains(&c) {
+                            break;
+                        }
+                    }
+                }
+                // OSC: until BEL or ST.
+                Some(']') => {
+                    for c in chars.by_ref() {
+                        if c == '\x07' {
+                            break;
+                        }
+                        if c == '\x1b' {
+                            if chars.next() != Some('\\') {
+                                break;
+                            }
+                            break;
+                        }
+                    }
+                }
+                // Charset selection and friends take one more byte.
+                Some('(' | ')' | '#' | '%') => {
+                    chars.next();
+                }
+                Some(_) | None => {}
+            }
+            continue;
+        }
+        if !c.is_control() {
+            out.push(c);
+        }
+    }
+    let mut text = out.as_str();
+    loop {
+        let stripped = strip_residue(text);
+        if stripped.len() == text.len() {
+            break;
+        }
+        text = stripped;
+    }
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+/// One `[…m` styling fragment (whose escape byte was already lost) off either end.
+fn strip_residue(text: &str) -> &str {
+    let mut text = text;
+    if let Some(after) = text.strip_prefix('[')
+        && let Some(end) = after.find('m')
+    {
+        let params = &after[..end];
+        if !params.is_empty() && params.chars().all(|c| c.is_ascii_digit() || c == ';') {
+            text = after[end + 1..].strip_prefix(']').unwrap_or(&after[end + 1..]);
+        }
+    }
+    if let Some(start) = text.rfind('[') {
+        let mut tail = &text[start + 1..];
+        tail = tail.strip_suffix(']').unwrap_or(tail);
+        if let Some(params) = tail.strip_suffix('m')
+            && !params.is_empty()
+            && params.chars().all(|c| c.is_ascii_digit() || c == ';')
+        {
+            text = text[..start].trim_end();
+        }
+    }
+    text
+}
+
+/// One model/setting value with terminal styling removed; `None` when its id has
+/// nothing printable left.
+pub(crate) fn clean_value(value: AgentConfigValue) -> Option<AgentConfigValue> {
+    let cleaned = clean_text(&value.value)?;
+    Some(AgentConfigValue {
+        value: cleaned.clone(),
+        name: clean_text(&value.name).unwrap_or(cleaned),
+        description: value.description.as_deref().and_then(clean_text),
+    })
+}
+
+/// Session settings with terminal styling removed: values that clean to nothing or
+/// repeat an earlier one are dropped, options left without values are dropped, and a
+/// `current` no offered value matches becomes unknown instead of pointing at styling
+/// residue a future session would send back to the agent.
+pub(crate) fn clean_options(options: Vec<AgentConfigOption>) -> Vec<AgentConfigOption> {
+    options
+        .into_iter()
+        .filter_map(|mut option| {
+            let mut seen = HashSet::new();
+            option.values =
+                option.values.into_iter().filter_map(clean_value).filter(|v| seen.insert(v.value.clone())).collect();
+            if option.values.is_empty() {
+                return None;
+            }
+            option.name = clean_text(&option.name).unwrap_or_else(|| option.id.clone());
+            option.description = option.description.as_deref().and_then(clean_text);
+            let current = option.current.as_deref().and_then(clean_text);
+            option.current = current.filter(|c| option.values.iter().any(|v| &v.value == c));
+            Some(option)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_text_strips_terminal_styling() {
+        assert_eq!(clean_text("\x1b[1mopus\x1b[0m"), Some("opus".to_owned()));
+        assert_eq!(
+            clean_text("opencode-go/muse-spark-1.3-contributor[1m]"),
+            Some("opencode-go/muse-spark-1.3-contributor".to_owned())
+        );
+        assert_eq!(clean_text("[1mOpus"), Some("Opus".to_owned()));
+        assert_eq!(clean_text("plain"), Some("plain".to_owned()));
+        assert_eq!(clean_text("\x1b[0m"), None);
+        assert_eq!(clean_text("  "), None);
+    }
+
+    #[test]
+    fn clean_options_drops_poison_and_resets_current() {
+        let option = AgentConfigOption {
+            id: "model".to_owned(),
+            name: "Model".to_owned(),
+            description: None,
+            category: Some("model".to_owned()),
+            current: Some("opencode-go/x[1m]".to_owned()),
+            values: vec![
+                AgentConfigValue {
+                    value: "\x1b[1mopencode-go/x\x1b[0m".to_owned(),
+                    name: "X".to_owned(),
+                    description: None,
+                },
+                AgentConfigValue { value: "opus".to_owned(), name: "Opus".to_owned(), description: None },
+            ],
+            via: AgentConfigVia::Option,
+        };
+        let cleaned = clean_options(vec![option]);
+        assert_eq!(cleaned[0].values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), ["opencode-go/x", "opus"]);
+        assert_eq!(cleaned[0].current.as_deref(), Some("opencode-go/x"));
+
+        let mut orphan = cleaned[0].clone();
+        orphan.current = Some("gone".to_owned());
+        let cleaned = clean_options(vec![orphan]);
+        assert_eq!(cleaned[0].current, None);
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]

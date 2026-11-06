@@ -3,7 +3,7 @@
 
 use crate::model::{
     AgentCommand, AgentConfigOption, AgentConfigValue, AgentConfigVia, AgentContextCategory, AgentContextKind,
-    AgentCost, AgentLimit, AgentUsage,
+    AgentCost, AgentLimit, AgentUsage, clean_options,
 };
 use serde_json::{Value, json};
 
@@ -77,14 +77,14 @@ pub(crate) fn options_of(result: &Value) -> Vec<AgentConfigOption> {
             AgentConfigVia::Model,
         ));
     }
-    out.retain(|o| !o.values.is_empty());
-    out
+    clean_options(out)
 }
 
 /// A `configOptions` array; only select options are kept (the UI shows them as dropdowns).
 pub(crate) fn parse_options(options: &Value) -> Vec<AgentConfigOption> {
     let Some(list) = options.as_array() else { return Vec::new() };
-    list.iter()
+    let parsed: Vec<AgentConfigOption> = list
+        .iter()
         .filter(|o| o.get("type").and_then(Value::as_str).is_none_or(|t| t == "select"))
         .filter_map(|o| {
             let id = o.get("id").or_else(|| o.get("configId")).and_then(Value::as_str)?.to_owned();
@@ -106,7 +106,8 @@ pub(crate) fn parse_options(options: &Value) -> Vec<AgentConfigOption> {
                 id,
             })
         })
-        .collect()
+        .collect();
+    clean_options(parsed)
 }
 
 /// A `config_option_update`: its options replace the config-option ones; `modes` / `models`
@@ -315,6 +316,17 @@ mod tests {
             &json!([{"id": "model", "type": "select", "currentValue": "b", "options": [{"value": "b"}]}]),
         );
         assert_eq!(ids(&c), [("model", Some("b")), ("mode", Some("code"))]);
+    }
+
+    #[test]
+    fn styled_model_ids_are_cleaned() {
+        let c = options_of(&json!({"configOptions": [{"id": "model", "category": "model", "type": "select",
+            "currentValue": "opencode-go/x[1m]",
+            "options": [{"value": "\u{1b}[1mopencode-go/x\u{1b}[0m", "name": "X"},
+                        {"value": "opus", "name": "Opus"}]}]}));
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].values.iter().map(|v| v.value.as_str()).collect::<Vec<_>>(), ["opencode-go/x", "opus"]);
+        assert_eq!(c[0].current.as_deref(), Some("opencode-go/x"));
     }
 
     #[test]

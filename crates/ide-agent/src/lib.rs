@@ -155,6 +155,9 @@ impl Shared {
     }
 
     fn remember(&self, provider: &str, config: Option<&[AgentConfigOption]>, commands: Option<&[AgentCommand]>) {
+        // Terminal styling never reaches the remembered settings.
+        let cleaned = config.map(|c| clean_options(c.to_vec()));
+        let config = cleaned.as_deref();
         let snapshot = {
             let mut cache = self.known.lock();
             let known = cache.entry(provider.to_owned()).or_default();
@@ -279,8 +282,24 @@ impl AgentManager {
     }
 
     fn with_connector(paths: AgentPaths, runtime: tokio::runtime::Handle, connector: Connector) -> Self {
-        let known =
+        let mut known: HashMap<String, Known> =
             std::fs::read(&paths.models_file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        // Styling residue persisted by older builds is healed on load, so a poisoned
+        // remembered model is never offered (or sent back) again.
+        let mut healed = false;
+        for entry in known.values_mut() {
+            let cleaned = clean_options(entry.config.clone());
+            if cleaned != entry.config {
+                entry.config = cleaned;
+                healed = true;
+            }
+        }
+        if healed {
+            let bytes = serde_json::to_vec_pretty(&known).unwrap_or_default();
+            if let Err(e) = write_file(&paths.models_file, &bytes) {
+                tracing::warn!("cleaning remembered agent settings: {e}");
+            }
+        }
         let providers = RwLock::new(provider::load(paths.custom_agents_dir.as_deref()));
         let shared = Arc::new(Shared {
             paths,
@@ -304,6 +323,15 @@ impl AgentManager {
                 .and_then(|v| serde_json::from_value::<TaskFile>(upgrade(v)).map_err(|e| e.to_string()))
             {
                 Ok(mut f) => {
+                    // Styling residue persisted by older builds never reaches the agent again.
+                    f.task.config = clean_options(f.task.config);
+                    f.wanted.retain_mut(|c| match clean_text(&c.value) {
+                        Some(value) => {
+                            c.value = value;
+                            true
+                        }
+                        None => false,
+                    });
                     // The agent process did not survive the restart: whatever was in flight is over.
                     if matches!(f.task.status, AgentStatus::Running | AgentStatus::NeedsInput | AgentStatus::Starting) {
                         f.task.status = AgentStatus::Ready;
@@ -2127,13 +2155,13 @@ fn run_listing(command: &str, args: &[String], env: &[(String, String)]) -> IdeR
 fn parse_model_listing(stdout: &str) -> Vec<AgentConfigValue> {
     stdout
         .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(|line| {
-            let (name, rest) = line.split_once(char::is_whitespace).map_or((line, ""), |(a, b)| (a, b.trim()));
+        .filter_map(clean_text)
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let (name, rest) = line.split_once(char::is_whitespace).map_or((line.as_str(), ""), |(a, b)| (a, b.trim()));
             let (value, description) =
-                if rest.is_empty() { (line.to_owned(), None) } else { (name.to_owned(), Some(rest.to_owned())) };
-            AgentConfigValue { value, name: name.to_owned(), description }
+                if rest.is_empty() { (line.clone(), None) } else { (name.to_owned(), Some(rest.to_owned())) };
+            clean_value(AgentConfigValue { value, name: name.to_owned(), description })
         })
         .collect()
 }
