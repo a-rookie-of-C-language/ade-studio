@@ -8,6 +8,7 @@ import { provideEditorService, provideToolWindowService, registerToolWindow } fr
 import { isDistractionFree, resetDistractionFree, setDistractionFree } from "@/workbench/distractionFree";
 import { notificationActions } from "@/workbench/Notifications";
 import { clearNotifications, useNotifications } from "@/workbench/notificationStore";
+import { isSoloMode, resetSoloMode, setSoloMode } from "@/workbench/soloMode";
 import {
   hideAllToolWindows,
   isToolWindowVisible,
@@ -40,6 +41,7 @@ beforeEach(() => {
   resetToolWindowLayout();
   resetDistractionFree();
   resetAgentMode();
+  resetSoloMode();
   provideEditorService({
     activeInput: () => null,
     openTabs: () => [],
@@ -67,6 +69,7 @@ beforeEach(() => {
 afterEach(() => {
   disposers.reverse().forEach((d) => d());
   resetAgentMode();
+  resetSoloMode();
   resetDistractionFree();
   useKeymap.setState({ overrides: {} });
 });
@@ -350,6 +353,47 @@ describe("agent mode", () => {
       setAgentMode(false);
       expect(useAgents.getState().sessionLocation).toBe("toolWindow");
       expect(localStorage.getItem("openidea.agentMode.sessionLocation")).toBeNull();
+    });
+  });
+
+  describe("solo mode exclusion", () => {
+    beforeEach(() => {
+      // The Solo side of the exclusion lives in the agents feature (the
+      // workbench cannot call into features): Solo activation must yield the
+      // centered shell and dock the conversation on the right.
+      disposers.push(installAgentMode());
+      useProject.setState({
+        project: { root: "/work/agent", name: "agent", trusted: true, isGit: false, settings: {} as never },
+        lightEdit: false,
+      });
+    });
+    afterEach(() => {
+      setSoloMode(false);
+      setAgentMode(false);
+      useProject.setState({ project: null, lightEdit: false });
+    });
+
+    it("entering Agent Mode exits Solo Mode first", () => {
+      setSoloMode(true);
+      expect(isSoloMode()).toBe(true);
+      expect(isToolWindowVisible("project")).toBe(false);
+      setAgentMode(true);
+      expect(isSoloMode()).toBe(false);
+      expect(isAgentMode()).toBe(true);
+      expect(isToolWindowVisible("project")).toBe(true);
+      expect(isToolWindowVisible(TOOL_WINDOW)).toBe(true);
+    });
+
+    it("Solo activation yields the centered shell and docks the conversation right", () => {
+      expect(useAgents.getState().sessionLocation).toBe("editor");
+      setAgentMode(true);
+      expect(isToolWindowVisible(TOOL_WINDOW)).toBe(true);
+      setSoloMode(true);
+      expect(isSoloMode()).toBe(true);
+      expect(isAgentMode()).toBe(false);
+      expect(isToolWindowVisible(TOOL_WINDOW)).toBe(true);
+      expect(isToolWindowVisible("project")).toBe(false);
+      expect(useAgents.getState().sessionLocation).toBe("toolWindow");
     });
   });
 });

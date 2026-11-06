@@ -15,6 +15,7 @@ import { installBrowserGuards } from "./browserGuards";
 import { installDistractionFree } from "./distractionFree";
 import { installFileDrop } from "./fileDrop";
 import { installFocusTracking } from "./focus";
+import { installSoloMode } from "./soloMode";
 import { clearProjectNotifications, installNotifyEvents, notificationServiceImpl } from "./notificationStore";
 import {
   NOTIFICATIONS_TOOL_WINDOW,
@@ -61,6 +62,7 @@ export function activateWorkbench(): () => void {
     installToolWindowActions(),
     installToolWindowLayoutSync(),
     installDistractionFree(),
+    installSoloMode(),
     installFocusTracking(setFocusedToolWindow),
     installTaskEvents(),
     installNotifyEvents(),

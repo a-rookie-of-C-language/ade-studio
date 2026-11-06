@@ -101,6 +101,14 @@ export interface ToolWindowLayoutState {
    */
   agentModeStash: { visible: SlotRecord; sizes: Record<ToolWindowAnchor, number> } | null;
   /**
+   * Layout before Solo Mode (visible windows + sizes); restored on exit and
+   * persisted in place of `visible` / `sizes` meanwhile. Takes precedence
+   * over the other stashes (Solo exits Agent Mode and Distraction Free on
+   * enter, so this is the plain IDE layout; a mode entered atop Solo stashes
+   * the solo layout instead).
+   */
+  soloModeStash: { visible: SlotRecord; sizes: Record<ToolWindowAnchor, number> } | null;
+  /**
    * True while a mode switch animates its track sizes (Agent Mode enter);
    * the grid transitions its tracks only then, so drags stay immediate.
    */
@@ -123,6 +131,7 @@ const initial = (): ToolWindowLayoutState => ({
   stripeButtons: {},
   distractionFreeStash: null,
   agentModeStash: null,
+  soloModeStash: null,
   layoutTransition: false,
 });
 
@@ -236,10 +245,11 @@ function persist() {
     stripeButtons,
     distractionFreeStash,
     agentModeStash,
+    soloModeStash,
   } = useToolWindowLayout.getState();
-  // Distraction Free / Agent Mode is not saved: the layout to restore is.
-  const visible = agentModeStash?.visible ?? distractionFreeStash ?? current;
-  const sizes = agentModeStash?.sizes ?? currentSizes;
+  // Distraction Free / Agent Mode / Solo Mode is not saved: the layout to restore is.
+  const visible = soloModeStash?.visible ?? agentModeStash?.visible ?? distractionFreeStash ?? current;
+  const sizes = soloModeStash?.sizes ?? agentModeStash?.sizes ?? currentSizes;
   try {
     localStorage.setItem(
       storageKey(scope),
@@ -375,7 +385,7 @@ export function installToolWindowLayoutSync(): () => void {
     if (visible) {
       const mounted = new Set(s.mounted);
       for (const id of Object.values(visible)) if (id) mounted.add(id);
-      update({ visible, mounted }, !!s.scope && !s.distractionFreeStash && !s.agentModeStash);
+      update({ visible, mounted }, !!s.scope && !s.distractionFreeStash && !s.agentModeStash && !s.soloModeStash);
     } else publishVisibility();
   });
 }
@@ -550,6 +560,38 @@ export function exitAgentModeLayout() {
   if (s.focused && !Object.values(visible).includes(s.focused)) focusEditor();
 }
 
+/**
+ * Entering Solo Mode: remembers the visible windows and sizes, then applies
+ * the solo layout computed by the caller (left and bottom hidden, chat kept
+ * on the right). Windows can still be opened meanwhile (by shortcut);
+ * exiting restores the remembered layout. No-op without a project layout
+ * loaded, atop another mode's stash, or when already in the mode.
+ */
+export function enterSoloModeLayout(nextVisible: SlotRecord, rightSize: number) {
+  const s = useToolWindowLayout.getState();
+  if (!s.scope || s.distractionFreeStash || s.agentModeStash || s.soloModeStash) return;
+  const hadFocus = !!s.focused;
+  update({
+    soloModeStash: { visible: { ...s.visible }, sizes: { ...s.sizes } },
+    visible: { ...nextVisible },
+    sizes: { ...s.sizes, right: Math.round(rightSize) },
+    maximized: null,
+    stashed: null,
+  });
+  if (hadFocus) focusEditor();
+}
+
+export function exitSoloModeLayout() {
+  const s = useToolWindowLayout.getState();
+  if (!s.soloModeStash) return;
+  const visible = { ...s.soloModeStash.visible };
+  const sizes = { ...s.soloModeStash.sizes };
+  const mounted = new Set(s.mounted);
+  for (const id of Object.values(visible)) if (id) mounted.add(id);
+  update({ visible, sizes, mounted, soloModeStash: null, maximized: null, stashed: null });
+  if (s.focused && !Object.values(visible).includes(s.focused)) focusEditor();
+}
+
 /** Marks a mode switch's track animation (set for its duration, then cleared). */
 export function setLayoutTransition(active: boolean) {
   if (useToolWindowLayout.getState().layoutTransition === active) return;
@@ -644,8 +686,8 @@ export interface ToolWindowLayoutSnapshot {
 export function toolWindowLayoutSnapshot(): ToolWindowLayoutSnapshot {
   const s = useToolWindowLayout.getState();
   return {
-    visible: { ...(s.agentModeStash?.visible ?? s.distractionFreeStash ?? s.visible) },
-    sizes: { ...(s.agentModeStash?.sizes ?? s.sizes) },
+    visible: { ...(s.soloModeStash?.visible ?? s.agentModeStash?.visible ?? s.distractionFreeStash ?? s.visible) },
+    sizes: { ...(s.soloModeStash?.sizes ?? s.agentModeStash?.sizes ?? s.sizes) },
     splits: { ...s.splits },
     placements: { ...s.placements },
     stripeButtons: { ...s.stripeButtons },
@@ -689,6 +731,7 @@ export function applyToolWindowLayout(snapshot: ToolWindowLayoutSnapshot) {
     stashed: null,
     distractionFreeStash: null,
     agentModeStash: null,
+    soloModeStash: null,
   });
   if (hadFocus) focusEditor();
 }

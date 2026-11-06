@@ -10,15 +10,18 @@
  * exit). Published as the `agentMode` context key; components read
  * `useAgentMode`. Entering the mode exits Distraction Free Mode first; the
  * reverse nests (Distraction Free entered atop Agent Mode restores the agent
- * layout). Conversations follow TRAE: entering docks them in the Agents
- * tool window on the right, exiting keeps them there.
+ * layout). Entering also exits Solo Mode. Conversations follow TRAE:
+ * entering docks them in the Agents tool window on the right, exiting keeps
+ * them there.
  */
 import { create } from "zustand";
 import { registerAction, type Action } from "@/platform/actions";
 import { setContext } from "@/platform/context";
 import { shortcutLabel } from "@/platform/keymap";
+import { useProject } from "@/platform/project";
 import { setDistractionFree } from "@/workbench/distractionFree";
 import { expireNotification, notify } from "@/workbench/notificationStore";
+import { setSoloMode, useSoloMode } from "@/workbench/soloMode";
 import {
   enterAgentModeLayout,
   exitAgentModeLayout,
@@ -174,8 +177,11 @@ function showHint() {
 
 export function setAgentMode(active: boolean) {
   if (active === isAgentMode()) return;
-  // Mutually exclusive with Distraction Free Mode: leaving it restores the layout to stash.
+  // Mutually exclusive with Distraction Free Mode and Solo Mode: leaving
+  // them restores the layout to stash. Distraction Free exits first (it may
+  // sit atop Solo, and the inner mode must unwind before the outer one).
   if (active) setDistractionFree(false);
+  if (active) setSoloMode(false);
   useAgentMode.setState({ active });
   setContext(AGENT_MODE_CONTEXT, active);
   writeStored(active);
@@ -212,6 +218,11 @@ function action(active: boolean): Action {
 /**
  * Registers the action (its title follows the mode), restores the saved mode
  * and re-applies the agent tool window layout when a project's layout loads.
+ *
+ * Also enforces the Solo Mode exclusion from this side (the workbench cannot
+ * call into features): when Solo activates, Agent Mode's centered shell
+ * yields to it, and the conversation docks on the right -- TRAE's solo AI
+ * sidebar. Exiting Solo keeps it there, like leaving Agent Mode does.
  */
 export function installAgentMode(): () => void {
   let dispose = registerAction(action(isAgentMode()));
@@ -227,12 +238,22 @@ export function installAgentMode(): () => void {
     enterAgentModeLayout(visible, rightSize);
     showHint();
   });
+  const unsubSolo = useSoloMode.subscribe((s, prev) => {
+    if (s.active === prev.active || !s.active) return;
+    if (isAgentMode()) setAgentMode(false);
+    // Cowork has no tool window to dock into and stays centered.
+    if (useProject.getState().project) {
+      dockConversation();
+      showToolWindow(TOOL_WINDOW, true);
+    }
+  });
   setContext(AGENT_MODE_CONTEXT, isAgentMode());
   if (readStored()) setAgentMode(true);
   return () => {
     clearTransitionTimer();
     unsubMode();
     unsubLayout();
+    unsubSolo();
     dispose();
   };
 }

@@ -22,6 +22,7 @@ import { FOCUSABLE } from "@/ui/popupState";
 import { TabStripRegistry } from "@/ui/Tabs";
 import { useContributions, type ToolWindowAnchor, type ToolWindowContribution } from "../contributions";
 import { useDistractionFree } from "../distractionFree";
+import { useSoloMode } from "../soloMode";
 import {
   hideToolWindow,
   MAX_SPLIT,
@@ -1046,8 +1047,10 @@ function GapHandle({
 function useToolWindowAppearance() {
   const a = useProject((s) => s.settings?.appearance);
   const distractionFree = useDistractionFree((s) => s.active);
+  // Solo Mode is the fullscreen builder: no stripes either, like Distraction Free.
+  const soloMode = useSoloMode((s) => s.active);
   return {
-    bars: a?.showToolWindowBars !== false && !distractionFree,
+    bars: a?.showToolWindowBars !== false && !distractionFree && !soloMode,
     names: a?.showToolWindowNames === true,
     widescreen: a?.widescreenToolWindows === true,
   };
