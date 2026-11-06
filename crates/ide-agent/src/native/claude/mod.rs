@@ -10,7 +10,7 @@
 mod cli;
 mod history;
 mod settings;
-mod tools;
+pub(super) mod tools;
 mod translate;
 
 #[cfg(test)]
