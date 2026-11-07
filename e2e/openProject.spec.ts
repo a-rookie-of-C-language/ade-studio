@@ -52,11 +52,12 @@ test("Close Project shows the Welcome screen; a recent project becomes the works
   await page.keyboard.press("Enter");
 
   // The agent-first home lands on the Cindy home; the workspace pill opens Projects.
-  await expect(page.getByRole("button", { name: "IDE" })).toBeVisible();
+  // exact: "IDE" would also substring-match "IDE and Project Settings" and "Hide".
+  await expect(page.getByRole("button", { name: "IDE", exact: true })).toBeVisible();
   await expect(page.getByRole("tree", { name: "Project" })).toBeHidden();
   expect(await ipcCalls(page, "close_project")).toHaveLength(1);
 
-  await page.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("button", { name: "Projects", exact: true }).click();
   const projects = page.getByRole("region", { name: "Projects" });
   await expect(projects.getByRole("option", { name: /^billing/ })).toBeVisible();
 
@@ -71,5 +72,5 @@ test("Close Project shows the Welcome screen; a recent project becomes the works
   await expect
     .poll(() => page.evaluate(() => window.localStorage.getItem("openidea.workspace.root")))
     .toBe(JSON.stringify(BILLING));
-  await expect(page.getByRole("button", { name: "IDE" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "IDE", exact: true })).toBeVisible();
 });
