@@ -69,7 +69,7 @@ fn version_of(program: &Path) -> Option<Vec<u64>> {
     parse_version(&ide_core::output_encoding::decode_tool_output(&out.stdout))
 }
 
-fn parse_version(text: &str) -> Option<Vec<u64>> {
+pub(crate) fn parse_version(text: &str) -> Option<Vec<u64>> {
     text.split_whitespace().find_map(|word| {
         let parts: Vec<u64> = word.trim_start_matches('v').split('.').map_while(|p| p.parse().ok()).collect();
         (parts.len() >= 2).then_some(parts)

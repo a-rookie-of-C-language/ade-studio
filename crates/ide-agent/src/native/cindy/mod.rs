@@ -35,6 +35,60 @@ use crate::provider::ProviderSpec;
 
 use translate::{TurnText, Update};
 
+/// The bridge entry's path below a checkout or bundle root.
+const DEV_REL: &[&str] = &["agent", "cindy-bridge", "dist", "agent", "cindy-bridge", "src", "index.js"];
+/// In-bundle nestsings of the deployed closure (whatever depth Tauri's resource
+/// copy preserves, plus the flat single-file future). Matched by suffix, so the
+/// exact bundle layout never matters.
+const BUNDLE_RELS: &[&[&str]] = &[
+    &["deploy", "dist", "agent", "cindy-bridge", "src", "index.js"],
+    &["dist", "agent", "cindy-bridge", "src", "index.js"],
+    &["cindy-bridge", "index.js"],
+];
+/// Explicit override (a B4 agent file's env, or the process environment).
+pub(crate) const BRIDGE_ENTRY_ENV: &str = "CINDY_BRIDGE_ENTRY";
+/// The repo's Node requirement, reused for the bridge runtime (AGENTS.md).
+const MIN_NODE: [u64; 2] = [22, 18];
+
+/// Where the bridge entry lives: explicit env first, then the checkout or bundle
+/// holding the running binary, then the compile-time checkout (dev, tests).
+/// Returns the likeliest path when nothing exists, so errors can point at it.
+pub(crate) fn bridge_entry(env: &[(String, String)]) -> PathBuf {
+    let from_env = env
+        .iter()
+        .find(|(k, _)| k == BRIDGE_ENTRY_ENV)
+        .map(|(_, v)| PathBuf::from(v))
+        .filter(|p| !p.as_os_str().is_empty())
+        .or_else(|| std::env::var_os(BRIDGE_ENTRY_ENV).map(PathBuf::from))
+        .filter(|p| !p.as_os_str().is_empty());
+    if let Some(p) = from_env {
+        return p;
+    }
+    let dev_rel: PathBuf = DEV_REL.iter().collect();
+    // Whatever Tauri's resource copy preserves, plus the checkout (dev, tests).
+    let mut rels: Vec<PathBuf> = BUNDLE_RELS.iter().map(|r| r.iter().collect()).collect();
+    rels.push(dev_rel.clone());
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        // The binary itself, then its ancestors (dev `target/debug`, bundles).
+        roots.extend(exe.ancestors().skip(1).take(8).map(Path::to_path_buf));
+    }
+    for dir in &roots {
+        for rel in &rels {
+            if dir.join(rel).is_file() {
+                return dir.join(rel);
+            }
+        }
+    }
+    // The checkout this binary was built from (dev, tests).
+    let manifest: PathBuf = [env!("CARGO_MANIFEST_DIR"), "..", ".."].iter().collect::<PathBuf>().join(&dev_rel);
+    if manifest.is_file() {
+        return manifest;
+    }
+    // Nothing found: point at the checkout layout, whose fix is documented.
+    manifest
+}
+
 /// How long `session/new` waits for the bridge's `started` (node boot plus SDK init).
 const START_TIMEOUT: Duration = Duration::from_secs(120);
 /// A stop that arrives this long before its prompt (the two race) still stops it.
@@ -44,6 +98,15 @@ const CANCEL_GRACE: Duration = Duration::from_secs(30);
 /// Stderr lines kept for crash reports.
 const STDERR_TAIL: usize = 20;
 
+/// `node --version` (`v24.16.0`); `None` when it fails or prints no version.
+async fn node_version(node: &str) -> Result<Option<Vec<u64>>, String> {
+    let out =
+        tokio::time::timeout(Duration::from_secs(15), tokio::process::Command::new(node).arg("--version").output())
+            .await
+            .map_err(|_| format!("Cindy needs Node.js to run (`{node} --version` timed out)."))?
+            .map_err(|e| format!("Cindy needs Node.js to run (couldn't run `{node} --version`: {e})."))?;
+    Ok(super::parse_version(&String::from_utf8_lossy(&out.stdout)).filter(|v| v.len() >= 2))
+}
 /// The default model sent in `start` frames (the bridge refuses to choose one).
 const DEFAULT_MODEL: &str = "sonnet";
 /// `spec.env` override for the default model (B4's `cindy.toml` supplies it).
@@ -309,6 +372,30 @@ impl Shim {
         self.sessions.lock().get(id).cloned().ok_or_else(|| invalid(format!("unknown session {id}")))
     }
 
+    /// Node and bridge entry, checked with actionable errors. Resolve late, so a
+    /// `node` installed after the IDE started is found too.
+    async fn preflight(&self) -> Result<String, String> {
+        let need = format!("Cindy needs Node.js {}.{} or newer to run", MIN_NODE[0], MIN_NODE[1]);
+        let program = crate::provider::resolve(&self.config.program, &[]).ok_or_else(|| {
+            format!("{need} (`{}` was not found on PATH). Install Node.js and restart the IDE.", self.config.program)
+        })?;
+        let version =
+            node_version(&program).await?.ok_or_else(|| format!("{need} (could not read `{program} --version`)."))?;
+        if version.len() < 2 || (version[0], version[1]) < (MIN_NODE[0], MIN_NODE[1]) {
+            return Err(format!(
+                "{need} (found {}).",
+                version.iter().map(u64::to_string).collect::<Vec<_>>().join(".")
+            ));
+        }
+        let _entry = self.config.args.first().map(PathBuf::from).filter(|p| p.is_file()).ok_or_else(|| {
+            format!(
+                "Cindy bridge not found ({}). Build it with `pnpm build:bridge` or reinstall the app.",
+                self.config.args.first().map_or_else(|| bridge_entry(&[]).display().to_string(), |a| a.clone()),
+            )
+        })?;
+        Ok(program)
+    }
+
     /// The live bridge, spawning (or respawning after a crash) it first.
     async fn ensure_bridge(self: &Arc<Self>) -> Result<Arc<Bridge>, String> {
         if self.closed.load(Ordering::Acquire) {
@@ -321,9 +408,9 @@ impl Shim {
         if let Some(b) = self.bridge.lock().as_ref().filter(|b| !b.dead.load(Ordering::Acquire)).cloned() {
             return Ok(b);
         }
-        // Resolve late, so a `node` installed after the IDE started is found too.
-        let program =
-            crate::provider::resolve(&self.config.program, &[]).unwrap_or_else(|| self.config.program.clone());
+        // Explicit preflight: a missing Node or bridge fails here with the fix,
+        // not later as a bare spawn error.
+        let program = self.preflight().await?;
         let (err_tx, mut err_rx) = mpsc::unbounded_channel::<String>();
         let stderr_tail: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
         let tail_writer = stderr_tail.clone();

@@ -136,16 +136,23 @@ fn spec(env: Vec<(String, String)>) -> ProviderSpec {
 
 impl Harness {
     async fn connect(env: Vec<(String, String)>) -> Self {
+        Self::connect_with(env, "node").await
+    }
+
+    async fn connect_with(env: Vec<(String, String)>, command: &str) -> Self {
         let launcher = Arc::new(FakeLauncher::default());
         let seen = Arc::new(Mutex::new(Seen::default()));
         let answers = Arc::new(Mutex::new(VecDeque::new()));
         let hold = Arc::new(AtomicBool::new(false));
         let cwd = std::env::temp_dir().join("openidea-cindy-test");
-        let shim = Shim::new(
-            build_config(&spec(env), &cwd),
-            launcher.clone(),
-            Arc::new(|line: String| eprintln!("[cindy] {line}")),
-        );
+        // Preflight checks the entry file; the fake bridge never execs it.
+        let entry = std::env::temp_dir().join("openidea-cindy-test-entry.js");
+        std::fs::write(&entry, "// fake bridge\n").unwrap();
+        let mut s = spec(env);
+        s.command = command.to_owned();
+        s.args = vec![entry.to_string_lossy().into_owned()];
+        let shim =
+            Shim::new(build_config(&s, &cwd), launcher.clone(), Arc::new(|line: String| eprintln!("[cindy] {line}")));
         let client = super::super::serve(
             shim.clone(),
             Arc::new(TestClient { seen: seen.clone(), answers: answers.clone(), hold: hold.clone() }),
@@ -540,4 +547,26 @@ async fn in_frames_are_single_line_json() {
     let line = InFrame::Prompt { session: "s".into(), text: "multi\nline".into() }.line();
     assert!(!line.contains('\n'));
     assert_eq!(serde_json::from_str::<Value>(&line).unwrap()["text"], "multi\nline");
+}
+
+#[test]
+fn bridge_entry_honours_the_env_override() {
+    let custom = PathBuf::from("/tmp/cindy-custom-entry.js");
+    let env = vec![(BRIDGE_ENTRY_ENV.into(), custom.to_string_lossy().into_owned())];
+    assert_eq!(bridge_entry(&env), custom);
+}
+
+#[test]
+fn bridge_entry_falls_back_to_the_checkout() {
+    // No env: whatever exists (exe walk-up, manifest) or the last-resort guess,
+    // the answer is always the checkout-relative bridge entry.
+    let rel: PathBuf = ["agent", "cindy-bridge", "dist", "agent", "cindy-bridge", "src", "index.js"].iter().collect();
+    assert!(bridge_entry(&[]).ends_with(&rel));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn missing_node_fails_with_the_fix() {
+    let h = Harness::connect_with(vec![], "definitely-not-node-xyz").await;
+    let err = h.request("session/new", json!({ "cwd": h.cwd, "mcpServers": [] })).await.unwrap_err();
+    assert!(err.to_string().contains("was not found on PATH"), "{err}");
 }

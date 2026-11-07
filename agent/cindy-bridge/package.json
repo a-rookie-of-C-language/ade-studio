@@ -5,6 +5,9 @@
   "description": "Node sidecar: hosts vendored Cindy Claude-chain (third-party/cindy-agent) behind the private v0 NDJSON protocol for OpenIDEA AgentManager.",
   "type": "module",
   "license": "Apache-2.0",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",

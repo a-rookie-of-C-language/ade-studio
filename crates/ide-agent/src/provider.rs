@@ -71,6 +71,7 @@ const BUILTIN: &[(&str, &str, Driver, &[&str], &str)] = &[
         &["npx", "-y", "@agentclientprotocol/claude-agent-acp@0.97.0"],
         "Run `claude` in a terminal and sign in.",
     ),
+    ("cindy", "Cindy (Claude)", Driver::Cindy, &["node"], "Run `claude` in a terminal and sign in."),
     (
         "codex-acp",
         "Codex (ACP)",
@@ -122,6 +123,12 @@ impl ProviderSpec {
             // 1.x lists models on the CLI; 2.x needs a disposable session instead.
             self.model_discovery = ModelDiscovery::Command { args: vec!["models".into(), "--verbose".into()] };
         }
+        // Cindy runs the vendored bridge through the `node` on PATH; its entry is
+        // resolved here so the New Task page lists it without a config file.
+        // A `<config>/agents/cindy.toml` replaces all of this (command, args, env).
+        if self.id == "cindy" {
+            self.args = vec![crate::native::cindy::bridge_entry(&self.env).to_string_lossy().into_owned()];
+        }
         self
     }
 
@@ -145,12 +152,20 @@ pub(crate) fn resolve(command: &str, extra_dirs: &[PathBuf]) -> Option<String> {
     }
     let find_in = |dir: &Path| {
         let c = dir.join(command);
-        let exts: &[&str] = if cfg!(windows) { &["exe", "cmd", "bat"] } else { &[] };
-        if is_executable(&c) || exts.iter().any(|e| is_executable(&c.with_extension(e))) {
-            Some(c.to_string_lossy().into_owned())
-        } else {
-            None
+        if is_executable(&c) {
+            return Some(c.to_string_lossy().into_owned());
         }
+        // Windows resolves a bare name through PATHEXT: return the executable
+        // found, not the extensionless probe (spawning the probe fails).
+        if cfg!(windows) {
+            for e in ["exe", "cmd", "bat"] {
+                let p = c.with_extension(e);
+                if is_executable(&p) {
+                    return Some(p.to_string_lossy().into_owned());
+                }
+            }
+        }
+        None
     };
     for dir in extra_dirs {
         if let Some(found) = find_in(dir) {
@@ -382,7 +397,12 @@ pub(crate) fn load(custom_dir: Option<&Path>) -> Vec<ProviderSpec> {
 }
 
 /// Whether the spec's command resolves to an executable (its install dirs or `PATH`).
+/// Cindy also needs its bridge entry on disk (built by `pnpm build:bridge`).
 pub(crate) fn installed(spec: &ProviderSpec) -> bool {
+    if spec.driver == Driver::Cindy {
+        return resolve(&spec.command, &spec.install_dirs).is_some()
+            && crate::native::cindy::bridge_entry(&spec.env).is_file();
+    }
     resolve(&spec.command, &spec.install_dirs).is_some()
 }
 
@@ -627,5 +647,40 @@ mod tests {
         // Unknown names and missing paths resolve to nothing.
         assert!(resolve("definitely-not-an-agent-binary", &[dir.path().to_path_buf()]).is_none());
         assert!(resolve(&dir.path().join("missing").to_string_lossy(), &[]).is_none());
+    }
+
+    #[test]
+    fn cindy_builtin_resolves_its_bridge() {
+        use crate::native::cindy::{BRIDGE_ENTRY_ENV, bridge_entry};
+        assert!(is_builtin("cindy"));
+        let builtin = builtin_spec("cindy").unwrap();
+        assert_eq!((builtin.name.as_str(), builtin.command.as_str()), ("Cindy (Claude)", "node"));
+        assert_eq!(builtin.driver, Driver::Cindy);
+        assert_eq!(builtin.login_hint, "Run `claude` in a terminal and sign in.");
+        // No config file: the entry is whatever the checkout resolves to.
+        let specs = load(None);
+        let cindy = specs.iter().find(|s| s.id == "cindy").unwrap();
+        assert_eq!(cindy.args, [bridge_entry(&[]).to_string_lossy().into_owned()]);
+        assert_eq!(cindy.source, AgentSource::Builtin);
+        // A user file overrides the entry through the env.
+        let dir = tempfile::tempdir().unwrap();
+        let entry = dir.path().join("bridge.js");
+        std::fs::write(&entry, "").unwrap();
+        let entry_s = entry.to_string_lossy().replace('\\', "\\\\");
+        std::fs::write(
+            dir.path().join("cindy.toml"),
+            format!("driver = \"cindy\"\ncommand = \"node\"\n[env]\n{BRIDGE_ENTRY_ENV} = \"{entry_s}\"\n"),
+        )
+        .unwrap();
+        let specs = load(Some(dir.path()));
+        let cindy = specs.iter().find(|s| s.id == "cindy").unwrap();
+        assert_eq!(cindy.args, [entry.to_string_lossy().into_owned()]);
+        assert_eq!(installed(cindy), resolve("node", &[]).is_some());
+        // A missing entry reads as not installed, with the command still shown.
+        std::fs::remove_file(&entry).unwrap();
+        let specs = load(Some(dir.path()));
+        let cindy = specs.iter().find(|s| s.id == "cindy").unwrap();
+        assert!(!installed(cindy));
+        assert_eq!(describe(cindy).command, format!("node {}", entry.to_string_lossy()));
     }
 }

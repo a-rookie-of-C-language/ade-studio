@@ -44,6 +44,10 @@ CLAUDE.local.md
 # Local reference screenshots
 pycharm-screenshots/
 
+
+# Built cindy-bridge (B4 release packaging assembles it per platform).
+agent/cindy-bridge/deploy/
+
 # Built Cindy renderer embed (scripts/cindy-embed/build.mjs regenerates it).
 /public/cindy/
 
