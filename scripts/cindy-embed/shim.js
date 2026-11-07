@@ -139,9 +139,15 @@
           return typeof e === "string" && KNOWN_EFFORTS[e] === 1;
         });
         var contextWindow = typeof m.context_window === "number" && m.context_window > 0 ? m.context_window : 200000;
+        var vendor = typeof m.provider === "string" && m.provider ? m.provider : undefined;
         return {
           id: m.id,
           name: m.name || m.id,
+          // Real vendor ids group properly in the picker; unknown gateway
+          // names ride the userProvider pass-through in isAgentSelectableModel
+          // instead of being killed by the id-regex classifier. Never set a
+          // known non-chat category here.
+          group: vendor,
           contextWindow: contextWindow,
           efforts: efforts,
           defaultEffort: magpieDefaultEffort(efforts),
