@@ -1,7 +1,7 @@
 # Cindy Agent 接入 OpenIDEA：私有最小桥（v0，不用 ACP）
 
-> 状态：草案（待评审）。已定方向：agent 区暂时禁用 ACP，先用 Cindy；协议用私有最小桥，
-> 后续可在 bridge 内或 openidea 侧再扩展 ACP。本 spec 是行为改动的前置说明，实现前需评审通过。
+> 状态：B1–B4 已落地。B5（magpie 路由）进行中：agent 区仍禁用 ACP；模型侧走本地
+> magpie 网关，执行仍经 Claude SDK + vendor 原语；UI 只借品牌标识，不搬运 desktop renderer。
 
 ## 0. 目标与非目标
 
@@ -157,6 +157,40 @@ cindy-bridge (Node, 无状态转译)
 - `<config>/agents/cindy.toml`（`driver = "cindy"`, `command = "node"`,
   `args = ["<app>/cindy-bridge.mjs"]`）；Node 用仓库既有版本要求，找不到时明确报错。
 - 文案进 text catalog（中英）；Cowork 新任务页出现 “Cindy (Claude)” provider。
+- 实际落点（B4 评审结论）：builtin 行 + `tuned()` 注入 bridge 路径（无需托管 toml，
+  用户 toml 覆盖机制照常）；`installed()` 要求 node 可解析且 bridge 存在；
+  `ensure_bridge` 做 Node>=22.18 / bridge 存在性预检；provider 图标用 magpie 标
+  （`src/ui/openidea/agents/cindy.svg` + THIRD_PARTY_LICENSES 条目）。
+
+### B5 — 模型走本地 magpie 网关（UI 只借品牌标识，不搬 renderer）
+
+- 路由：magpie wire id（含 `/`，如 `auto/gpt-6.1-sol`）走网关；裸别名
+  （`sonnet`…）保持 B2 legacy（本机登录 / `ANTHROPIC_API_KEY`）。判定点两处：
+  bridge `local-auth`（`authSource: 'api-key'` → vendor gateway-key/host-managed，
+  `nativeCliAuth` 自动关闭），Rust shim 会话创建时的模型选择。两者都不碰 vendor。
+- 鉴权：`getState` 遇 wire id 只探网关 `/v1/models` 可达性（默认
+  `http://127.0.0.1:3425`，`MAGPIE_BASE_URL` 可覆盖）；`getAuthEnv` 只返回
+  `ANTHROPIC_API_KEY`（`MAGPIE_API_KEY` 或占位 `magpie-local`，网关不校验）；
+  接入点（`ANTHROPIC_BASE_URL`）走 `runtimeConfig.endpoint`（vendor 按会话凭证形态
+  自动剥离订阅会话），不在 `getAuthEnv` 里夹带（adapter 接口约定）。
+- 模型目录：Rust `session/new` 从网关拉 `/v1/models` 生成 Model 选项
+  （`value` = wire id，`name` = display_name，`description` = magpie_label/owned_by），
+  默认选 Claude 家族首个（唯一可执行引擎），`CINDY_MODEL` 精确覆盖；网关不通时回退
+  静态三别名。`initialize`/probe 不带模型（沿用“会话级模型”语义）。
+- 执行：仍是 Claude SDK + vendor 原语；SDK spawn 的是 `binaryPath`（`CINDY_CLAUDE_PATH`
+  覆盖优先；win32 只接受可直接 spawn 的二进制，npm shim 的 `.cmd` 会 EINVAL，
+  启动时明示）。网关上游配额耗尽时 turn 按 `done`/`error` 照常结束，不重试掩盖。
+- UI：只借品牌——`agent-cindy` 图标用 magpie 标（MIT，yetone/magpie，经 Cindy
+  providerBranding 24px 网格适配）；模型行描述直接用网关的 provider/label。
+  不移植 desktop unified selector（911 行 M1–M4 + 收藏/最近/深度 + 远端网关账号体系
+  超出 v0 范围）。
+- 供应商包裁剪：release deploy 删掉 SDK 自带平台 `claude.exe`（~244MB；SDK 实际用
+  host 注入的 `binaryPath`，已验证去掉后 boot 到鉴权门）；悬空 symlink 一并清
+  （Tauri 资源校验会卡死）。`copy-md-resources.js` 把 `?raw` 的两个 `.md` 镜像进
+  `dist/`，raw-loader 优先用现货（dev 回退源码树）。
+- 验收：Rust 侧 stub catalog 单测 + 带 CINDY_MODEL 的模型切换单测；真网关 e2e
+  （catalog → probe 可 serving 模型 → 完整 turn 回 READY）；bridge 侧 magpie auth
+  单测 6 例；bridge 回放 18 例全绿（B2 未动）。
 
 ## 4. 安全边界
 

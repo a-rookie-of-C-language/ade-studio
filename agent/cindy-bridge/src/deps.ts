@@ -9,12 +9,21 @@ import { createLocalAuthAdapter } from "./local-auth.js";
 export const EXIT_MISSING_DEPS = 2;
 
 /**
- * 在 PATH 里找 `claude` CLI。win32 顺带试 `.exe` / `.cmd` 后缀。
- * 只做存在性检查，不执行它（执行是 SDK 的事）。
+ * 在 PATH 里找 `claude` CLI。win32 优先可直接执行的后缀：裸名在 npm 目录里是
+ * POSIX shell 脚本，SDK spawn 它会直接炸（B4 修：原来 "" 排第一）。只做存在性
+ * 检查，不执行它（执行是 SDK 的事）。
  */
-export function resolveClaudeBinaryPath(): string | null {
-  const pathEnv = process.env.PATH ?? "";
-  const suffixes = process.platform === "win32" ? ["", ".exe", ".cmd"] : [""];
+export function resolveClaudeBinaryPath(env: Record<string, string | undefined> = process.env): string | null {
+  const pathEnv = env.PATH ?? "";
+  const override = env.CINDY_CLAUDE_PATH?.trim();
+  if (override) {
+    try {
+      if (existsSync(override)) return override;
+    } catch {
+      // 落到 PATH 查找。
+    }
+  }
+  const suffixes = process.platform === "win32" ? [".exe", ".cmd", ""] : [""];
   for (const dir of pathEnv.split(delimiter)) {
     if (dir.length === 0) continue;
     for (const suffix of suffixes) {
@@ -29,11 +38,13 @@ export function resolveClaudeBinaryPath(): string | null {
   return null;
 }
 
-/** v0 runtimeConfig：双 memory 全关，不覆写 endpoint（走 SDK 默认），无业务 flag。 */
-export function createLocalRuntimeConfig(): AgentRuntimeConfig {
+/** v0 runtimeConfig：双 memory 全关；magpie 可达时 endpoint 指过去（vendor 按会话
+ *  凭证形态自动剥离订阅会话，保持 B2 的直连行为）。无业务 flag。 */
+export function createLocalRuntimeConfig(endpoint?: string): AgentRuntimeConfig {
   return {
     memoryEnabled: false,
     makerMemoryEnabled: false,
+    ...(endpoint ? { endpoint } : {}),
   };
 }
 
@@ -47,14 +58,21 @@ export interface LocalDepsResult {
  */
 // 中文注释：binaryPath 为空时 maker-core 构造期即抛错，v0 选择在组装依赖时就
 // fail-fast，把“缺 claude CLI”与其它运行时错误区分开（exit 2，供 B4 明确报错）。
-export function buildLocalDeps(logger: Logger): LocalDepsResult {
+export function buildLocalDeps(logger: Logger, magpieEndpoint?: string): LocalDepsResult {
   const binaryPath = resolveClaudeBinaryPath();
   if (!binaryPath) {
     throw new Error("claude CLI not found in PATH; install it or run `claude login` in your own terminal first");
   }
+  if (process.platform === "win32" && /\.(cmd|bat|ps1)$/i.test(binaryPath)) {
+    // vendor spawn 不带 shell，.cmd 必 EINVAL；指一条能直接执行的路。
+    logger.warn("deps: claude entry is a shell shim and cannot be spawned on Windows", {
+      binaryPath,
+      hint: "set CINDY_CLAUDE_PATH to a real claude.exe",
+    });
+  }
   const deps: AgentDeps = {
     auth: createLocalAuthAdapter(logger),
-    runtimeConfig: createLocalRuntimeConfig(),
+    runtimeConfig: createLocalRuntimeConfig(magpieEndpoint),
     binaryPath,
     logger,
     mcpProviders: [],

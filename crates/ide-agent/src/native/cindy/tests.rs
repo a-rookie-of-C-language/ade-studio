@@ -148,6 +148,11 @@ impl Harness {
         // Preflight checks the entry file; the fake bridge never execs it.
         let entry = std::env::temp_dir().join("openidea-cindy-test-entry.js");
         std::fs::write(&entry, "// fake bridge\n").unwrap();
+        // Catalog lookups stay hermetic: an unreachable gateway forces the static list.
+        let mut env = env;
+        if !env.iter().any(|(k, _)| k == "MAGPIE_BASE_URL") {
+            env.push(("MAGPIE_BASE_URL".into(), "http://127.0.0.1:1".into()));
+        }
         let mut s = spec(env);
         s.command = command.to_owned();
         s.args = vec![entry.to_string_lossy().into_owned()];
@@ -195,6 +200,11 @@ impl Harness {
     }
 
     async fn new_session(&mut self) -> String {
+        self.new_session_expecting(None).await
+    }
+
+    /// `Some(model)` asserts the exact start model; `None` asserts any default.
+    async fn new_session_expecting(&mut self, model: Option<&str>) -> String {
         let handle = tokio::spawn({
             let client = self.client.clone();
             let cwd = self.cwd.clone();
@@ -205,11 +215,15 @@ impl Harness {
         // The session id is fresh; the start carries the default model.
         let session = start["session"].as_str().unwrap().to_owned();
         assert!(!session.is_empty());
-        assert_eq!(start["model"], "sonnet");
+        let got = start["model"].as_str().unwrap();
+        match model {
+            Some(want) => assert_eq!(got, want),
+            None => assert!(!got.is_empty()),
+        }
         self.b().send(&format!(r#"{{"type":"started","session":"{session}","sdkSessionId":"sdk-1"}}"#)).await;
         let r = tokio::time::timeout(WAIT, handle).await.expect("join").unwrap().unwrap();
         assert_eq!(r["sessionId"], session);
-        assert_eq!(r["configOptions"][0]["currentValue"], "sonnet");
+        assert_eq!(r["configOptions"][0]["currentValue"], got);
         session
     }
 
@@ -251,7 +265,8 @@ impl Harness {
 #[tokio::test(flavor = "multi_thread")]
 async fn session_new_starts_bridge_with_cwd_and_model() {
     let mut h = Harness::connect(vec![]).await;
-    let session = h.new_session().await;
+    // No gateway here (the harness points at a dead port): the static fallback.
+    let session = h.new_session_expecting(Some("sonnet")).await;
     assert!(!session.is_empty());
 }
 
@@ -569,4 +584,75 @@ async fn missing_node_fails_with_the_fix() {
     let h = Harness::connect_with(vec![], "definitely-not-node-xyz").await;
     let err = h.request("session/new", json!({ "cwd": h.cwd, "mcpServers": [] })).await.unwrap_err();
     assert!(err.to_string().contains("was not found on PATH"), "{err}");
+}
+
+/// Serves one fixed magpie catalog, then stops.
+fn stub_magpie(catalog: serde_json::Value) -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        let Ok((mut stream, _)) = listener.accept() else { return };
+        let mut buf = [0u8; 4096];
+        let _ = stream.read(&mut buf);
+        let body = serde_json::to_string(&catalog).unwrap();
+        let _ = stream.write_all(
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .as_bytes(),
+        );
+    });
+    format!("http://127.0.0.1:{}", addr.port())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn session_new_lists_the_magpie_catalog() {
+    let catalog = serde_json::json!({ "data": [
+        { "id": "auto/gpt-x", "display_name": "G", "owned_by": "acme", "magpie_label": "G routing" },
+        { "id": "auto/claude-y", "display_name": "C", "owned_by": "devin", "magpie_label": "C routing" },
+    ]});
+    let base = stub_magpie(catalog);
+    let mut h = Harness::connect(vec![("MAGPIE_BASE_URL".into(), base)]).await;
+    let session = h.new_session_expecting(Some("auto/claude-y")).await;
+    h.b().send(&format!("{{\"type\":\"started\",\"session\":\"{session}\",\"sdkSessionId\":\"sdk-1\"}}")).await;
+    let bound = h.session(&session);
+    let (current, values, descs) = {
+        let st = bound.st.lock();
+        let options = st.options();
+        let current = options[0]["currentValue"].as_str().unwrap().to_owned();
+        let values: Vec<String> =
+            options[0]["options"].as_array().unwrap().iter().map(|o| o["value"].as_str().unwrap().to_owned()).collect();
+        let descs: Vec<String> = options[0]["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["description"].as_str().unwrap().to_owned())
+            .collect();
+        (current, values, descs)
+    };
+    assert_eq!(current, "auto/claude-y");
+    assert_eq!(values, ["auto/gpt-x", "auto/claude-y"]);
+    assert_eq!(descs, ["G routing", "C routing"]);
+    // A wire id from the catalog namespace stays selectable after listing.
+    let set = tokio::spawn({
+        let client = h.client.clone();
+        let session = session.clone();
+        async move {
+            client
+                .request::<_, Value>(
+                    "session/set_config_option",
+                    json!({ "sessionId": session, "configId": "model", "value": "auto/gpt-x" }),
+                    None,
+                )
+                .await
+        }
+    });
+    assert_eq!(h.b().expect_in("close").await["type"], "close");
+    assert_eq!(h.b().expect_in("start").await["model"], "auto/gpt-x");
+    h.b().send(&format!("{{\"type\":\"started\",\"session\":\"{session}\",\"sdkSessionId\":\"sdk-2\"}}")).await;
+    let r = tokio::time::timeout(WAIT, set).await.expect("join").unwrap().unwrap();
+    assert_eq!(r["configOptions"][0]["currentValue"], "auto/gpt-x");
 }

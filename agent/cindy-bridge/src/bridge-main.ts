@@ -2,6 +2,7 @@ import { createInterface } from "node:readline";
 import { ClaudeCodeAgent } from "../../../third-party/cindy-agent/maker-core/agents/claude-code/index.js";
 import { CindyBridge, resolvePermissionTimeoutMs } from "./bridge.js";
 import { EXIT_MISSING_DEPS, buildLocalDeps } from "./deps.js";
+import { magpieBaseUrl, magpieReachable } from "./local-auth.js";
 import { createStderrLogger } from "./stderr-logger.js";
 
 /** stdout 写（带背压等待；帧通道，失败直接抛给调用方）。 */
@@ -29,9 +30,14 @@ function writeStdout(line: string): Promise<void> {
  */
 export async function main(): Promise<number> {
   const logger = createStderrLogger();
+  // Magpie endpoint is process-wide (vendor reads runtimeConfig per spawn):
+  // probe once, so bare-alias sessions never inherit a dead gateway.
+  const magpieUrl = magpieBaseUrl();
+  const magpieUp = await magpieReachable(magpieUrl, 1500);
+  if (magpieUp) logger.info("cindy-bridge: magpie gateway routing enabled", { magpieUrl });
   let deps: ReturnType<typeof buildLocalDeps>;
   try {
-    deps = buildLocalDeps(logger);
+    deps = buildLocalDeps(logger, magpieUp ? magpieUrl : undefined);
   } catch (err) {
     logger.fatal(err instanceof Error ? err.message : String(err));
     return EXIT_MISSING_DEPS;
