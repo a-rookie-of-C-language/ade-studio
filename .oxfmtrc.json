@@ -15,6 +15,7 @@
     "pnpm-lock.yaml",
     "**/*.toml",
     "fixtures",
+    "third-party",
     "plugins/*/web",
     "plugins/official/*/web",
     "crates/**/tests/fixtures"

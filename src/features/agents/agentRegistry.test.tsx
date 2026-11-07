@@ -22,6 +22,7 @@ function AgentRegistryPage(props: ComponentProps<typeof RegistryPage>) {
   );
 }
 import { ADD_AGENT, providerOptions } from "./providerOptions";
+import { providerIcon } from "./model";
 import {
   afterRemove,
   matchesQuery,
@@ -172,6 +173,25 @@ describe("agent picker", () => {
       ["__missing__", undefined],
       ["gemini", "gemini"],
       [ADD_AGENT, undefined],
+    ]);
+  });
+
+  it("lists the Cindy builtin with its magpie icon", () => {
+    const options = providerOptions(
+      [
+        provider({
+          id: "cindy",
+          name: "Cindy (Claude)",
+          command: "node /app/cindy-bridge.mjs",
+          source: { kind: "builtin" },
+        }),
+      ],
+      tx,
+      providerIcon,
+    );
+    expect(options.map((o) => [o.value, o.label])).toEqual([
+      ["cindy", "Cindy (Claude)"],
+      [ADD_AGENT, "More agents…"],
     ]);
   });
 });

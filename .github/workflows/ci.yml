@@ -47,6 +47,10 @@ jobs:
       # tauri-build checks that frontendDist exists.
       - run: pnpm install --frozen-lockfile && mkdir -p dist
         shell: bash
+      # The packaged bridge must exist before any Rust step compiles src-tauri:
+      # its build script fails when agent/cindy-bridge/deploy is missing, and
+      # the cindy-bridge e2e boots the real bridge from its dist.
+      - run: pnpm build:bridge
       - if: runner.os == 'Linux'
         run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
