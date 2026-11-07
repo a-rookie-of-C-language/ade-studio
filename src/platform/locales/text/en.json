@@ -117,5 +117,10 @@
   "Output": "Output",
   "Running": "Running",
   "Pin Task": "Pin Task",
-  "Unpin Task": "Unpin Task"
+  "Unpin Task": "Unpin Task",
+  "Favorites": "Favorites",
+  "Recent": "Recent",
+  "Search models": "Search models",
+  "Add to favorites": "Add to favorites",
+  "Remove from favorites": "Remove from favorites"
 }

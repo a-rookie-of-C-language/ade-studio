@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfigOption } from "@/bindings";
 import { ConfigPickers, configPickerOptions } from "./ConfigPickers";
+import { useAgents } from "./store";
 
 const config = (values: AgentConfigOption["values"], category = "model"): AgentConfigOption => ({
   id: "model",
@@ -69,6 +70,7 @@ it("shows Cursor approvals separately from its execution mode and sends the choi
         option("mode", "mode", ["Agent", "Plan", "Ask"]),
         option("openidea.cursor.approval", "approval", ["ask", "bypass"]),
       ]}
+      provider="copilot"
       onChange={onChange}
     />,
   );
@@ -93,6 +95,7 @@ it("shows Allow All as a switch and sends on/off values", () => {
           values: [value("on", "On"), value("off", "Off")],
         },
       ]}
+      provider="copilot"
       onChange={onChange}
     />,
   );
@@ -124,6 +127,7 @@ it("shows Allow All inside the mode popup when both options exist", () => {
           values: [value("on", "On"), value("off", "Off")],
         },
       ]}
+      provider="copilot"
       onChange={onChange}
     />,
   );
@@ -137,7 +141,7 @@ it("shows Allow All inside the mode popup when both options exist", () => {
 
 it("sends the complete nested model id through ConfigPickers", () => {
   const onChange = vi.fn();
-  render(<ConfigPickers config={[config([value("9router/cmc/Beam")])]} onChange={onChange} />);
+  render(<ConfigPickers config={[config([value("9router/cmc/Beam")])]} provider="copilot" onChange={onChange} />);
   fireEvent.click(screen.getByRole("button", { name: "Model" }));
   fireEvent.click(screen.getByRole("option", { name: "Beamcmc/Beam" }));
   expect(onChange).toHaveBeenCalledExactlyOnceWith("model", "9router/cmc/Beam");
@@ -154,7 +158,7 @@ it("edits secondary settings from the compact popup and restores focus when dism
     values: [value("ask", "Ask first"), value("bypass", "Bypass approvals")],
   };
   const onChange = vi.fn();
-  render(<ConfigPickers config={[approval]} values={{ approvals: "bypass" }} onChange={onChange} />);
+  render(<ConfigPickers config={[approval]} values={{ approvals: "bypass" }} provider="copilot" onChange={onChange} />);
   const trigger = screen.getByRole("button", { name: "Agent settings" });
   trigger.focus();
   fireEvent.click(trigger);
@@ -216,7 +220,7 @@ describe("model and effort button", () => {
   ];
 
   it("shows the model with the agent's effort name and the mode with Allow All", () => {
-    render(<ConfigPickers config={copilotConfig()} onChange={vi.fn()} />);
+    render(<ConfigPickers config={copilotConfig()} provider="copilot" onChange={vi.fn()} />);
     const model = screen.getByRole("button", { name: "Model" });
     expect(model).toHaveTextContent("Claude Sonnet 5.5medium");
     expect(screen.getByRole("button", { name: "Mode" })).toHaveTextContent("AgentAllow All");
@@ -225,7 +229,14 @@ describe("model and effort button", () => {
 
   it("steps through the advertised effort levels and picks a model from the popup", () => {
     const onChange = vi.fn();
-    render(<ConfigPickers config={copilotConfig()} values={{ reasoning_effort: "high" }} onChange={onChange} />);
+    render(
+      <ConfigPickers
+        config={copilotConfig()}
+        values={{ reasoning_effort: "high" }}
+        provider="copilot"
+        onChange={onChange}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     const dialog = screen.getByRole("dialog", { name: "Model & effort settings" });
     const slider = within(dialog).getByRole("slider", { name: "Reasoning Effort" });
@@ -234,8 +245,7 @@ describe("model and effort button", () => {
     expect(slider).toHaveAttribute("aria-valuetext", "high");
     fireEvent.change(slider, { target: { value: "3" } });
     expect(onChange).toHaveBeenLastCalledWith("reasoning_effort", "xhigh");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Model" }));
-    fireEvent.click(screen.getByRole("option", { name: /GPT-6 Sol/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "GPT-6 Sol1x" }));
     expect(onChange).toHaveBeenLastCalledWith("model", "gpt-6-sol");
   });
 
@@ -244,19 +254,123 @@ describe("model and effort button", () => {
     // jsdom has no 2d context; keep it quiet and exercise the no-context path.
     const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     const { rerender } = render(
-      <ConfigPickers config={copilotConfig()} values={{ reasoning_effort: "high" }} onChange={onChange} />,
+      <ConfigPickers
+        config={copilotConfig()}
+        values={{ reasoning_effort: "high" }}
+        provider="copilot"
+        onChange={onChange}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Model" }));
     const dialog = screen.getByRole("dialog", { name: "Model & effort settings" });
     expect(within(dialog).getByRole("slider", { name: "Reasoning Effort" })).toHaveAttribute("aria-valuetext", "high");
     expect(dialog.querySelector("canvas")).not.toBeInTheDocument();
-    rerender(<ConfigPickers config={copilotConfig()} values={{ reasoning_effort: "xhigh" }} onChange={onChange} />);
+    rerender(
+      <ConfigPickers
+        config={copilotConfig()}
+        values={{ reasoning_effort: "xhigh" }}
+        provider="copilot"
+        onChange={onChange}
+      />,
+    );
     expect(dialog.querySelector("canvas")).toBeInTheDocument();
     getContext.mockRestore();
   });
 
   it("keeps a plain model picker when the agent has no effort option", () => {
-    render(<ConfigPickers config={copilotConfig(null)} onChange={vi.fn()} />);
+    render(<ConfigPickers config={copilotConfig(null)} provider="copilot" onChange={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Model" })).toHaveAttribute("aria-haspopup", "listbox");
+  });
+});
+
+describe("model favorites and recents", () => {
+  const copilotConfig = (): AgentConfigOption[] => [
+    {
+      id: "model",
+      name: "Model",
+      category: "model",
+      description: null,
+      current: "sonnet",
+      via: "option",
+      values: [
+        { value: "sonnet", name: "Sonnet", description: null },
+        { value: "opus", name: "Opus", description: null },
+      ],
+    },
+    {
+      id: "reasoning_effort",
+      name: "Reasoning Effort",
+      category: "thought_level",
+      description: null,
+      current: "low",
+      via: "option",
+      values: [
+        { value: "low", name: "Low", description: null },
+        { value: "high", name: "High", description: null },
+      ],
+    },
+  ];
+  beforeEach(() => {
+    useAgents.setState({ modelFavorites: [], modelRecents: [] });
+    globalThis.localStorage?.clear();
+  });
+  const openPopup = (onChange = vi.fn()) => {
+    render(<ConfigPickers config={copilotConfig()} provider="copilot" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    return { onChange, dialog: screen.getByRole("dialog", { name: "Model & effort settings" }) };
+  };
+
+  it("stars the current config and applies it back with its effort", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ConfigPickers
+        config={copilotConfig()}
+        values={{ reasoning_effort: "high" }}
+        provider="copilot"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    const dialog = screen.getByRole("dialog", { name: "Model & effort settings" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add to favorites: Opus" }));
+    expect(within(dialog).getByText("Favorites")).toBeInTheDocument();
+    // The favorite carries "high"; switching to "low" first proves applying restores it.
+    rerender(
+      <ConfigPickers
+        config={copilotConfig()}
+        values={{ reasoning_effort: "low" }}
+        provider="copilot"
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Opus · High" }));
+    expect(onChange).toHaveBeenNthCalledWith(1, "model", "opus");
+    expect(onChange).toHaveBeenNthCalledWith(2, "reasoning_effort", "high");
+  });
+
+  it("unstars from the favorites section", () => {
+    const { dialog } = openPopup();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add to favorites: Opus" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Remove from favorites" }));
+    expect(within(dialog).queryByText("Favorites")).not.toBeInTheDocument();
+  });
+
+  it("records applied models as recents for the same provider only", () => {
+    const { onChange } = openPopup();
+    const dialog = screen.getByRole("dialog", { name: "Model & effort settings" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Opus" }));
+    expect(onChange).toHaveBeenCalledWith("model", "opus");
+    // Applying closes the popup; reopening shows the recorded recent.
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Model & effort settings" })).getByText("Recent"),
+    ).toBeInTheDocument();
+  });
+
+  it("filters the model list by the search field", () => {
+    const { dialog } = openPopup();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Search models" }), { target: { value: "opu" } });
+    expect(within(dialog).queryByRole("button", { name: "Sonnet" })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Opus" })).toBeInTheDocument();
   });
 });

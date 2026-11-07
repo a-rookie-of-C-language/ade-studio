@@ -8,10 +8,12 @@ import { useRef, useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import type { AgentConfigOption } from "@/bindings";
 import { useTx } from "@/platform/i18n";
-import { Icon, IconButton, Popup, Select, T, Toggle, tooltipAttrs } from "@/ui";
+import { Icon, IconButton, Input, Popup, Select, T, Toggle, tooltipAttrs } from "@/ui";
 import type { SelectOption } from "@/ui/Select";
 import EffortStars from "./EffortStars";
 import { mainOptions, modeIcon } from "./composerModel";
+import { isFavorite, providerFavorites, providerRecents, type ModelFavorite, type ModelRecent } from "./modelFavorites";
+import { recordModelRecent, toggleModelFavorite, useAgents } from "./store";
 import styles from "./Composer.module.css";
 
 export function configPickerOptions(option: AgentConfigOption): SelectOption[] {
@@ -52,11 +54,14 @@ export function ConfigPickers({
   config,
   values,
   onChange,
+  provider,
 }: {
   config: readonly AgentConfigOption[];
   /** Chosen values that override `current`, by option id. */
   values?: Record<string, string>;
   onChange: (option: string, value: string) => void;
+  /** Agent provider the model values belong to (scopes favorites and recents). */
+  provider: string;
 }) {
   const tx = useTx();
   const [open, setOpen] = useState(false);
@@ -78,6 +83,7 @@ export function ConfigPickers({
         <span key={o.id} className={clsx(styles.configPicker, o.category !== "model" && styles.inlineSetting)}>
           {o === model && effort ? (
             <ModelEffortPicker
+              provider={provider}
               model={o}
               modelValue={valueOf(o)}
               effort={effort}
@@ -188,14 +194,16 @@ function ConfigPicker({
   );
 }
 
-/** One button for the model and its effort; the popup has the model list and an effort slider. */
+/** One button for the model and its effort; the popup holds favorites, recents, the model list and an effort slider. */
 function ModelEffortPicker({
+  provider,
   model,
   modelValue,
   effort,
   effortValue,
   onChange,
 }: {
+  provider: string;
   model: AgentConfigOption;
   modelValue: string | null;
   effort: AgentConfigOption;
@@ -204,11 +212,24 @@ function ModelEffortPicker({
 }) {
   const tx = useTx();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const anchor = useRef<HTMLButtonElement>(null);
+  const favorites = useAgents((s) => s.modelFavorites);
+  const recents = useAgents((s) => s.modelRecents);
   const modelName = selected(model, modelValue)?.name ?? tx("Default");
   const effortName = selected(effort, effortValue)?.name ?? tx("Default");
   const effortIsMax = effort.values.length > 1 && effortValue === effort.values[effort.values.length - 1]?.value;
   const summary = `${tx(model.name)}: ${modelName} · ${tx(effort.name)}: ${effortName}`;
+  /** The effort a favorite carries when the agent still offers the level, else the current one. */
+  const effectiveEffort = (favEffort: string | null) =>
+    favEffort && effort.values.some((v) => v.value === favEffort) ? favEffort : (effortValue ?? null);
+  const apply = (value: string, favEffort: string | null) => {
+    onChange(model.id, value);
+    const nextEffort = effectiveEffort(favEffort);
+    if (effort && nextEffort && nextEffort !== effortValue) onChange(effort.id, nextEffort);
+    recordModelRecent(provider, value, nextEffort);
+    setOpen(false);
+  };
   return (
     <>
       <button
@@ -243,10 +264,18 @@ function ModelEffortPicker({
         aria-label={tx("Model & effort settings")}
         className={styles.modelEffortPopup}
       >
-        <div className={styles.settingsRow}>
-          <span className={styles.settingsLabel}>{tx(model.name)}</span>
-          <ConfigPicker option={model} value={modelValue} onChange={onChange} framed />
-        </div>
+        <ModelList
+          provider={provider}
+          model={model}
+          modelValue={modelValue}
+          effort={effort}
+          effortValue={effortValue}
+          query={query}
+          onQuery={setQuery}
+          favorites={favorites}
+          recents={recents}
+          onApply={apply}
+        />
         <div className={styles.effortHeader}>
           <span className={styles.settingsLabel}>{tx(effort.name)}</span>
           <span className={clsx(styles.effortValue, effortIsMax && styles.effortValueMax)}>
@@ -261,6 +290,164 @@ function ModelEffortPicker({
         <EffortSlider option={effort} value={effortValue} onChange={(v) => onChange(effort.id, v)} />
       </Popup>
     </>
+  );
+}
+
+/** Searchable model list with favorites and recents; starring never leaves the popup. */
+function ModelList({
+  provider,
+  model,
+  modelValue,
+  effort,
+  effortValue,
+  query,
+  onQuery,
+  favorites,
+  recents,
+  onApply,
+}: {
+  provider: string;
+  model: AgentConfigOption;
+  modelValue: string | null;
+  effort: AgentConfigOption;
+  effortValue: string | null;
+  query: string;
+  onQuery: (query: string) => void;
+  favorites: readonly ModelFavorite[];
+  recents: readonly ModelRecent[];
+  onApply: (value: string, effort: string | null) => void;
+}) {
+  const tx = useTx();
+  const q = query.trim().toLowerCase();
+  const scoped = q
+    ? model.values.filter((v) => `${v.name} ${v.description ?? ""} ${v.value}`.toLowerCase().includes(q))
+    : model.values;
+  const options = configPickerOptions({ ...model, values: scoped });
+  const favs = providerFavorites(favorites, provider);
+  const recentList = providerRecents(recents, provider);
+  const searching = q.length > 0;
+  const nameOf = (value: string) => model.values.find((v) => v.value === value)?.name ?? value;
+  const effortNameOf = (value: string | null) => (value && effort.values.find((v) => v.value === value)?.name) || null;
+  return (
+    <>
+      <div className={styles.modelSearch}>
+        <Input
+          variant="bare"
+          aria-label={tx("Search models")}
+          placeholder={tx("Search models")}
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+        />
+      </div>
+      {!searching && favs.length > 0 && (
+        <div className={styles.modelSection}>
+          <div className={styles.modelSectionTitle}>
+            <T>Favorites</T>
+          </div>
+          {favs.map((f) => (
+            <div key={f.uid} className={styles.modelRow}>
+              <button
+                type="button"
+                className={clsx(styles.modelOption, f.value === modelValue && styles.modelOptionCurrent)}
+                onClick={() => onApply(f.value, f.effort)}
+                aria-label={effortNameOf(f.effort) ? `${nameOf(f.value)} · ${effortNameOf(f.effort)}` : nameOf(f.value)}
+              >
+                <Icon name="star" size={14} className={styles.modelStarred} />
+                <span className={styles.modelName}>{nameOf(f.value)}</span>
+                {effortNameOf(f.effort) && <span className={styles.modelDetail}>{effortNameOf(f.effort)}</span>}
+              </button>
+              <IconButton
+                icon="close"
+                size="small"
+                title={tx("Remove from favorites")}
+                aria-label={tx("Remove from favorites")}
+                onClick={() => toggleModelFavorite(provider, f.value, f.effort)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {!searching && recentList.length > 0 && (
+        <div className={styles.modelSection}>
+          <div className={styles.modelSectionTitle}>
+            <T>Recent</T>
+          </div>
+          {recentList.map((r) => (
+            <div key={`${r.value}${r.effort ?? ""}`} className={styles.modelRow}>
+              <button
+                type="button"
+                className={clsx(styles.modelOption, r.value === modelValue && styles.modelOptionCurrent)}
+                onClick={() => onApply(r.value, r.effort)}
+                aria-label={effortNameOf(r.effort) ? `${nameOf(r.value)} · ${effortNameOf(r.effort)}` : nameOf(r.value)}
+              >
+                <Icon name="history" size={14} />
+                <span className={styles.modelName}>{nameOf(r.value)}</span>
+                {effortNameOf(r.effort) && <span className={styles.modelDetail}>{effortNameOf(r.effort)}</span>}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.modelSection} role="listbox" aria-label={tx(model.name)}>
+        {options.map((opt) =>
+          opt.section ? (
+            <div key={opt.value} className={styles.modelSectionTitle} aria-hidden>
+              {opt.label}
+            </div>
+          ) : (
+            <ModelRow
+              key={opt.value}
+              label={opt.label}
+              detail={opt.detail}
+              starred={isFavorite(favorites, provider, opt.value, effortValue)}
+              current={opt.value === modelValue}
+              onApply={() => onApply(opt.value, effortValue)}
+              onStar={() => toggleModelFavorite(provider, opt.value, effortValue)}
+            />
+          ),
+        )}
+      </div>
+    </>
+  );
+}
+
+/** One model row: apply on the left, star on the right (siblings, never nested buttons). */
+function ModelRow({
+  label,
+  detail,
+  starred,
+  current,
+  onApply,
+  onStar,
+}: {
+  label: string;
+  detail?: string;
+  starred: boolean;
+  current: boolean;
+  onApply: () => void;
+  onStar: () => void;
+}) {
+  const tx = useTx();
+  const action = starred ? tx("Remove from favorites") : tx("Add to favorites");
+  return (
+    <div className={styles.modelRow} role="option" aria-selected={current}>
+      <button
+        type="button"
+        className={clsx(styles.modelOption, current && styles.modelOptionCurrent)}
+        onClick={onApply}
+      >
+        <span className={styles.modelName}>{label}</span>
+        {detail && <span className={styles.modelDetail}>{detail}</span>}
+      </button>
+      <IconButton
+        icon={starred ? "star" : "star-outline"}
+        size="small"
+        title={action}
+        aria-label={`${action}: ${label}`}
+        aria-pressed={starred}
+        onClick={onStar}
+      />
+    </div>
   );
 }
 

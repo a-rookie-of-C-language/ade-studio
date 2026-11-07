@@ -21,6 +21,7 @@ import { call, commands, isTauri } from "@/platform/ipc";
 import { executeAction } from "@/platform/actions";
 import { editorService, notifications, toolWindowService } from "@/workbench/contributions";
 import { bypassDefaults, canSend, emptyDraft, toPrompt, type ComposerDraft, type FileRef } from "./composerModel";
+import { addFavorite, recordRecent, removeFavorite, type ModelFavorite, type ModelRecent } from "./modelFavorites";
 import { withQuote } from "./conversation";
 import {
   HOME_KEY,
@@ -73,6 +74,10 @@ interface AgentsState {
   lastComposer: string;
   /** First messages of past tasks, newest first (New Task page ↑). */
   history: string[];
+  /** Starred model+effort configs, by agent provider. */
+  modelFavorites: ModelFavorite[];
+  /** Recently used model+effort configs, newest first, by agent provider. */
+  modelRecents: ModelRecent[];
   /** The composer asked to take focus (`seq` tells repeated requests apart). */
   focus: { key: string; seq: number } | null;
   /** Task shown inside the Agents tool window instead of an editor tab. */
@@ -95,6 +100,8 @@ const HISTORY_KEY = "openidea.agents.history.v1";
 const HISTORY_SIZE = 50;
 const SESSION_LOCATION_KEY = "openidea.agents.sessionLocation.v1";
 const PINNED_KEY = "{{SECRET_kb06lsdf}}";
+const FAVORITES_KEY = "{{SECRET_xks9nk53}}";
+const RECENTS_KEY = "{{SECRET_669ln141}}";
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -137,6 +144,8 @@ export const useAgents = create<AgentsState>(() => ({
   composers: new Map(),
   lastComposer: HOME,
   history: load<string[]>(HISTORY_KEY, []),
+  modelFavorites: load<ModelFavorite[]>(FAVORITES_KEY, []),
+  modelRecents: load<ModelRecent[]>(RECENTS_KEY, []),
   focus: null,
   docked: null,
   // TRAE's IDE keeps the chat on the right: default to the tool window, not
@@ -168,6 +177,26 @@ export function updateDraft(patch: Partial<Draft>) {
   const draft = { ...useAgents.getState().draft, ...patch };
   useAgents.setState({ draft });
   save(DRAFT_KEY, draft);
+}
+
+/** Star or unstar the given model+effort config for `provider` (survives restarts). */
+export function toggleModelFavorite(provider: string, value: string, effort: string | null) {
+  const modelFavorites = useAgents.getState().modelFavorites;
+  const existing = modelFavorites.find(
+    (f) => f.provider === provider && f.value === value && (f.effort ?? null) === (effort ?? null),
+  );
+  const next = existing
+    ? removeFavorite(modelFavorites, existing.uid)
+    : addFavorite(modelFavorites, provider, value, effort);
+  useAgents.setState({ modelFavorites: next });
+  save(FAVORITES_KEY, next);
+}
+
+/** Record a used model+effort config for `provider` (survives restarts). */
+export function recordModelRecent(provider: string, value: string, effort: string | null) {
+  const modelRecents = recordRecent(useAgents.getState().modelRecents, provider, value, effort);
+  useAgents.setState({ modelRecents });
+  save(RECENTS_KEY, modelRecents);
 }
 
 export const composerDraft = (key: string) => useAgents.getState().composers.get(key) ?? emptyDraft();

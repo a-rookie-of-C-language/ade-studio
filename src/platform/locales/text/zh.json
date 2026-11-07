@@ -6351,5 +6351,10 @@
   "Pin Task": "置顶任务",
   "Unpin Task": "取消置顶",
   "Solo Mode": "专注模式",
-  "Exit Solo Mode": "退出专注模式"
+  "Exit Solo Mode": "退出专注模式",
+  "Favorites": "收藏夹",
+  "Recent": "最近",
+  "Search models": "搜索模型",
+  "Add to favorites": "添加到收藏夹",
+  "Remove from favorites": "从收藏夹移除"
 }

@@ -1669,7 +1669,7 @@ function SessionComposer({
         onConfig={setOption}
         onSubmit={send}
         disabled={task.status === "archived"}
-        toolbar={<ConfigPickers config={task.config} onChange={setOption} />}
+        toolbar={<ConfigPickers config={task.config} onChange={setOption} provider={task.provider} />}
         actions={
           <>
             {busy && <IconButton icon="stop" title="Stop" size="small" onClick={() => void cancelTask(task.id)} />}

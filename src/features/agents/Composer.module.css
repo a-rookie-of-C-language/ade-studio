@@ -142,6 +142,59 @@
   width: min(300px, calc(100vw - 24px));
   padding: 4px 12px 12px;
 }
+.modelSearch {
+  margin: 8px 0 4px;
+}
+.modelSection {
+  margin-top: 8px;
+}
+.modelSectionTitle {
+  padding: 4px 8px;
+  color: var(--fg-muted);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+}
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.modelOption {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  color: var(--fg-secondary);
+  text-align: start;
+}
+.modelOption:hover {
+  background: var(--bg-toolbar-hover);
+  color: var(--fg-strong);
+}
+.modelOptionCurrent {
+  color: var(--fg-strong);
+}
+.modelName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelDetail {
+  overflow: hidden;
+  flex: none;
+  max-width: 60%;
+  color: var(--fg-subtle);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelStarred {
+  flex: none;
+  color: var(--accent);
+}
 .effortHeader {
   display: flex;
   align-items: baseline;

@@ -142,7 +142,12 @@ export function HomeEditor({
                 }
               />
               {options.length ? (
-                <ConfigPickers config={options} values={draft.config} onChange={setOption} />
+                <ConfigPickers
+                  config={options}
+                  values={draft.config}
+                  onChange={setOption}
+                  provider={provider?.id ?? draft.provider}
+                />
               ) : (
                 // In the pickers' own slot, so it can't read as the agent's description.
                 provider?.installed &&
