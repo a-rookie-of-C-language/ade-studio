@@ -22,6 +22,7 @@ import {
   MAX_IMAGE_BYTES,
   applyCompletion,
   atEdgeLine,
+  effectiveFiles,
   isPathQuery,
   mergeMatches,
   resolveTyped,
@@ -32,6 +33,7 @@ import {
   modeOption,
   nextValue,
   recall,
+  removeMention,
   type Completion,
   type FileRef,
 } from "./composerModel";
@@ -85,6 +87,18 @@ export function Composer(props: ComposerProps) {
   const [files, setFiles] = useState<Item[]>([]);
   const [active, setActive] = useState(0);
   const recalled = useRef<{ index: number; stash: string }>({ index: -1, stash: "" });
+  /** Files still mentioned in the text: rendered as chips, sent with the prompt. */
+  const referenced = effectiveFiles({ text, files: draft?.files ?? [], images });
+
+  /** Unreferences a file: its chip and every `@rel` go away together. */
+  const removeRef = (ref: FileRef) => {
+    const current = composerDraft(id);
+    updateComposer(id, {
+      text: removeMention(current.text, ref.rel),
+      files: current.files.filter((f) => f.path !== ref.path),
+    });
+    setCompletion(null);
+  };
 
   useEffect(() => {
     if (props.autoFocus) ref.current?.focus();
@@ -367,6 +381,31 @@ export function Composer(props: ComposerProps) {
             ))}
           </div>
         </Popup>
+      )}
+      {referenced.length > 0 && (
+        <div className={styles.refs} onClick={(e) => e.stopPropagation()}>
+          {referenced.map((f) => {
+            const dir = f.rel.endsWith("/");
+            const base = basename(dir ? f.rel.slice(0, -1) : f.rel);
+            return (
+              <span key={f.path} className={styles.ref} {...tooltipAttrs(f.rel)}>
+                <Icon name={dir ? "folder" : fileIconName(base, f.rel)} size={14} />
+                <span className={styles.refName}>
+                  {base}
+                  {dir && "/"}
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeRef}
+                  aria-label={tx("Remove reference")}
+                  onClick={() => removeRef(f)}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
       )}
       {images.length > 0 && (
         <div className={styles.images} onClick={(e) => e.stopPropagation()}>

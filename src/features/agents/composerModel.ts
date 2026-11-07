@@ -124,15 +124,34 @@ export function mentionOf(rel: string, lines?: { from: number; to: number }): st
   return lines.from === lines.to ? `@${rel}:${lines.from}` : `@${rel}:${lines.from}-${lines.to}`;
 }
 
-/** The prompt to send: files still mentioned in the text (each once), and the images. */
-export function toPrompt(draft: ComposerDraft): AgentPrompt {
+/** A mention of `rel` with any `:lines` suffix: what keeps a file referenced. */
+function mentionPattern(rel: string): RegExp {
+  return new RegExp(`@${escapeRe(rel)}(?![\\w./-])|@${escapeRe(rel)}:`);
+}
+
+/** Files still mentioned in the text (each once): what the agent will receive. */
+export function effectiveFiles(draft: ComposerDraft): FileRef[] {
   const seen = new Set<string>();
-  const files = draft.files.filter((f) => {
-    if (seen.has(f.path) || !new RegExp(`@${escapeRe(f.rel)}(?![\\w./-])|@${escapeRe(f.rel)}:`).test(draft.text))
-      return false;
+  return draft.files.filter((f) => {
+    if (seen.has(f.path) || !mentionPattern(f.rel).test(draft.text)) return false;
     seen.add(f.path);
     return true;
   });
+}
+
+/** Drops every `@rel` (with any `:lines` suffix) from the text and tidies the gap. */
+export function removeMention(text: string, rel: string): string {
+  // The trailing guard mirrors the mention pattern: `@a.ts` never eats `@a.tsx`.
+  return text
+    .replace(new RegExp(`@${escapeRe(rel)}(?::\\d*(?:-\\d+)?)?(?![\\w./-])`, "g"), "")
+    .replace(/[^\S\n]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** The prompt to send: files still mentioned in the text (each once), and the images. */
+export function toPrompt(draft: ComposerDraft): AgentPrompt {
+  const files = effectiveFiles(draft);
   return { text: draft.text.trim(), files: files.map((f) => f.path), images: draft.images };
 }
 

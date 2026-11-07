@@ -634,6 +634,47 @@
 .removeImage:focus-visible {
   opacity: 1;
 }
+/* Referenced files: chips with a remove button, mirroring the image attachments. */
+.refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 0;
+  cursor: default;
+}
+.ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 4px 3px 8px;
+  border-radius: var(--radius-small);
+  background: var(--bg-toolbar-hover);
+  color: var(--fg-secondary);
+}
+.refName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.removeRef {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.removeRef:hover,
+.removeRef:focus-visible {
+  background: var(--bg-popup);
+  color: var(--fg-strong);
+}
 
 /* `@` / `/` completion; Popup keeps the list within the viewport. */
 .caretMirror {
