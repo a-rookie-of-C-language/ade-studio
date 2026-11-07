@@ -1,38 +1,22 @@
 /** Agent tasks of the open project, mirrored from `ide-agent` through `agentSubscribe`. */
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type {
   AgentChange,
-  AgentCommand,
-  AgentConfigOption,
   AgentEntry,
   AgentEvent,
   ExternalSession,
-  AgentImage,
   AgentLimit,
   AgentProvider,
   AgentTask,
   Isolation,
 } from "@/bindings";
 import { useProject } from "@/platform/project";
-import { defaultTaskProject } from "./project";
 import { call, commands, isTauri } from "@/platform/ipc";
 import { executeAction } from "@/platform/actions";
 import { editorService, notifications, toolWindowService } from "@/workbench/contributions";
-import { bypassDefaults, canSend, emptyDraft, toPrompt, type ComposerDraft, type FileRef } from "./composerModel";
-import { withQuote } from "./conversation";
-import {
-  HOME_KEY,
-  HOME_KIND,
-  SESSION_KIND,
-  TOOL_WINDOW,
-  attentionChange,
-  entriesKey,
-  isBusy,
-  sessionKey,
-  upsertEntry,
-} from "./model";
+import type { ComposerDraft } from "./composerModel";
+import { SESSION_KIND, TOOL_WINDOW, attentionChange, entriesKey, isBusy, sessionKey, upsertEntry } from "./model";
 
 /** New Task page settings (its text lives in the `HOME` composer). */
 export interface Draft {
@@ -92,8 +76,7 @@ interface AgentsState {
 
 const DRAFT_KEY = "openidea.agents.draft.v2";
 const HISTORY_KEY = "openidea.agents.history.v1";
-const HISTORY_SIZE = 50;
-const SESSION_LOCATION_KEY = "openidea.agents.sessionLocation.v1";
+
 const PINNED_KEY = "{{SECRET_kb06lsdf}}";
 
 function load<T>(key: string, fallback: T): T {
@@ -141,7 +124,9 @@ export const useAgents = create<AgentsState>(() => ({
   docked: null,
   // TRAE's IDE keeps the chat on the right: default to the tool window, not
   // a centered editor tab. Only an explicit "editor" choice opts into center.
-  sessionLocation: load<unknown>(SESSION_LOCATION_KEY, null) === "editor" ? "editor" : "toolWindow",
+  // The tool window is gone: every session opens in the editor (or the
+  // Cowork column). Legacy `toolWindow` values on disk are ignored.
+  sessionLocation: "editor",
   lastTask: null,
   homeOpen: false,
   coworkTask: null,
@@ -164,21 +149,6 @@ export function togglePin(id: string) {
   save(PINNED_KEY, pinned);
 }
 
-export function updateDraft(patch: Partial<Draft>) {
-  const draft = { ...useAgents.getState().draft, ...patch };
-  useAgents.setState({ draft });
-  save(DRAFT_KEY, draft);
-}
-
-export const composerDraft = (key: string) => useAgents.getState().composers.get(key) ?? emptyDraft();
-
-export function updateComposer(key: string, patch: Partial<ComposerDraft>) {
-  useAgents.setState((s) => ({
-    composers: new Map(s.composers).set(key, { ...(s.composers.get(key) ?? emptyDraft()), ...patch }),
-    lastComposer: key,
-  }));
-}
-
 /** Session tabs on screen; a task can be shown in more than one split. */
 const visible = new Map<string, number>();
 const windowFocused = () => document.visibilityState !== "hidden" && document.hasFocus();
@@ -196,23 +166,6 @@ function setUnread(task: string, value: boolean) {
 function markUnread(task: string) {
   const current = useAgents.getState().tasks.get(task);
   if (current && current.status !== "archived" && !viewing(task)) setUnread(task, true);
-}
-
-export function markVisible(task: string): () => void {
-  visible.set(task, (visible.get(task) ?? 0) + 1);
-  const read = () => {
-    if (viewing(task)) setUnread(task, false);
-  };
-  read();
-  window.addEventListener("focus", read);
-  document.addEventListener("visibilitychange", read);
-  return () => {
-    const count = (visible.get(task) ?? 1) - 1;
-    if (count) visible.set(task, count);
-    else visible.delete(task);
-    window.removeEventListener("focus", read);
-    document.removeEventListener("visibilitychange", read);
-  };
 }
 
 let generation = 0;
@@ -290,25 +243,6 @@ export async function refreshExternal(provider?: string): Promise<void> {
   } catch (e) {
     if (gen === generation) useAgents.setState({ externalError: e instanceof Error ? e.message : String(e) });
   }
-}
-
-/**
- * Imports an external session as a task of the project and resumes it under its own
- * session id. Importing the same session twice returns the first task.
- */
-export async function importExternal(session: ExternalSession): Promise<AgentTask> {
-  const projectRoot = useProject.getState().project?.root ?? null;
-  const task = await call(
-    commands.agentImportExternal({
-      provider: session.provider,
-      sessionId: session.sessionId,
-      title: session.title,
-      cwd: session.cwd,
-      projectRoot,
-    }),
-  );
-  void refreshExternal();
-  return task;
 }
 
 function onEvent(e: AgentEvent) {
@@ -435,61 +369,6 @@ export async function refreshProviders() {
   if (providers) useAgents.setState({ providers });
 }
 
-export const NO_COMMANDS: readonly AgentCommand[] = [];
-
-/**
- * Session settings for the pickers on the New Task page: what the agent's
- * session-free discovery lists (fetched on change), or what it offered last
- * session (`offered`) until that arrives. Empty before either is known.
- */
-export function useAgentOptions(
-  provider: string | undefined,
-  offered: readonly AgentConfigOption[],
-): readonly AgentConfigOption[] {
-  const [found, setFound] = useState<{ for: unknown[]; list: readonly AgentConfigOption[] } | null>(null);
-  useEffect(() => {
-    if (!provider || !isTauri()) return;
-    let alive = true;
-    call(commands.agentModels(provider))
-      .then((list) => alive && setFound({ for: [provider], list }))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [provider]);
-  // Discovery wins when it lists anything; an empty discovery (native agents
-  // before their first session) keeps what the last session offered, so the
-  // remembered models don't vanish behind the "after the first task" hint.
-  const current = found && found.for[0] === provider;
-  return current && found.list.length ? found.list : offered;
-}
-
-/**
- * Slash commands to complete: what the agent offered (`offered`; fetched again when it
- * changes) plus, for Claude Code, the skills and custom commands on disk. Without `task`,
- * those of the project.
- */
-export function useAgentCommands(
-  provider: string | undefined,
-  task: string | null,
-  offered: readonly AgentCommand[],
-): readonly AgentCommand[] {
-  const [found, setFound] = useState<{ for: unknown[]; list: readonly AgentCommand[] } | null>(null);
-  useEffect(() => {
-    if (!provider || !isTauri()) return;
-    let alive = true;
-    call(commands.agentCommands(provider, task))
-      .then((list) => alive && setFound({ for: [provider, task, offered], list }))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [provider, task, offered]);
-  // Until the list for these arguments arrives, what the agent offered.
-  const current = found && found.for[0] === provider && found.for[1] === task && found.for[2] === offered;
-  return current ? found.list : offered;
-}
-
 /** Shows `task` inline in the Cowork home (`null` returns to the composer). */
 export function openCoworkTask(task: string | null) {
   useAgents.setState({ coworkTask: task, lastTask: task, homeOpen: false, docked: null });
@@ -512,15 +391,30 @@ export function openTask(task: string) {
   openTaskInEditor(task);
 }
 
+/** The agent UI is gone (sessions live in Cindy's interface now): opening calls must not throw. */
+function openEditorInput(input: { kind: string; key: string; data: unknown }) {
+  try {
+    void editorService()
+      .openInput(input, { focus: true })
+      .catch(() => {});
+  } catch {
+    /* no session UI to open into */
+  }
+}
+
 function openTaskInEditor(task: string) {
   // The title rides along so a restored tab has it before the tasks load.
   const title = useAgents.getState().tasks.get(task)?.title;
-  void editorService().openInput({ kind: SESSION_KIND, key: sessionKey(task), data: { task, title } }, { focus: true });
+  openEditorInput({ kind: SESSION_KIND, key: sessionKey(task), data: { task, title } });
 }
 
 function showDockedTask(task: string) {
   useAgents.setState({ docked: task, lastTask: task, homeOpen: false });
-  toolWindowService().show(TOOL_WINDOW, true);
+  try {
+    toolWindowService().show(TOOL_WINDOW, true);
+  } catch {
+    /* no tool window to show */
+  }
   void editorService().closeInput?.(sessionKey(task));
 }
 
@@ -545,12 +439,6 @@ export function centeredTask(): string | null {
     }
   }
   return newest;
-}
-
-/** Docks the centered session so crossing to the IDE (or back) keeps it on screen. */
-export function carrySessionToDocked() {
-  const id = centeredTask();
-  if (id) useAgents.setState({ docked: id, lastTask: id, homeOpen: false });
 }
 
 /** A session carried across a Cowork home ⇄ IDE project switch in flight. */
@@ -623,248 +511,9 @@ export async function consumePendingCarry(): Promise<void> {
 
 const normRoot = (p: string | null) => (p == null ? null : p.replace(/\\/g, "/").replace(/\/+$/, ""));
 
-function saveSessionLocation(location: SessionLocation) {
-  useAgents.setState({ sessionLocation: location });
-  save(SESSION_LOCATION_KEY, location);
-  if (location === "toolWindow") {
-    for (const { input } of editorService().openTabs?.() ?? []) {
-      if (input.kind === SESSION_KIND || input.kind === HOME_KIND) void editorService().closeInput?.(input.key);
-    }
-  }
-}
-
-/** Conversation placement is an Agents-wide preference, shared by every task. */
-export function setSessionLocation(location: SessionLocation) {
-  const s = useAgents.getState();
-  if (s.sessionLocation === location) return;
-  const active = editorService().activeInput?.();
-  const activeTask = active?.kind === SESSION_KIND ? (active.data as { task: string }).task : null;
-  const home = s.homeOpen || active?.kind === HOME_KIND;
-  const task =
-    s.docked ??
-    activeTask ??
-    (s.lastTask && s.tasks.has(s.lastTask) ? s.lastTask : null) ??
-    [...s.tasks.values()]
-      .filter((t) => t.status !== "archived")
-      .sort((a, b) => (b.updatedMs ?? b.createdMs ?? 0) - (a.updatedMs ?? a.createdMs ?? 0))[0]?.id;
-  saveSessionLocation(location);
-  useAgents.setState({ docked: null, homeOpen: false });
-  if (home) {
-    openHome();
-  } else if (task) {
-    openTask(task);
-  } else if (location === "toolWindow") {
-    openHome();
-  }
-}
-
-/** Dragging a session into the tool window selects the same placement for other tasks. */
-export function dockTask(task: string) {
-  saveSessionLocation("toolWindow");
-  showDockedTask(task);
-}
-
-export function undockTask() {
-  setSessionLocation("editor");
-  // The conversation moved to the center: close the panel it came from.
-  toolWindowService().hide(TOOL_WINDOW);
-}
-
-/** An explicit editor drop also updates where subsequent sessions open. */
-export function openTaskInEditorLocation(task: string) {
-  saveSessionLocation("editor");
-  useAgents.setState({ docked: null, homeOpen: false });
-  openTask(task);
-  // The session now lives in the center: close the sidebar panel behind it.
-  toolWindowService().hide(TOOL_WINDOW);
-}
-
-/** Opens the New Task page; `prompt` pre-fills it. */
-export function openHome(prompt?: string) {
-  const project = useProject.getState().project;
-  if (project?.workspace) {
-    const previous = useAgents.getState().draft.projectRoot;
-    const projectRoot = defaultTaskProject(project, editorService().activePath(), previous);
-    updateDraft({ projectRoot, ...(projectRoot !== previous ? { base: null } : {}) });
-  }
-  if (prompt !== undefined) updateComposer(HOME, { text: prompt });
-  // Welcome/Cowork has no tool window to show: reveal the composer in the
-  // center column instead of docking into nothing.
-  if (!useProject.getState().project && !useProject.getState().lightEdit) {
-    openCoworkTask(null);
-    return;
-  }
-  if (useAgents.getState().sessionLocation === "toolWindow") {
-    useAgents.setState({ docked: null, homeOpen: true });
-    toolWindowService().show(TOOL_WINDOW, true);
-    void editorService().closeInput?.(HOME_KEY);
-    return;
-  }
-  void editorService().openInput({ kind: HOME_KIND, key: HOME_KEY, data: {} }, { focus: true });
-}
-
-/** `isolation` overrides the draft's (a project without git can only use the local checkout). */
-export async function startTask(
-  isolation: Isolation = useAgents.getState().draft.isolation,
-  projectRoot: string | null = null,
-): Promise<void> {
-  const { draft, providers } = useAgents.getState();
-  const composer = composerDraft(HOME);
-  if (!canSend(composer)) return;
-  const config = { ...bypassDefaults(providers.find((p) => p.id === draft.provider)?.config ?? []), ...draft.config };
-  const task = await call(
-    commands.agentCreate({
-      projectRoot,
-      prompt: toPrompt(composer),
-      provider: draft.provider,
-      config: Object.entries(config).map(([id, value]) => ({ id, value })),
-      isolation,
-      base: isolation === "worktree" ? draft.base : null,
-      // Idempotency key: a retried click replays to the first task instead of
-      // starting a duplicate (the backend returns it on the launch receipt).
-      operationId:
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random()}`,
-    }),
-  );
-  // Its events can arrive before this reply: keep the newer state they carried.
-  useAgents.setState((s) => ({
-    tasks: s.tasks.has(task.id) ? s.tasks : new Map(s.tasks).set(task.id, task),
-    entries: new Map(s.entries).set(task.id, s.entries.get(task.id) ?? []),
-  }));
-  updateDraft({ projectRoot });
-  remember(composer.text.trim());
-  updateComposer(HOME, emptyDraft());
-  // Welcome shows no editor tabs: keep the new conversation in the Cowork center column.
-  const { project, lightEdit } = useProject.getState();
-  if (!project && !lightEdit) {
-    useAgents.setState({ coworkTask: task.id, lastTask: task.id, homeOpen: false });
-    return;
-  }
-  if ((await editorService().closeInput?.(HOME_KEY)) !== false) openTask(task.id);
-}
-
-function remember(text: string) {
-  if (!text) return;
-  const history = [text, ...useAgents.getState().history.filter((h) => h !== text)].slice(0, HISTORY_SIZE);
-  useAgents.setState({ history });
-  save(HISTORY_KEY, history);
-}
-
-/** Sends the session composer's message: queued while the agent works, or with `now` interrupting it. */
-export async function sendMessage(task: string, now: boolean): Promise<void> {
-  const composer = composerDraft(task);
-  if (!canSend(composer)) return;
-  await call(commands.agentPrompt(task, toPrompt(composer), now));
-  updateComposer(task, emptyDraft());
-}
-
 /** Moves the caret to the end of composer `key`. */
 export function focusComposer(key: string) {
   useAgents.setState((s) => ({ focus: { key, seq: (s.focus?.seq ?? 0) + 1 } }));
 }
 
-/** Quotes `text` (a selection of the conversation) in the task's composer, to reply to it. */
-export function quoteInComposer(task: string, text: string) {
-  updateComposer(task, { text: withQuote(composerDraft(task).text, text) });
-  focusComposer(task);
-}
-
-/** Copies the task's conversation into a new task (up to its first `turns` turns) and opens it. */
-export async function forkTask(task: string, turns: number | null): Promise<void> {
-  const copy = await call(commands.agentFork(task, turns));
-  useAgents.setState((s) => ({
-    tasks: s.tasks.has(copy.id) ? s.tasks : new Map(s.tasks).set(copy.id, copy),
-  }));
-  openTask(copy.id);
-}
-
-/**
- * Runs the conversation again from turn `turn` with `text` as its message: the agent is
- * stopped if it works, that turn and the later ones are dropped, then `text` is sent.
- */
-export async function rerunFrom(task: string, turn: number, text: string, images: AgentImage[] = []): Promise<void> {
-  if (isBusy(useAgents.getState().tasks.get(task)?.status ?? "ready")) {
-    await cancelTask(task);
-    await settled(task);
-  }
-  await call(commands.agentRollback(task, turn));
-  try {
-    await call(commands.agentPrompt(task, { text, files: [], images }, false));
-  } catch (e) {
-    // Rollback removes the inline editor; recover its text in the session composer.
-    const current = composerDraft(task);
-    updateComposer(task, { text: current.text ? `${text}\n${current.text}` : text });
-    focusComposer(task);
-    throw e;
-  }
-}
-
-/** Resolves once the task's turn has ended (or after a while). */
-function settled(task: string, timeoutMs = 15_000): Promise<void> {
-  const done = () => !isBusy(useAgents.getState().tasks.get(task)?.status ?? "ready");
-  if (done()) return Promise.resolve();
-  return new Promise((resolve) => {
-    const finish = () => {
-      stop();
-      clearTimeout(timer);
-      resolve();
-    };
-    const stop = useAgents.subscribe(() => done() && finish());
-    const timer = setTimeout(finish, timeoutMs);
-  });
-}
-
-/** Sends an earlier message again (queued while the agent works). */
-export const resendMessage = (task: string, text: string) =>
-  call(commands.agentPrompt(task, { text, files: [], images: [] }, false));
-
-/** Takes a queued message back into the composer to edit it. */
-export async function editQueued(task: string, queued: string): Promise<void> {
-  const item = await call(commands.agentUnqueue(task, queued));
-  const current = composerDraft(task);
-  const cwd = useAgents.getState().tasks.get(task)?.cwd ?? "";
-  const files: FileRef[] = item.prompt.files.map((path) => ({
-    path,
-    rel: path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path,
-  }));
-  updateComposer(task, {
-    text: current.text ? `${item.prompt.text}\n${current.text}` : item.prompt.text,
-    files: [...files, ...current.files],
-    images: [...item.prompt.images, ...current.images],
-  });
-}
-
-export const removeQueued = (task: string, queued: string) => call(commands.agentUnqueue(task, queued));
-export const sendQueuedNow = (task: string, queued: string) => call(commands.agentSendQueuedNow(task, queued));
-export const setTaskConfig = (task: string, option: string, value: string) =>
-  call(commands.agentSetConfig(task, option, value));
-
-/**
- * Adds `@file` references (with an optional line range) to the composer typed in last and
- * shows it: IDEA-style "send this to the chat".
- */
-export function addReferences(refs: Array<{ path: string; rel: string; mention: string }>) {
-  const s = useAgents.getState();
-  const key = s.lastComposer !== HOME && s.tasks.has(s.lastComposer) ? s.lastComposer : HOME;
-  const task = key === HOME ? null : s.tasks.get(key)!;
-  const current = composerDraft(key);
-  // A worktree task sees the same files under its own directory.
-  const root = task?.isolation === "worktree" ? task.cwd : null;
-  const files: FileRef[] = refs.map((r) => ({ path: root ? `${root}/${r.rel}` : r.path, rel: r.rel }));
-  const mentions = refs.map((r) => r.mention).join(" ");
-  const text =
-    current.text && !/\s$/.test(current.text) ? `${current.text} ${mentions} ` : `${current.text}${mentions} `;
-  updateComposer(key, { text, files: [...current.files, ...files] });
-  if (task) openTask(task.id);
-  else openHome();
-}
-
 /** Stops the task's turn, or with `subagent` only that subagent's work. */
-export const cancelTask = (task: string, subagent: string | null = null) => call(commands.agentCancel(task, subagent));
-export const respond = (task: string, permission: number, option: string | null) =>
-  call(commands.agentRespond(task, permission, option));
-export const unarchiveTask = (task: string) => call(commands.agentUnarchive(task));
-export const archiveTask = (task: string) => call(commands.agentArchive(task));
-export const deleteTask = (task: string, removeWorktree: boolean) => call(commands.agentDelete(task, removeWorktree));

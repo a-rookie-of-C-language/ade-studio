@@ -26,8 +26,6 @@ export interface ComposerDraft {
   images: AgentImage[];
 }
 
-export const emptyDraft = (): ComposerDraft => ({ text: "", files: [], images: [] });
-
 export type Completion =
   | { kind: "file"; query: string; from: number; to: number }
   | { kind: "command"; query: string; from: number; to: number };
@@ -228,13 +226,6 @@ export function formatTokens(n: number): string {
   return tokens(n);
 }
 
-/** `3800` → `3.8k`: request and sample counts shown in the session stats card. */
-export function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${+(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`;
-  return `${Math.round(n)}`;
-}
-
 /**
  * The launch environment card: what the backend reports about how the task was
  * started (agent, binary, surface), and nothing it doesn't. A missing receipt
@@ -315,10 +306,6 @@ export function imageFromDataUrl(url: string, name?: string): AgentImage | null 
   if (!m || !m[1]!.startsWith("image/")) return null;
   return { mimeType: m[1]!, data: m[2]!, name: name ?? null };
 }
-
-export const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
-/** Larger images are refused (agents reject them anyway). */
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
