@@ -44,7 +44,6 @@ CLAUDE.local.md
 # Local reference screenshots
 pycharm-screenshots/
 
-
 # Built cindy-bridge (B4 release packaging assembles it per platform).
 agent/cindy-bridge/deploy/
 
@@ -53,3 +52,4 @@ agent/cindy-bridge/deploy/
 
 # Local embed-spike scratch (harness + logs, never committed).
 /.tmp-cindy/
+>>>>>>> 326d1196f16143fe1710cddf3a82503a09f283a6

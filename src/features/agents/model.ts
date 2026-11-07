@@ -1,15 +1,8 @@
 /** Pure helpers: task grouping, entry updates, labels. */
-import type { AgentEntry, AgentStatus, AgentSubagentStatus, AgentTask } from "@/bindings";
+import type { AgentEntry, AgentStatus, AgentTask } from "@/bindings";
 
 export const SESSION_KIND = "agent-session";
-export const HOME_KIND = "agent-home";
-export const HOME_KEY = "agent:new";
 export const TOOL_WINDOW = "agents";
-/** MIME of a dragged agent task (a tree row or the docked conversation bar): the payload is the task id. */
-export const TASK_DRAG = "application/x-openidea-agent-task";
-/** Settings › Tools › Agents: the ACP Registry. */
-export const REGISTRY_PAGE = "tools.agents";
-
 export const sessionKey = (task: string) => `agent:${task}`;
 
 /** Key of a conversation in the entries store: the task's own, or its subagent `subagent`'s. */
@@ -21,45 +14,8 @@ export type SubagentEntry = Extract<AgentEntry, { type: "subagent" }>;
 export const findSubagent = (entries: AgentEntry[] | undefined, id: string) =>
   entries?.find((e): e is SubagentEntry => e.type === "subagent" && e.id === id);
 
-export const subagentWorking = (s: AgentSubagentStatus) => s === "running" || s === "needsInput";
-
 /** "Explore", else what it was started for. */
 export const subagentTitle = (e: SubagentEntry) => e.title ?? e.description ?? "Subagent";
-
-export function subagentStatusLabel(s: AgentSubagentStatus): string {
-  switch (s) {
-    case "running":
-      return "Running";
-    case "needsInput":
-      return "Needs input";
-    case "done":
-      return "Done";
-    case "cancelled":
-      return "Stopped";
-    case "failed":
-      return "Failed";
-  }
-}
-
-const PROVIDER_ICONS = new Set([
-  "cindy",
-  "claude",
-  "codex",
-  "gemini",
-  "copilot",
-  "cursor",
-  "opencode",
-  "qwen",
-  "kimi",
-  "goose",
-  "auggie",
-  "kiro",
-  "vibe",
-]);
-
-/** The agent's logo; custom agents get the generic agents icon. */
-export const providerIcon = (provider: string) =>
-  PROVIDER_ICONS.has(provider) ? `agent-${provider}` : "toolwindow-agents";
 
 export interface TaskGroup {
   status: "needsInput" | "failed" | "limited" | "running" | "ready" | "archived";
@@ -98,25 +54,6 @@ export function upsertEntry(entries: AgentEntry[], index: number, entry: AgentEn
 
 /** "agent/fix-lexer" → "fix-lexer". */
 export const branchLabel = (branch: string | null) => (branch ?? "").replace(/^agent\//, "");
-
-export function statusLabel(s: AgentStatus): string {
-  switch (s) {
-    case "starting":
-      return "Starting";
-    case "running":
-      return "Running";
-    case "needsInput":
-      return "Needs input";
-    case "ready":
-      return "Ready";
-    case "failed":
-      return "Failed";
-    case "limited":
-      return "Usage limit";
-    case "archived":
-      return "Archived";
-  }
-}
 
 /** Index of each turn-starting message in `entries`: its turn's number (messages steered into a running turn don't start one). */
 export function turnNumbers(entries: AgentEntry[]): Map<number, number> {

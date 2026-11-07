@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { Markdown, renderUserText } from "./Markdown";
-import styles from "./Session.module.css";
+import styles from "./Markdown.module.css";
 
 const { openFile, openExternalUrl, notify } = vi.hoisted(() => ({
   openFile: vi.fn().mockResolvedValue(undefined),

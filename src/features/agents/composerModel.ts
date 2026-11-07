@@ -24,10 +24,86 @@ export interface ComposerDraft {
   text: string;
   files: FileRef[];
   images: AgentImage[];
+  /** Long pastes folded out of the text; `text` holds one token line per entry. */
+  pastes: PastedText[];
 }
 
-export const emptyDraft = (): ComposerDraft => ({ text: "", files: [], images: [] });
+export interface PastedText {
+  id: string;
+  /** The pasted content, verbatim. */
+  text: string;
+}
 
+/** Fold pastes longer than this: a 200-line log should be a chip, a snippet stays inline. */
+export const PASTE_FOLD_MIN_LINES = 8;
+export const PASTE_FOLD_MIN_CHARS = 1200;
+
+let pasteCounter = 0;
+
+/** Whether pasted text belongs in a folded chip instead of the textarea. */
+export function shouldFoldPasted(text: string): boolean {
+  if (!text.trim()) return false;
+  return text.split("\n").length > PASTE_FOLD_MIN_LINES || text.length > PASTE_FOLD_MIN_CHARS;
+}
+
+const pasteLineCount = (text: string) => text.split("\n").length;
+
+/** A folded paste and the token line standing in for it: `[Pasted 47 lines #a1b2]`. */
+export function foldPasted(text: string): { paste: PastedText; token: string } {
+  const id = `${Date.now().toString(36)}${(pasteCounter++).toString(36)}`;
+  const paste = { id, text };
+  return { paste, token: pasteToken(id, pasteLineCount(text)) };
+}
+
+const pasteToken = (id: string, lines: number) => `[Pasted ${lines} line${lines === 1 ? "" : "s"} #${id}]`;
+
+const PASTE_TOKEN_PATTERN = /\[Pasted \d+ lines? #([a-z0-9]+)\]/g;
+
+/** Paste ids still tokenized in the text, in order. */
+export function pastedIds(text: string): string[] {
+  return [...text.matchAll(PASTE_TOKEN_PATTERN)].map((m) => m[1]!);
+}
+
+/** Pastes still tokenized in the text: what the agent will receive, in token order. */
+export function effectivePastes(draft: ComposerDraft): PastedText[] {
+  const byId = new Map(draft.pastes.map((p) => [p.id, p]));
+  const seen = new Set<string>();
+  const out: PastedText[] = [];
+  for (const id of pastedIds(draft.text)) {
+    const paste = byId.get(id);
+    if (paste && !seen.has(id)) {
+      seen.add(id);
+      out.push(paste);
+    }
+  }
+  return out;
+}
+
+const PASTE_TOKEN_LINE = /^\[Pasted \d+ lines? #([a-z0-9]+)\]$/;
+
+/** Replaces token lines with the pasted content; unknown tokens stay visible, never silently lost. */
+export function expandPastes(draft: ComposerDraft): string {
+  const byId = new Map(draft.pastes.map((p) => [p.id, p.text]));
+  return draft.text
+    .split("\n")
+    .map((line) => {
+      const m = PASTE_TOKEN_LINE.exec(line.trim());
+      return m && byId.has(m[1]!) ? byId.get(m[1]!)! : line;
+    })
+    .join("\n");
+}
+
+/** Drops the paste's token line from the text and tidies the gap. */
+export function removePasteToken(text: string, id: string): string {
+  // Tokens always stand on their own line; a mid-line remnant is user text and stays.
+  const single = new RegExp(`^\\[Pasted \\d+ lines? #${id}\\]$`);
+  return text
+    .split("\n")
+    .filter((line) => !single.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 export type Completion =
   | { kind: "file"; query: string; from: number; to: number }
   | { kind: "command"; query: string; from: number; to: number };
@@ -124,16 +200,35 @@ export function mentionOf(rel: string, lines?: { from: number; to: number }): st
   return lines.from === lines.to ? `@${rel}:${lines.from}` : `@${rel}:${lines.from}-${lines.to}`;
 }
 
-/** The prompt to send: files still mentioned in the text (each once), and the images. */
-export function toPrompt(draft: ComposerDraft): AgentPrompt {
+/** A mention of `rel` with any `:lines` suffix: what keeps a file referenced. */
+function mentionPattern(rel: string): RegExp {
+  return new RegExp(`@${escapeRe(rel)}(?![\\w./-])|@${escapeRe(rel)}:`);
+}
+
+/** Files still mentioned in the text (each once): what the agent will receive. */
+export function effectiveFiles(draft: ComposerDraft): FileRef[] {
   const seen = new Set<string>();
-  const files = draft.files.filter((f) => {
-    if (seen.has(f.path) || !new RegExp(`@${escapeRe(f.rel)}(?![\\w./-])|@${escapeRe(f.rel)}:`).test(draft.text))
-      return false;
+  return draft.files.filter((f) => {
+    if (seen.has(f.path) || !mentionPattern(f.rel).test(draft.text)) return false;
     seen.add(f.path);
     return true;
   });
-  return { text: draft.text.trim(), files: files.map((f) => f.path), images: draft.images };
+}
+
+/** Drops every `@rel` (with any `:lines` suffix) from the text and tidies the gap. */
+export function removeMention(text: string, rel: string): string {
+  // The trailing guard mirrors the mention pattern: `@a.ts` never eats `@a.tsx`.
+  return text
+    .replace(new RegExp(`@${escapeRe(rel)}(?::\\d*(?:-\\d+)?)?(?![\\w./-])`, "g"), "")
+    .replace(/[^\S\n]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** The prompt to send: files still mentioned in the text (each once), pastes expanded, and the images. */
+export function toPrompt(draft: ComposerDraft): AgentPrompt {
+  const files = effectiveFiles(draft);
+  return { text: expandPastes(draft).trim(), files: files.map((f) => f.path), images: draft.images };
 }
 
 export const canSend = (d: ComposerDraft) => !!d.text.trim() || d.images.length > 0;
@@ -228,13 +323,6 @@ export function formatTokens(n: number): string {
   return tokens(n);
 }
 
-/** `3800` → `3.8k`: request and sample counts shown in the session stats card. */
-export function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${+(n / 1000).toFixed(n >= 100_000 ? 0 : 1)}k`;
-  return `${Math.round(n)}`;
-}
-
 /**
  * The launch environment card: what the backend reports about how the task was
  * started (agent, binary, surface), and nothing it doesn't. A missing receipt
@@ -315,10 +403,6 @@ export function imageFromDataUrl(url: string, name?: string): AgentImage | null 
   if (!m || !m[1]!.startsWith("image/")) return null;
   return { mimeType: m[1]!, data: m[2]!, name: name ?? null };
 }
-
-export const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp)$/i;
-/** Larger images are refused (agents reject them anyway). */
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function escapeRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

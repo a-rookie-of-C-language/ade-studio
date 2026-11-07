@@ -59,6 +59,8 @@ jobs:
       - if: runner.os == 'Linux'
         run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The cindy-bridge e2e boots the real bridge: its dist must exist.
+      - run: pnpm build:bridge
       # Test fixtures write LF files; keep Git from converting them on checkout.
       - run: git config --global core.autocrlf false
       - run: cargo nextest run --workspace --no-fail-fast

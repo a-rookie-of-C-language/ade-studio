@@ -71,15 +71,6 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-/** Clock time of a message: `14:03` today, else with the date. */
-export function formatSentAt(ms: number, now = Date.now()): string {
-  const d = new Date(ms);
-  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return new Date(now).toDateString() === d.toDateString()
-    ? time
-    : `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
-}
-
 /** Start offsets of `query` in `text`, ignoring case; empty for an empty query. */
 export function findAll(text: string, query: string): number[] {
   if (!query) return [];

@@ -62,7 +62,6 @@ export const intellijMacos: Record<string, string[]> = {
 
   // Find
   "find.inFile": ["Meta+F"],
-  "agents.findInConversation": ["Meta+F"],
   "find.replaceInFile": ["Meta+R"],
   "find.next": ["Meta+G"],
   "find.previous": ["Meta+Shift+G"],
@@ -355,9 +354,6 @@ export const intellijMacos: Record<string, string[]> = {
   "http.runAll": [],
   "db.execute": ["Meta+Enter"],
   "db.showToolWindow": [],
-  "agents.newTask": ["Meta+Shift+I"],
-  "agents.showToolWindow": [],
-  "agents.sendToAgent": [],
   // Database tool window (when the tree has focus; `db.openConsole` anywhere).
   "db.openConsole": ["Meta+Shift+L"],
   "db.newDataSource": [],
