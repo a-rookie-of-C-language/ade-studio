@@ -416,6 +416,16 @@
       // Fail-closed (reject) so the selector shows retry, never infinite
       // loading — and never an empty catalog either (the panel assumes at
       // least one provider with models and throws on open otherwise).
+      // Refresh affordance (selector/settings open): bust the cache so the
+      // panel's own listProviders refetch sees live rows. Desktop resolves
+      // { ok: true }; failures reject and callers already tolerate that.
+      requestProviderModelsAutoRefresh: function () {
+        magpieCache = null;
+        magpieCacheAt = 0;
+        return requestMagpieCatalog().then(function () {
+          return { ok: true };
+        });
+      },
       listProviders: function () {
         return requestMagpieCatalog().then(function (models) {
           var view = magpieProviderView(models);
