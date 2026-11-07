@@ -24,7 +24,14 @@ one by one (P2 order: catalog → auth → chat → task).
   magpie `provider` ids (the picker's trigger/panel resolve by
   `(providerId, modelId)` with non-null assertions — one lumped provider
   leaves every selection at "Model Details Unavailable" and throws on open);
-  effort strings filtered to the `@cindy/model-providers` union;
+  effort strings filtered to the `@cindy/model-providers` union; vendor id
+  passed through as the model's `group` (real vendors group properly, unknown
+  gateway names ride the userProvider pass-through in `isAgentSelectableModel`
+  instead of being killed by the id-regex classifier — never set a known
+  non-chat category); `MobileChoiceOption`s (`effortLevels`,
+  `permissionModes`) use `{ id, label }`, `availableModels` use `displayName`;
+  empty catalogs reject (the panel assumes at least one model); opening the
+  selector busts the 15s cache via `requestProviderModelsAutoRefresh`;
   `connected: true`, `auth: { method: "none" }`, routing loopback 3425,
   every model attached to all three agents (`claude-code`, `codex`, `pi`).
 
@@ -34,3 +41,13 @@ Auth/session (local-mode boot identity only), chat send, task run, device
 link, provider management writes. The trigger shows "unresolved" and panels
 may throw whenever the catalog lacks the stored selection — never feed the
 renderer a provider id the selection cannot match.
+
+## Ownership boundary (2026-11-08)
+
+Embed side owns display data bridges that need no execution: the model
+catalog above, capability snapshots, refresh affordances. Session/task
+lifecycle (list/create/update/delete sessions, send prompts, run agents,
+worktree and project operations) is IDE-side linkage and explicitly out of
+scope here — `localDb.sessions.*` stays empty-by-design until that owner
+says otherwise. Do not map `AgentTask` into Cindy's `Session` shape
+unilaterally: it needs continuous timeline sync plus runtime validation.

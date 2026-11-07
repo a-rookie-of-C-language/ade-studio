@@ -139,9 +139,15 @@
           return typeof e === "string" && KNOWN_EFFORTS[e] === 1;
         });
         var contextWindow = typeof m.context_window === "number" && m.context_window > 0 ? m.context_window : 200000;
+        var vendor = typeof m.provider === "string" && m.provider ? m.provider : undefined;
         return {
           id: m.id,
           name: m.name || m.id,
+          // Real vendor ids group properly in the picker; unknown gateway
+          // names ride the userProvider pass-through in isAgentSelectableModel
+          // instead of being killed by the id-regex classifier. Never set a
+          // known non-chat category here.
+          group: vendor,
           contextWindow: contextWindow,
           efforts: efforts,
           defaultEffort: magpieDefaultEffort(efforts),
@@ -202,7 +208,8 @@
       m.efforts.forEach(function (e) {
         if (!seen[e]) {
           seen[e] = true;
-          effortLevels.push({ id: e, displayName: e.charAt(0).toUpperCase() + e.slice(1) });
+          // MobileChoiceOption is { id, label }: displayName renders blank.
+          effortLevels.push({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) });
         }
       });
     });
@@ -218,7 +225,7 @@
       }),
       hasFastMode: false,
       effortLevels: effortLevels,
-      permissionModes: [{ id: "default", displayName: "Default" }],
+      permissionModes: [{ id: "default", label: "Default" }],
     };
   }
 
@@ -412,9 +419,38 @@
       getCompanionCloudState: undefined,
       listBotGroups: undefined,
       // Real model catalog for the picker: live magpie rows via the parent.
-      // Fail-closed (reject) so the selector shows retry, never infinite loading.
+      // Fail-closed (reject) so the selector shows retry, never infinite
+      // loading — and never an empty catalog either (the panel assumes at
+      // least one provider with models and throws on open otherwise).
+      // Refresh affordance (selector/settings open): bust the cache so the
+      // panel's own listProviders refetch sees live rows. Desktop resolves
+      // { ok: true }; failures reject and callers already tolerate that.
+      requestProviderModelsAutoRefresh: function () {
+        magpieCache = null;
+        magpieCacheAt = 0;
+        return requestMagpieCatalog().then(function () {
+          return { ok: true };
+        });
+      },
+      // Manual refresh from settings: same live rows, desktop result shape.
+      refreshBuiltinProviderModels: function (providerId) {
+        magpieCache = null;
+        magpieCacheAt = 0;
+        return requestMagpieCatalog().then(function () {
+          return { ok: true, providerId: providerId };
+        });
+      },
       listProviders: function () {
-        return requestMagpieCatalog().then(magpieProviderView);
+        return requestMagpieCatalog().then(function (models) {
+          var view = magpieProviderView(models);
+          var total = view.providers.reduce(function (n, p) {
+            return (
+              n + (p.models["claude-code"] || []).length + (p.models.codex || []).length + (p.models.pi || []).length
+            );
+          }, 0);
+          if (total === 0) return Promise.reject(new Error("magpie catalog empty"));
+          return view;
+        });
       },
       getCapabilities: function () {
         return requestMagpieCatalog().then(magpieCapabilities);
