@@ -22,6 +22,7 @@ function AgentRegistryPage(props: ComponentProps<typeof RegistryPage>) {
   );
 }
 import { ADD_AGENT, providerOptions } from "./providerOptions";
+import { providerIcon } from "./model";
 import {
   afterRemove,
   matchesQuery,
@@ -175,7 +176,7 @@ describe("agent picker", () => {
     ]);
   });
 
-  it("lists the Cindy builtin, with the generic icon until it ships its own", () => {
+  it("lists the Cindy builtin with its magpie icon", () => {
     const options = providerOptions(
       [
         provider({
@@ -186,7 +187,7 @@ describe("agent picker", () => {
         }),
       ],
       tx,
-      (id) => (id === "cindy" ? "toolwindow-agents" : "agent-" + id),
+      providerIcon,
     );
     expect(options.map((o) => [o.value, o.label])).toEqual([
       ["cindy", "Cindy (Claude)"],

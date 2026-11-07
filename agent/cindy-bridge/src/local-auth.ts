@@ -3,24 +3,69 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   AuthAdapter,
+  AuthAdapterOptions,
   AuthLoginOptions,
 } from "../../../third-party/cindy-agent/maker-core/interfaces/auth-adapter.js";
 import type { AuthState } from "../../../third-party/cindy-agent/maker-core/types/common.js";
 import type { Logger } from "../../../third-party/cindy-agent/maker-core/interfaces/logger.js";
 
+/** Local Magpie gateway (B5). Overridable; the loopback default needs no credentials. */
+export const DEFAULT_MAGPIE_BASE_URL = "http://127.0.0.1:3425";
+
+export function magpieBaseUrl(env: Record<string, string | undefined> = process.env): string {
+  const raw = env.MAGPIE_BASE_URL?.trim();
+  return raw && raw.length > 0 ? raw : DEFAULT_MAGPIE_BASE_URL;
+}
+
+export function magpieApiKey(env: Record<string, string | undefined> = process.env): string {
+  const raw = env.MAGPIE_API_KEY?.trim();
+  // The local gateway ignores credentials; the CLI still wants the field set.
+  return raw && raw.length > 0 ? raw : "magpie-local";
+}
+
+/** A magpie wire id (`auto/…`, `provider/…`); bare SDK aliases route legacy. */
+export function isMagpieModelId(model: unknown): boolean {
+  return typeof model === "string" && model.includes("/");
+}
+
+/** The gateway answers its catalog: enough for an auth check. */
+export async function magpieReachable(baseUrl: string, timeoutMs = 5000): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${baseUrl}/v1/models`, { signal: ctrl.signal });
+      return res.ok;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
- * v0 本地只读 AuthAdapter（spec §4：只读本机已有登录态，零新凭据）。
+ * v0 本地只读 AuthAdapter（spec §4：只读本机已有登录态，零新凭据）+ B5 magpie。
  *
- * - `getState`：只检查 `~/.claude/.credentials.json` 是否存在，或进程环境是否自带
- *   `ANTHROPIC_API_KEY`。存在性检查，不读文件内容、不输出 token。
- * - `getAuthEnv`：返回 `{}`，让 SDK/子进程直接继承用户终端的进程环境
- *   （用户已经在自己的终端 `claude login` 过，bridge 不注入、不转存任何 secret）。
- * - `triggerLogin`：v0 不拉起任何登录流程，直接返回未认证，提示用户自行登录。
- * - `logout`：空操作。用户自己的登录态归用户所有，bridge 绝不删除。
+ * 路由按模型 id 切分（vendor 的 credentialMode 推导保持原样）：
+ * - magpie wire id（含 `/`，如 `auto/gpt-6.1-sol`）→ 网关：authSource `api-key` 触发
+ *   vendor 的 gateway-key/host-managed 路由（endpoint 由 runtimeConfig 注入，见 deps）。
+ * - 裸别名（`sonnet`…）→ legacy：本机 claude 登录 / ANTHROPIC_API_KEY（B2 行为不变）。
  */
 export function createLocalAuthAdapter(logger: Logger): AuthAdapter {
   return {
-    async getState(): Promise<AuthState> {
+    async getState(options?: AuthAdapterOptions): Promise<AuthState> {
+      // Magpie wire ids never touch the Claude login, even when one exists.
+      if (isMagpieModelId(options?.model)) {
+        const baseUrl = magpieBaseUrl();
+        if (await magpieReachable(baseUrl)) {
+          return { authenticated: true, authSource: "api-key" };
+        }
+        return {
+          authenticated: false,
+          errorReason: `magpie gateway unreachable at ${baseUrl} (set MAGPIE_BASE_URL or start it)`,
+        };
+      }
       const credentialsPath = join(homedir(), ".claude", ".credentials.json");
       const hasFileLogin = existsSync(credentialsPath);
       const hasEnvKey = typeof process.env.ANTHROPIC_API_KEY === "string" && process.env.ANTHROPIC_API_KEY.length > 0;
@@ -47,7 +92,11 @@ export function createLocalAuthAdapter(logger: Logger): AuthAdapter {
       logger.warn("local-auth: logout is a no-op in v0; user credentials are never touched");
     },
 
-    async getAuthEnv(): Promise<Record<string, string>> {
+    async getAuthEnv(options?: AuthAdapterOptions): Promise<Record<string, string>> {
+      // 只给鉴权 key；BASE_URL 归 runtimeConfig.endpoint（adapter 接口约定）。
+      if (isMagpieModelId(options?.model)) {
+        return { ANTHROPIC_API_KEY: magpieApiKey() };
+      }
       return {};
     },
   };

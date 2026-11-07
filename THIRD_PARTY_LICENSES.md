@@ -186,6 +186,15 @@ declarations, key and animation binding names (`(keydown.enter)`, `[@fade]`,
 `(@fade.done)`), runs of text that entities split (`a && b`) parsed as one, and one
 token for `{` and `}`.
 
+## Magpie mark (Cindy agent icon)
+
+`src/ui/openidea/agents/cindy.svg` traces the Magpie mark adapted from
+[yetone/magpie](https://github.com/yetone/magpie/blob/main/site/public/img/magpie-small.svg)
+(MIT), via the 24 px grid version in Cindy
+`packages/model-providers/src/providerBranding.ts`. Recoloured to `currentColor`
+so the icon follows the theme; shape unmodified. Copyright the Magpie
+contributors; MIT licence, full text below.
+
 ## nvim-treesitter queries
 
 `crates/ide-syntax/queries/<grammar>/locals.scm` are derived from the `locals.scm`

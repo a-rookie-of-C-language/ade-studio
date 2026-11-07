@@ -10,6 +10,7 @@
 //! error. Nothing is silently rebuilt.
 
 mod frames;
+mod magpie;
 mod translate;
 
 #[cfg(test)]
@@ -108,11 +109,12 @@ async fn node_version(node: &str) -> Result<Option<Vec<u64>>, String> {
     Ok(super::parse_version(&String::from_utf8_lossy(&out.stdout)).filter(|v| v.len() >= 2))
 }
 /// The default model sent in `start` frames (the bridge refuses to choose one).
+/// With magpie up, the catalog pick wins; this is the legacy/bare-alias default.
 const DEFAULT_MODEL: &str = "sonnet";
 /// `spec.env` override for the default model (B4's `cindy.toml` supplies it).
 const MODEL_ENV: &str = "CINDY_MODEL";
-/// Models v0 offers (Claude aliases the vendored SDK accepts).
-const MODELS: &[(&str, &str)] = &[("sonnet", "Sonnet"), ("opus", "Opus"), ("haiku", "Haiku")];
+/// How long `session/new` waits on the magpie catalog.
+const MAGPIE_CATALOG_TIMEOUT: Duration = Duration::from_secs(10);
 const MODEL_OPTION: &str = "model";
 
 pub(crate) fn connect(
@@ -138,6 +140,27 @@ pub(crate) fn connect_with(
     Ok(super::serve(shim, client))
 }
 
+/// The models a new session offers: the magpie catalog when the gateway answers,
+/// else the static fallback. The default honours `CINDY_MODEL`.
+async fn resolve_models(shim: &Shim) -> (Vec<magpie::OfferedModel>, String, bool) {
+    let preferred =
+        if shim.config.default_model.trim().is_empty() { None } else { Some(shim.config.default_model.as_str()) };
+    match magpie::fetch_models(&shim.config.magpie_url, MAGPIE_CATALOG_TIMEOUT).await {
+        Ok(models) if !models.is_empty() => {
+            let default = magpie::pick_default(&models, preferred).unwrap_or_else(|| shim.config.default_model.clone());
+            (magpie::offered(&models), default, true)
+        }
+        _ => {
+            let offered = magpie::fallback_offered();
+            let default = preferred
+                .filter(|p| offered.iter().any(|o| o.value == *p))
+                .map(str::to_owned)
+                .unwrap_or_else(|| shim.config.default_model.clone());
+            let default = if offered.iter().any(|o| o.value == default) { default } else { DEFAULT_MODEL.into() };
+            (offered, default, false)
+        }
+    }
+}
 fn build_config(spec: &ProviderSpec, cwd: &Path) -> Config {
     Config {
         program: spec.resolve_command(),
@@ -147,6 +170,7 @@ fn build_config(spec: &ProviderSpec, cwd: &Path) -> Config {
         start_timeout: millis(&spec.env, "CINDY_START_TIMEOUT_MS", START_TIMEOUT),
         cancel_grace: millis(&spec.env, "CINDY_CANCEL_GRACE_MS", CANCEL_GRACE),
         default_model: default_model(spec),
+        magpie_url: magpie::magpie_base_url(&spec.env),
     }
 }
 /// Tuning knob from the agent file env (also handy for slow first boots).
@@ -160,8 +184,13 @@ fn millis(env: &[(String, String)], key: &str, default: Duration) -> Duration {
 }
 
 fn default_model(spec: &ProviderSpec) -> String {
-    let wanted = spec.env.iter().find(|(k, _)| k == MODEL_ENV).map(|(_, v)| v.as_str()).unwrap_or(DEFAULT_MODEL);
-    if MODELS.iter().any(|(v, _)| *v == wanted) { wanted.to_owned() } else { DEFAULT_MODEL.to_owned() }
+    // Unvalidated here: `session/new` prefers the catalog and falls back to this.
+    spec.env
+        .iter()
+        .find(|(k, _)| k == MODEL_ENV)
+        .map(|(_, v)| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| DEFAULT_MODEL.to_owned())
 }
 
 struct Config {
@@ -172,6 +201,7 @@ struct Config {
     start_timeout: Duration,
     cancel_grace: Duration,
     default_model: String,
+    magpie_url: String,
 }
 
 /// How the shim starts its bridge. Production spawns `node <bridge>`; tests
@@ -302,6 +332,10 @@ struct State {
     started: bool,
     failed: Option<String>,
     model: String,
+    /// Models offered at `session/new` (magpie catalog, or the static fallback).
+    offered: Vec<magpie::OfferedModel>,
+    /// The offered list came from magpie: wire ids stay selectable.
+    magpie: bool,
     text: HashMap<bool, TurnText>,
     tools: translate::ToolTracker,
     turn: Option<Turn>,
@@ -589,7 +623,8 @@ impl Shim {
                 let cwd =
                     params.get("cwd").and_then(Value::as_str).map_or_else(|| self.config.cwd.clone(), PathBuf::from);
                 let cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd);
-                let session = Arc::new(Session::new(&id, cwd, self.config.default_model.clone(), Arc::downgrade(self)));
+                let (offered, model, magpie) = rt.block_on(resolve_models(self));
+                let session = Arc::new(Session::new(&id, cwd, model, offered, magpie, Arc::downgrade(self)));
                 if self.sessions.lock().insert(id.clone(), session.clone()).is_some() {
                     unreachable!("uuid collision");
                 }
@@ -685,7 +720,14 @@ impl Handler for Shim {
 }
 
 impl Session {
-    fn new(id: &str, cwd: PathBuf, model: String, shim: Weak<Shim>) -> Self {
+    fn new(
+        id: &str,
+        cwd: PathBuf,
+        model: String,
+        offered: Vec<magpie::OfferedModel>,
+        magpie: bool,
+        shim: Weak<Shim>,
+    ) -> Self {
         Self {
             id: id.to_owned(),
             cwd,
@@ -694,6 +736,8 @@ impl Session {
                 started: false,
                 failed: None,
                 model,
+                offered,
+                magpie,
                 text: HashMap::new(),
                 tools: translate::ToolTracker::default(),
                 turn: None,
@@ -720,14 +764,20 @@ impl Session {
         Ok(())
     }
 
-    fn config_options(model: &str) -> Value {
+    fn config_options(model: &str, offered: &[magpie::OfferedModel]) -> Value {
         Value::Array(vec![json!({
             "id": MODEL_OPTION,
             "name": "Model",
             "category": "model",
             "type": "select",
             "currentValue": model,
-            "options": MODELS.iter().map(|(v, n)| json!({ "value": v, "name": n })).collect::<Vec<_>>(),
+            "options": offered.iter().map(|o| {
+                let mut entry = json!({ "value": o.value, "name": o.name });
+                if let Some(d) = &o.description {
+                    entry["description"] = json!(d);
+                }
+                entry
+            }).collect::<Vec<_>>(),
         })])
     }
 
@@ -773,7 +823,7 @@ impl Session {
         if option != MODEL_OPTION {
             return Err(format!("no setting {option}"));
         }
-        if !MODELS.iter().any(|(v, _)| *v == value) {
+        if !valid_model(&self.st.lock(), value) {
             return Err(format!("{option} has no value {value}"));
         }
         let restart = {
@@ -987,6 +1037,12 @@ impl Session {
 
 impl State {
     fn options(&self) -> Value {
-        Session::config_options(&self.model)
+        Session::config_options(&self.model, &self.offered)
     }
+}
+
+/// Whether `value` is selectable now: an offered row, or any magpie wire id
+/// once the catalog supplied the namespace.
+fn valid_model(st: &State, value: &str) -> bool {
+    st.offered.iter().any(|o| o.value == value) || (st.magpie && magpie::is_magpie_id(value))
 }
