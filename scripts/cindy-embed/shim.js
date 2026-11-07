@@ -287,9 +287,12 @@
         record(path + " [construct]");
         return proxy;
       },
-      getOwnPropertyDescriptor: function () {
-        return { configurable: true, enumerable: false };
-      },
+      // No getOwnPropertyDescriptor trap: forwarding to the function target
+      // keeps Object.keys/entries/spread working (they see only the real,
+      // non-enumerable function props and yield nothing). A blanket trap
+      // returning { configurable: true } for EVERY property — including the
+      // target's non-configurable `prototype` — violates proxy invariants
+      // and makes Object.entries(stub) throw (crashed PluginModelPickerHost).
     });
     proxyCache.set(path, proxy);
     return proxy;
