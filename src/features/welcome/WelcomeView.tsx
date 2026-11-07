@@ -20,7 +20,7 @@ import {
   T,
 } from "@/ui";
 import logo from "../../../src-tauri/icons/128x128.png";
-import { CoworkSoon, CoworkTasks } from "./CoworkPage";
+import { CoworkTasks } from "./CoworkPage";
 import { CindyHome } from "./CindyHome";
 import { ProjectsPage } from "./ProjectsPage";
 import { loadRecent, useRecent } from "./recent";
@@ -29,7 +29,7 @@ import { dropWorkspace, RECENT_PREFIX, selectWorkspace, useWorkspace } from "./w
 import styles from "./Welcome.module.css";
 import coworkStyles from "./Cowork.module.css";
 
-export type WelcomePage = "cowork" | "projects" | "scheduled" | "plugins" | "automation" | "artifacts";
+export type WelcomePage = "cowork" | "projects";
 
 export const GEAR_MENU: MenuItem[] = [
   { kind: "action", action: "file.settings" },
@@ -164,18 +164,7 @@ export function WelcomeView() {
   if (reopening) return <Reopening location={reopening} />;
   if (connecting && !connectDialog && !listOpening) return <Reopening location={connecting} />;
 
-  const contentLabel =
-    page === "projects"
-      ? t("cowork.projects")
-      : page === "scheduled"
-        ? t("cowork.scheduled")
-        : page === "plugins"
-          ? t("cowork.plugins")
-          : page === "automation"
-            ? t("cowork.automation")
-            : page === "artifacts"
-              ? t("cowork.artifacts")
-              : t("cowork.cowork");
+  const contentLabel = page === "projects" ? t("cowork.projects") : t("cowork.cowork");
 
   const handleNav = (id: string) => {
     if (id.startsWith(RECENT_PREFIX)) {
@@ -203,10 +192,6 @@ export function WelcomeView() {
           icon: "folder",
           children: recents.slice(0, 7).map((p) => ({ id: `${RECENT_PREFIX}${p.path}`, label: p.name })),
         },
-        { id: "plugins", label: t("cowork.plugins"), icon: "plugin" },
-        { id: "automation", label: t("cowork.automation"), icon: "run" },
-        { id: "artifacts", label: t("cowork.artifacts"), icon: "package" },
-        { id: "scheduled", label: t("cowork.scheduled"), icon: "clock" },
       ],
     },
   ];
@@ -255,16 +240,6 @@ export function WelcomeView() {
       </Sidebar>
       <section className={styles.content} aria-label={contentLabel} aria-busy={opening || undefined}>
         {page === "cowork" && <CindyHome />}
-        {page === "plugins" && <CoworkSoon icon="plugin" title={t("cowork.plugins")} hint={t("cowork.soon.plugins")} />}
-        {page === "automation" && (
-          <CoworkSoon icon="run" title={t("cowork.automation")} hint={t("cowork.soon.automation")} />
-        )}
-        {page === "artifacts" && (
-          <CoworkSoon icon="package" title={t("cowork.artifacts")} hint={t("cowork.soon.artifacts")} />
-        )}
-        {page === "scheduled" && (
-          <CoworkSoon icon="clock" title={t("cowork.scheduled")} hint={t("cowork.soon.scheduled")} />
-        )}
         {page === "projects" && <ProjectsPage onPick={goHome} />}
         {dropping && (
           <div className={styles.dropOverlay} aria-hidden>

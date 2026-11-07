@@ -1,12 +1,10 @@
-/** Home sidebar: tasks rail and placeholders (the center is the embedded Cindy interface). */
-import { useMemo, type ComponentProps } from "react";
+/** Home sidebar: tasks rail (the center is the embedded Cindy interface). */
+import { useMemo } from "react";
 import type { AgentStatus, AgentTask } from "@/bindings";
 import { useT, useTx } from "@/platform/i18n";
 import { Icon, IconButton, tooltipAttrs } from "@/ui";
 import { isPinned, openTask, togglePin, useAgents } from "@/features/agents/store";
 import styles from "./Cowork.module.css";
-
-type IconName = ComponentProps<typeof Icon>["name"];
 
 function statusClass(status: AgentStatus) {
   switch (status) {
@@ -137,18 +135,5 @@ function TaskRow({ task, pinned }: { task: AgentTask; pinned?: boolean }) {
         <Icon name="pin" size={13} />
       </button>
     </li>
-  );
-}
-
-/** Honest placeholder for pages with no backend yet. */
-export function CoworkSoon({ icon, title, hint }: { icon: IconName; title: string; hint: string }) {
-  const t = useT();
-  return (
-    <div className={styles.soon}>
-      <p className={styles.soonEyebrow}>{t("cowork.soon.title")}</p>
-      <Icon name={icon} size={32} className={styles.soonIcon} />
-      <h1 className={styles.soonTitle}>{title}</h1>
-      <p className={styles.soonHint}>{hint}</p>
-    </div>
   );
 }

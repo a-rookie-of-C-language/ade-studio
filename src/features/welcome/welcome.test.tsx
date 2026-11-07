@@ -336,22 +336,6 @@ describe("Welcome › Cowork", () => {
     expect(screen.getByRole("button", { name: "Draft release notes" })).toBeTruthy();
   });
 
-  it("shows the placeholder for Scheduled", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
-    expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
-  });
-
-  it("shows honest placeholders for Plugins, Automation and Artifacts", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
-    expect(screen.getByText("Discover and install agent plugins here.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Automation" }));
-    expect(screen.getByText("Recurring runs and rules will live here once configured.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
-    expect(screen.getByText("Files your agents produce will be collected here.")).toBeTruthy();
-  });
-
   it("pins a task atop the sidebar and unpins it again", async () => {
     const one = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
     const two = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
@@ -393,7 +377,7 @@ describe("Welcome › Cowork", () => {
   it("starts as an icon rail and expands back", async () => {
     await renderWelcome();
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Scheduled" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
