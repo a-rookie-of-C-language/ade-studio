@@ -23,6 +23,8 @@ import {
   applyCompletion,
   atEdgeLine,
   effectiveFiles,
+  effectivePastes,
+  foldPasted,
   isPathQuery,
   mergeMatches,
   resolveTyped,
@@ -34,8 +36,11 @@ import {
   nextValue,
   recall,
   removeMention,
+  removePasteToken,
+  shouldFoldPasted,
   type Completion,
   type FileRef,
+  type PastedText,
 } from "./composerModel";
 import { composerDraft, updateComposer, useAgents } from "./store";
 import { ImagePreview, imageSrc } from "./ImagePreview";
@@ -88,7 +93,7 @@ export function Composer(props: ComposerProps) {
   const [active, setActive] = useState(0);
   const recalled = useRef<{ index: number; stash: string }>({ index: -1, stash: "" });
   /** Files still mentioned in the text: rendered as chips, sent with the prompt. */
-  const referenced = effectiveFiles({ text, files: draft?.files ?? [], images });
+  const referenced = effectiveFiles({ text, files: draft?.files ?? [], images, pastes: draft?.pastes ?? [] });
 
   /** Unreferences a file: its chip and every `@rel` go away together. */
   const removeRef = (ref: FileRef) => {
@@ -98,6 +103,33 @@ export function Composer(props: ComposerProps) {
       files: current.files.filter((f) => f.path !== ref.path),
     });
     setCompletion(null);
+  };
+  /** Pastes still tokenized in the text: rendered as chips, expanded on send. */
+  const pasted = effectivePastes({ text, files: [], images: [], pastes: draft?.pastes ?? [] });
+
+  /** Unfolds nothing: dropping a paste removes its chip and its token line together. */
+  const removePaste = (paste: PastedText) => {
+    const current = composerDraft(id);
+    updateComposer(id, {
+      text: removePasteToken(current.text, paste.id),
+      pastes: current.pastes.filter((p) => p.id !== paste.id),
+    });
+    setCompletion(null);
+  };
+
+  /** Long pastes land as a token line plus a chip instead of flooding the box. */
+  const insertPaste = (pastedText: string) => {
+    const el = ref.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const { paste, token } = foldPasted(pastedText);
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+    const glueBefore = before === "" || before.endsWith("\n") ? "" : "\n";
+    const glueAfter = after === "" || after.startsWith("\n") ? "" : "\n";
+    const next = `${before}${glueBefore}${token}${glueAfter}${after}`;
+    updateComposer(id, { text: next, pastes: [...composerDraft(id).pastes, paste] });
+    setText(next, before.length + glueBefore.length + token.length + (glueAfter ? 1 : 0));
   };
 
   useEffect(() => {
@@ -407,6 +439,29 @@ export function Composer(props: ComposerProps) {
           })}
         </div>
       )}
+      {pasted.length > 0 && (
+        <div className={styles.refs} onClick={(e) => e.stopPropagation()}>
+          {pasted.map((p) => {
+            const lines = p.text.split("\n").length;
+            return (
+              <span key={p.id} className={styles.ref} {...tooltipAttrs(p.text.slice(0, 240))}>
+                <Icon name="paste" size={14} />
+                <span className={styles.refName}>
+                  {lines} {tx(lines === 1 ? "line" : "lines")}
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeRef}
+                  aria-label={tx("Remove pasted text")}
+                  onClick={() => removePaste(p)}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
       {images.length > 0 && (
         <div className={styles.images} onClick={(e) => e.stopPropagation()}>
           {images.map((img, i) => (
@@ -442,10 +497,16 @@ export function Composer(props: ComposerProps) {
         onBlur={() => setCompletion(null)}
         onKeyDown={onKeyDown}
         onPaste={(e) => {
-          const pasted = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
-          if (pasted.length) {
+          const pastedFiles = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+          if (pastedFiles.length) {
             e.preventDefault();
-            readImageFiles(pasted);
+            readImageFiles(pastedFiles);
+            return;
+          }
+          const pastedText = e.clipboardData.getData("text");
+          if (pastedText && shouldFoldPasted(pastedText)) {
+            e.preventDefault();
+            insertPaste(pastedText);
           }
         }}
       />

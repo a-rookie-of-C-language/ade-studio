@@ -6357,5 +6357,8 @@
   "Search models": "搜索模型",
   "Add to favorites": "添加到收藏夹",
   "Remove from favorites": "从收藏夹移除",
-  "Remove reference": "移除引用"
+  "Remove reference": "移除引用",
+  "Remove pasted text": "移除粘贴的文本",
+  "line": "行",
+  "lines": "行"
 }

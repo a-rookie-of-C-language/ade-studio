@@ -133,15 +133,18 @@ describe("agent composer", () => {
         { path: "/w/gone.rs", rel: "gone.rs" },
       ],
       images: [],
+      pastes: [],
     });
     expect(prompt).toEqual({ text: "look at @src/a.rs:3-5 and @b.rs", files: ["/w/src/a.rs", "/w/b.rs"], images: [] });
     expect(mentionOf("a.rs", { from: 3, to: 3 })).toBe("@a.rs:3");
     // A folder counts while `@src/` is left as typed, not once a file inside it was picked.
     const folder = { path: "/w/src", rel: "src/" };
-    expect(toPrompt({ text: "explain @src/ please", files: [folder], images: [] }).files).toEqual(["/w/src"]);
-    expect(toPrompt({ text: "explain @src/", files: [folder], images: [] }).files).toEqual(["/w/src"]);
-    expect(toPrompt({ text: "explain @src/a.rs", files: [folder], images: [] }).files).toEqual([]);
-    expect(canSend({ text: " ", files: [], images: [] })).toBe(false);
+    expect(toPrompt({ text: "explain @src/ please", files: [folder], images: [], pastes: [] }).files).toEqual([
+      "/w/src",
+    ]);
+    expect(toPrompt({ text: "explain @src/", files: [folder], images: [], pastes: [] }).files).toEqual(["/w/src"]);
+    expect(toPrompt({ text: "explain @src/a.rs", files: [folder], images: [], pastes: [] }).files).toEqual([]);
+    expect(canSend({ text: " ", files: [], images: [], pastes: [] })).toBe(false);
   });
 
   it("recalls history from the edge lines only", () => {

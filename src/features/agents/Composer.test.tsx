@@ -34,3 +34,37 @@ describe("reference chips", () => {
     expect(screen.queryByText("a.ts")).not.toBeInTheDocument();
   });
 });
+
+describe("pasted text chips", () => {
+  const longText = Array.from({ length: 11 }, (_, i) => `log line ${i}`).join("\n");
+  const pasteEvent = (text: string) => ({
+    clipboardData: { files: [] as File[], getData: (_type: string) => text },
+  });
+  it("folds a long paste into a chip and expands it for sending", () => {
+    updateComposer("test", { text: "" });
+    render(<Composer {...props} />);
+    fireEvent.paste(screen.getByRole("textbox", { name: "Message" }), pasteEvent(longText));
+    expect(screen.getByText("11 lines")).toBeInTheDocument();
+    const draft = composerDraft("test");
+    expect(draft.pastes).toHaveLength(1);
+    expect(draft.text).toMatch(/\[Pasted 11 lines #[a-z0-9]+\]/);
+    // The token line (not the 11 lines) is what sits in the box.
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(draft.text);
+  });
+  it("removes the chip and its token together", () => {
+    updateComposer("test", { text: "" });
+    render(<Composer {...props} />);
+    fireEvent.paste(screen.getByRole("textbox", { name: "Message" }), pasteEvent(longText));
+    fireEvent.click(screen.getByRole("button", { name: "Remove pasted text" }));
+    expect(composerDraft("test").pastes).toEqual([]);
+    expect(composerDraft("test").text).toBe("");
+    expect(screen.queryByText("11 lines")).not.toBeInTheDocument();
+  });
+  it("leaves short pastes inline", () => {
+    updateComposer("test", { text: "" });
+    render(<Composer {...props} />);
+    fireEvent.paste(screen.getByRole("textbox", { name: "Message" }), pasteEvent("just a note"));
+    expect(composerDraft("test").pastes).toEqual([]);
+    expect(screen.queryByText("Remove pasted text")).not.toBeInTheDocument();
+  });
+});

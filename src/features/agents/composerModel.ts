@@ -24,9 +24,88 @@ export interface ComposerDraft {
   text: string;
   files: FileRef[];
   images: AgentImage[];
+  /** Long pastes folded out of the text; `text` holds one token line per entry. */
+  pastes: PastedText[];
 }
 
-export const emptyDraft = (): ComposerDraft => ({ text: "", files: [], images: [] });
+export interface PastedText {
+  id: string;
+  /** The pasted content, verbatim. */
+  text: string;
+}
+
+export const emptyDraft = (): ComposerDraft => ({ text: "", files: [], images: [], pastes: [] });
+
+/** Fold pastes longer than this: a 200-line log should be a chip, a snippet stays inline. */
+export const PASTE_FOLD_MIN_LINES = 8;
+export const PASTE_FOLD_MIN_CHARS = 1200;
+
+let pasteCounter = 0;
+
+/** Whether pasted text belongs in a folded chip instead of the textarea. */
+export function shouldFoldPasted(text: string): boolean {
+  if (!text.trim()) return false;
+  return text.split("\n").length > PASTE_FOLD_MIN_LINES || text.length > PASTE_FOLD_MIN_CHARS;
+}
+
+const pasteLineCount = (text: string) => text.split("\n").length;
+
+/** A folded paste and the token line standing in for it: `[Pasted 47 lines #a1b2]`. */
+export function foldPasted(text: string): { paste: PastedText; token: string } {
+  const id = `${Date.now().toString(36)}${(pasteCounter++).toString(36)}`;
+  const paste = { id, text };
+  return { paste, token: pasteToken(id, pasteLineCount(text)) };
+}
+
+const pasteToken = (id: string, lines: number) => `[Pasted ${lines} line${lines === 1 ? "" : "s"} #${id}]`;
+
+const PASTE_TOKEN_PATTERN = /\[Pasted \d+ lines? #([a-z0-9]+)\]/g;
+
+/** Paste ids still tokenized in the text, in order. */
+export function pastedIds(text: string): string[] {
+  return [...text.matchAll(PASTE_TOKEN_PATTERN)].map((m) => m[1]!);
+}
+
+/** Pastes still tokenized in the text: what the agent will receive, in token order. */
+export function effectivePastes(draft: ComposerDraft): PastedText[] {
+  const byId = new Map(draft.pastes.map((p) => [p.id, p]));
+  const seen = new Set<string>();
+  const out: PastedText[] = [];
+  for (const id of pastedIds(draft.text)) {
+    const paste = byId.get(id);
+    if (paste && !seen.has(id)) {
+      seen.add(id);
+      out.push(paste);
+    }
+  }
+  return out;
+}
+
+const PASTE_TOKEN_LINE = /^\[Pasted \d+ lines? #([a-z0-9]+)\]$/;
+
+/** Replaces token lines with the pasted content; unknown tokens stay visible, never silently lost. */
+export function expandPastes(draft: ComposerDraft): string {
+  const byId = new Map(draft.pastes.map((p) => [p.id, p.text]));
+  return draft.text
+    .split("\n")
+    .map((line) => {
+      const m = PASTE_TOKEN_LINE.exec(line.trim());
+      return m && byId.has(m[1]!) ? byId.get(m[1]!)! : line;
+    })
+    .join("\n");
+}
+
+/** Drops the paste's token line from the text and tidies the gap. */
+export function removePasteToken(text: string, id: string): string {
+  // Tokens always stand on their own line; a mid-line remnant is user text and stays.
+  const single = new RegExp(`^\\[Pasted \\d+ lines? #${id}\\]$`);
+  return text
+    .split("\n")
+    .filter((line) => !single.test(line.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 export type Completion =
   | { kind: "file"; query: string; from: number; to: number }
@@ -149,10 +228,10 @@ export function removeMention(text: string, rel: string): string {
     .trim();
 }
 
-/** The prompt to send: files still mentioned in the text (each once), and the images. */
+/** The prompt to send: files still mentioned in the text (each once), pastes expanded, and the images. */
 export function toPrompt(draft: ComposerDraft): AgentPrompt {
   const files = effectiveFiles(draft);
-  return { text: draft.text.trim(), files: files.map((f) => f.path), images: draft.images };
+  return { text: expandPastes(draft).trim(), files: files.map((f) => f.path), images: draft.images };
 }
 
 export const canSend = (d: ComposerDraft) => !!d.text.trim() || d.images.length > 0;
