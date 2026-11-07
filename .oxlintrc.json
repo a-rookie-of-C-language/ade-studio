@@ -18,7 +18,8 @@
     "plugins",
     "test-results",
     "playwright-report",
-    ".claude"
+    ".claude",
+    ".tmp-cindy"
   ],
   "rules": {
     "constructor-super": "error",

@@ -1,65 +1,12 @@
-/** Agent-first home: greeting + task composer; tasks rail; placeholders. */
+/** Home sidebar: tasks rail and placeholders (the center is the embedded Cindy interface). */
 import { useMemo, type ComponentProps } from "react";
 import type { AgentStatus, AgentTask } from "@/bindings";
 import { useT, useTx } from "@/platform/i18n";
 import { Icon, IconButton, tooltipAttrs } from "@/ui";
-import { HomeEditor } from "@/features/agents/HomeEditor";
-import { CoworkSession } from "@/features/agents/SessionEditor";
-import { isPinned, openCoworkTask, openTask, togglePin, useAgents } from "@/features/agents/store";
-import { HomeTerminalPanel, useHomeTerminal } from "./HomeTerminal";
-import { openCurrentWorkspaceInIDE } from "./workspace";
+import { isPinned, openTask, togglePin, useAgents } from "@/features/agents/store";
 import styles from "./Cowork.module.css";
 
 type IconName = ComponentProps<typeof Icon>["name"];
-
-/** Top-right jump to the IDE for the current workspace, like TRAE's home. */
-function IdeJump() {
-  const t = useT();
-  return (
-    <button
-      type="button"
-      className={styles.ideJump}
-      onClick={() => void openCurrentWorkspaceInIDE()}
-      title={t("cowork.openIDE")}
-    >
-      <span>IDE</span>
-      <Icon name="open-in-tool-window" size={14} />
-    </button>
-  );
-}
-
-/** Center column: greeting and the real task composer, or the open task when one is selected. */
-export function CoworkHome() {
-  const t = useT();
-  const coworkTask = useAgents((s) => s.coworkTask);
-  const task = useAgents((s) => (coworkTask ? s.tasks.get(coworkTask) : undefined));
-  const terminalOpen = useHomeTerminal((s) => s.open);
-  const setTerminalOpen = useHomeTerminal((s) => s.setOpen);
-  if (coworkTask && task) {
-    return (
-      <div className={`${styles.home} ${styles.homeSession}`}>
-        <IdeJump />
-        <div className={styles.sessionWrap}>
-          <button type="button" className={styles.backButton} onClick={() => openCoworkTask(null)}>
-            <Icon name="arrow-left" size={14} />
-            {t("cowork.back")}
-          </button>
-          <div className={styles.sessionRow}>
-            <CoworkSession id={coworkTask} />
-            {terminalOpen && <HomeTerminalPanel card onClose={() => setTerminalOpen(false)} />}
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className={styles.home}>
-      <IdeJump />
-      <HomeEditor heading={<span className={styles.greeting}>{t("cowork.greeting")}</span>} />
-      {terminalOpen && <HomeTerminalPanel onClose={() => setTerminalOpen(false)} />}
-    </div>
-  );
-}
 
 function statusClass(status: AgentStatus) {
   switch (status) {
