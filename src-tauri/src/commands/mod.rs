@@ -106,6 +106,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         agent::agent_subscribe,
         agent::agent_providers,
         agent::agent_models,
+        agent::cindy_magpie_catalog,
         agent::agent_set_command,
         agent::agent_set_env,
         agent::agent_registry_list,

@@ -70,6 +70,139 @@
     /* older engine: fall through to shared storage */
   }
 
+  // ---- Embedded model catalog (real bridge, not a stub) ----
+  // The iframe cannot fetch the loopback magpie gateway itself (the gateway
+  // sends no CORS headers), so the parent (CindyView) serves the Rust
+  // `cindy_magpie_catalog` command over postMessage. Fail-closed: a timeout
+  // or gateway-down rejects, and the picker shows load-failed with retry
+  // instead of hanging on "Loading model…" forever.
+  var MAGPIE_REQ = "cindy-embed:magpie-catalog:request";
+  var MAGPIE_RES = "cindy-embed:magpie-catalog:response";
+  var magpieNextId = 1;
+  var magpiePending = {};
+  var magpieCache = null;
+  var magpieCacheAt = 0;
+  var MAGPIE_CACHE_MS = 15000;
+  window.addEventListener("message", function (event) {
+    var d = event.data;
+    if (!d || d.source !== "openidea-host" || d.type !== MAGPIE_RES) return;
+    var p = magpiePending[d.id];
+    if (!p) return;
+    delete magpiePending[d.id];
+    clearTimeout(p.timer);
+    if (d.ok) p.resolve(d.models);
+    else p.reject(new Error(d.error || "magpie catalog unavailable"));
+  });
+  function requestMagpieCatalog() {
+    var now = Date.now();
+    if (magpieCache && now - magpieCacheAt < MAGPIE_CACHE_MS) return Promise.resolve(magpieCache);
+    if (requestMagpieCatalog.inflight) return requestMagpieCatalog.inflight;
+    var p = new Promise(function (resolve, reject) {
+      var id = magpieNextId++;
+      var timer = setTimeout(function () {
+        delete magpiePending[id];
+        reject(new Error("magpie catalog timed out"));
+      }, 10000);
+      magpiePending[id] = { resolve: resolve, reject: reject, timer: timer };
+      try {
+        window.parent.postMessage({ source: "cindy-embed", type: MAGPIE_REQ, id: id }, "*");
+      } catch (e) {
+        delete magpiePending[id];
+        clearTimeout(timer);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
+    });
+    requestMagpieCatalog.inflight = p;
+    p.then(
+      function (models) {
+        magpieCache = models;
+        magpieCacheAt = Date.now();
+      },
+      function () {},
+    ).then(function () {
+      requestMagpieCatalog.inflight = null;
+    });
+    return p;
+  }
+  function magpieDefaultEffort(efforts) {
+    if (!efforts || efforts.length === 0) return null;
+    if (efforts.indexOf("medium") !== -1) return "medium";
+    return efforts[0];
+  }
+  function magpieCatalogModels(models) {
+    return (models || [])
+      .map(function (m) {
+        var raw = Array.isArray(m.efforts) ? m.efforts : [];
+        var efforts = raw.filter(function (e) {
+          return typeof e === "string" && e;
+        });
+        var contextWindow = typeof m.context_window === "number" && m.context_window > 0 ? m.context_window : 200000;
+        return {
+          id: m.id,
+          name: m.name || m.id,
+          contextWindow: contextWindow,
+          efforts: efforts,
+          defaultEffort: magpieDefaultEffort(efforts),
+        };
+      })
+      .filter(function (m) {
+        return typeof m.id === "string" && m.id;
+      });
+  }
+  function magpieProviderView(models) {
+    var entries = magpieCatalogModels(models);
+    var routing = function () {
+      return {
+        upstream: "http://127.0.0.1:3425",
+        authStrategy: "none",
+        modelsUrl: "http://127.0.0.1:3425/v1/models",
+      };
+    };
+    var provider = {
+      id: "magpie-local",
+      name: "Magpie",
+      source: "user",
+      agents: ["claude-code", "codex", "pi"],
+      auth: { method: "none" },
+      routing: { "claude-code": routing(), codex: routing(), pi: routing() },
+      models: { "claude-code": entries, codex: entries, pi: entries },
+      connected: true,
+    };
+    return {
+      dataOwnerId: "local",
+      ownerGeneration: 1,
+      providers: [provider],
+      providerOrder: [provider.id],
+    };
+  }
+  function magpieCapabilities(models) {
+    var entries = magpieCatalogModels(models);
+    var seen = {};
+    var effortLevels = [];
+    entries.forEach(function (m) {
+      m.efforts.forEach(function (e) {
+        if (!seen[e]) {
+          seen[e] = true;
+          effortLevels.push({ id: e, displayName: e.charAt(0).toUpperCase() + e.slice(1) });
+        }
+      });
+    });
+    return {
+      availableModels: entries.map(function (m) {
+        return {
+          id: m.id,
+          displayName: m.name,
+          contextWindow: m.contextWindow,
+          efforts: m.efforts,
+          defaultEffort: m.defaultEffort,
+        };
+      }),
+      hasFastMode: false,
+      effortLevels: effortLevels,
+      permissionModes: [{ id: "default", displayName: "Default" }],
+    };
+  }
+
   var MAX_CALLS = 800;
 
   function fmtArg(a) {
@@ -259,6 +392,14 @@
     maker: namespace("electronAPI.maker", {
       getCompanionCloudState: undefined,
       listBotGroups: undefined,
+      // Real model catalog for the picker: live magpie rows via the parent.
+      // Fail-closed (reject) so the selector shows retry, never infinite loading.
+      listProviders: function () {
+        return requestMagpieCatalog().then(magpieProviderView);
+      },
+      getCapabilities: function () {
+        return requestMagpieCatalog().then(magpieCapabilities);
+      },
       listActive: function () {
         return Promise.resolve([]);
       },
