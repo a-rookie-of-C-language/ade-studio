@@ -432,6 +432,14 @@
           return { ok: true };
         });
       },
+      // Manual refresh from settings: same live rows, desktop result shape.
+      refreshBuiltinProviderModels: function (providerId) {
+        magpieCache = null;
+        magpieCacheAt = 0;
+        return requestMagpieCatalog().then(function () {
+          return { ok: true, providerId: providerId };
+        });
+      },
       listProviders: function () {
         return requestMagpieCatalog().then(function (models) {
           var view = magpieProviderView(models);
