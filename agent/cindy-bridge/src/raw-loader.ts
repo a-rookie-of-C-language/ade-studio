@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { join, sep } from "node:path";
 
@@ -84,7 +85,10 @@ export async function resolve(
   if (specifier.endsWith(".md?raw")) {
     const parent = context.parentURL ?? pathToFileURL(`${process.cwd()}/`).href;
     const abs = fileURLToPath(new URL(specifier, parent));
-    const source = distToSource(stripRawQuery(abs));
+    const direct = stripRawQuery(abs);
+    // Release bundles carry the resources inside `dist/` (see
+    // `copy-md-resources.js`); the source tree only exists in dev.
+    const source = existsSync(direct) ? direct : distToSource(direct);
     return { url: `${pathToFileURL(source).href}?raw`, shortCircuit: true };
   }
   if (specifier.startsWith("@cindy/") && context.parentURL) {

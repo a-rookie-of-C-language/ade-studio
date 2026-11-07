@@ -115,6 +115,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
       - run: pnpm install --frozen-lockfile
+      # The Cindy bridge ships inside the app bundle (see bundle.resources):
+      # its dist for the resolution fallback, its prod deploy for the runtime.
+      - run: pnpm build:bridge && pnpm deploy:bridge
       # Signing is optional: only secrets that are set get exported, so forks and
       # unconfigured repos produce unsigned builds instead of failing.
       - name: Signing env
@@ -189,13 +192,28 @@ jobs:
           cargo build --release --locked -p ide-host --bin openidea-server --target "$TARGET"
         env:
           TARGET: ${{ matrix.target }}
+      # The Cindy bridge for remote hosts: a self-contained tarball the server
+      # install wires up later (B4 follow-up); building it here keeps the asset
+      # in lockstep with the server.
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: pnpm }
+      - name: Bridge asset
+        env:
+          ASSET: cindy-bridge-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+        run: |
+          pnpm build:bridge && pnpm deploy:bridge
+          tar -czf "$ASSET" -C agent/cindy-bridge deploy
+          if command -v sha256sum >/dev/null; then sha256sum "$ASSET"; else shasum -a 256 "$ASSET"; fi > "$ASSET.sha256"
       - name: Upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASSET: openidea-server-${{ matrix.os }}-${{ matrix.arch }}.gz
+          BRIDGE: cindy-bridge-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
         run: |
           gzip -9 -c target/${{ matrix.target }}/release/openidea-server > "$ASSET"
           if command -v sha256sum >/dev/null; then sha256sum "$ASSET"; else shasum -a 256 "$ASSET"; fi > "$ASSET.sha256"
+          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" "$BRIDGE" "$BRIDGE.sha256" --clobber
           gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
   # The official plugins, signed, and the marketplace index released apps read

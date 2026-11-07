@@ -174,6 +174,25 @@ describe("agent picker", () => {
       [ADD_AGENT, undefined],
     ]);
   });
+
+  it("lists the Cindy builtin, with the generic icon until it ships its own", () => {
+    const options = providerOptions(
+      [
+        provider({
+          id: "cindy",
+          name: "Cindy (Claude)",
+          command: "node /app/cindy-bridge.mjs",
+          source: { kind: "builtin" },
+        }),
+      ],
+      tx,
+      (id) => (id === "cindy" ? "toolwindow-agents" : "agent-" + id),
+    );
+    expect(options.map((o) => [o.value, o.label])).toEqual([
+      ["cindy", "Cindy (Claude)"],
+      [ADD_AGENT, "More agents…"],
+    ]);
+  });
 });
 
 describe("Agents settings page", () => {

@@ -19,6 +19,8 @@
     "knip": "knip",
     "typecheck": "tsrs --noEmit && tsrs -p tsconfig.node.json --noEmit && tsrs -p perf --noEmit && tsrs -p scripts --noEmit && tsrs -p smoke --noEmit",
     "gen:bindings": "cargo test -p openidea --test export_bindings",
+    "build:bridge": "cd agent/cindy-bridge && pnpm install --frozen-lockfile && pnpm build && node scripts/copy-md-resources.js",
+    "deploy:bridge": "cd agent/cindy-bridge && pnpm deploy deploy --prod && node scripts/prune-deploy.js deploy",
     "gen:windows-icons": "node scripts/gen-windows-icons.ts",
     "gen:angular-grammar": "lezer-generator src/editor/core/cm/angular/angular.grammar --typeScript -o src/editor/core/cm/angular/parser.ts",
     "gen:jsp-grammar": "lezer-generator src/editor/core/cm/jsp/jsp.grammar --typeScript -o src/editor/core/cm/jsp/parser.ts",
