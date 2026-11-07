@@ -41,3 +41,13 @@ Auth/session (local-mode boot identity only), chat send, task run, device
 link, provider management writes. The trigger shows "unresolved" and panels
 may throw whenever the catalog lacks the stored selection — never feed the
 renderer a provider id the selection cannot match.
+
+## Ownership boundary (2026-11-08)
+
+Embed side owns display data bridges that need no execution: the model
+catalog above, capability snapshots, refresh affordances. Session/task
+lifecycle (list/create/update/delete sessions, send prompts, run agents,
+worktree and project operations) is IDE-side linkage and explicitly out of
+scope here — `localDb.sessions.*` stays empty-by-design until that owner
+says otherwise. Do not map `AgentTask` into Cindy's `Session` shape
+unilaterally: it needs continuous timeline sync plus runtime validation.
