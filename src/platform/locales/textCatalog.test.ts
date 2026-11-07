@@ -120,6 +120,7 @@ const UNTRANSLATED = new Set<string>([
   "Cargo Check",
   "Clippy",
   "ClickHouse",
+  "Cindy",
   "CockroachDB",
   "CodeLLDB",
   "CodeLLDB (Rust, C, C++)",

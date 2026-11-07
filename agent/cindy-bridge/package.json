@@ -10,8 +10,11 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prebuild": "node scripts/link-vendor-deps.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "pretypecheck": "node scripts/link-vendor-deps.mjs",
+    "test": "vitest run",
+    "pretest": "node scripts/link-vendor-deps.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.292",

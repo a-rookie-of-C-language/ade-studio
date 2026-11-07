@@ -19,14 +19,17 @@
 @property --tw-left {
   syntax: "<length>";
   inherits: false;
+  initial-value: 0px;
 }
 @property --tw-right {
   syntax: "<length>";
   inherits: false;
+  initial-value: 0px;
 }
 @property --tw-bottom {
   syntax: "<length>";
   inherits: false;
+  initial-value: 0px;
 }
 @property --gap-left {
   syntax: "*";

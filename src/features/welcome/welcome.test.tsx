@@ -89,9 +89,9 @@ import { handleListKey } from "./ProjectsPage";
 import { filterRecent, useRecent } from "./recent";
 import { openCurrentWorkspaceInIDE, openWorkspaceInIDE, useWorkspace } from "./workspace";
 import { _resetHomeTerminalForTests, useHomeTerminal } from "./HomeTerminal";
+import { useCindy } from "@/features/cindy/store";
 import { WelcomeView } from "./WelcomeView";
 import { useAgents } from "@/features/agents/store";
-import type { AgentTask } from "@/bindings";
 
 const p = (name: string, path: string, branch: string | null = null): RecentProject => ({
   name,
@@ -148,18 +148,25 @@ beforeEach(() => {
   useWorkspace.setState({ root: null });
   useProject.setState({ project: null, settings: { appearance: { theme: "light" } } as Settings, opening: false });
   useAgents.setState({ tasks: new Map(), composers: new Map() });
+  useCindy.setState({ status: "unknown", lastCheckedMs: null });
+  // No embedded Cindy files in tests: the home shows its setup screen deterministically.
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("refused");
+    }),
+  );
   _resetHomeTerminalForTests();
 });
 
 afterEach(() => {
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe("Welcome › Projects", () => {
-  it("shows brand, version and workspace rows with badges, ~ paths and branches", async () => {
+  it("shows workspace rows with badges, ~ paths and branches", async () => {
     await renderProjects();
-    expect(screen.getByText("ADE Studio")).toBeTruthy();
-    expect(screen.getByText("1.2.3")).toBeTruthy();
     expect(screen.getByText("Default workspace")).toBeTruthy();
     expect(screen.getByText("Current")).toBeTruthy();
     const rows = screen.getAllByRole("option");
@@ -180,8 +187,8 @@ describe("Welcome › Projects", () => {
     expect(touchRecentProject).toHaveBeenCalledWith("/Users/me/repo/acme-api");
     expect(useWorkspace.getState().root).toBe("/Users/me/repo/acme-api");
     expect(openProject).not.toHaveBeenCalled();
-    // Back on the home composer.
-    expect(screen.getByText("Where should we start?")).toBeTruthy();
+    // Back on the Cindy home.
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
   });
 
   it("moves with arrows, filters by typing, selects with Enter and removes with Delete", async () => {
@@ -194,7 +201,7 @@ describe("Welcome › Projects", () => {
     await act(async () => {});
     expect(useWorkspace.getState().root).toBe("/Users/me/repo/delta");
     expect(openProject).not.toHaveBeenCalled();
-    expect(screen.getByText("Where should we start?")).toBeTruthy();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     await act(async () => {});
@@ -221,7 +228,7 @@ describe("Welcome › Projects", () => {
     fireEvent.click(screen.getByText("Default workspace"));
     await act(async () => {});
     expect(useWorkspace.getState().root).toBeNull();
-    expect(screen.getByText("Where should we start?")).toBeTruthy();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
   });
 
   it("notifies when the folder is gone instead of selecting it", async () => {
@@ -259,7 +266,7 @@ describe("Welcome › Projects", () => {
     await act(async () => {});
     expect(fsReadDir).toHaveBeenCalledWith("/Users/me/repo/fresh");
     expect(useWorkspace.getState().root).toBe("/Users/me/repo/fresh");
-    expect(screen.getByText("Where should we start?")).toBeTruthy();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
   });
 
   it("opens a row in the IDE without touching the home workspace", async () => {
@@ -301,63 +308,13 @@ describe("Welcome › IDE switch", () => {
 });
 
 describe("Welcome › Cowork", () => {
-  it("is the only home: greeting and composer, no mode tabs", async () => {
+  it("is the Cindy home: setup screen, no composer", async () => {
     await renderWelcome();
-    expect(screen.getByText("Where should we start?")).toBeTruthy();
-    expect(screen.queryByText("Ideas for you")).toBeNull();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
+    expect(screen.queryByText("Where should we start?")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
-    expect(screen.getByRole("button", { name: "New" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
-  });
-
-  it("lists recent tasks in the sidebar", async () => {
-    const task = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
-    const older = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
-    useAgents.setState({
-      tasks: new Map([
-        ["t1", task],
-        ["t2", older],
-      ]),
-    });
-    await renderWelcome();
-    expect(screen.getByRole("button", { name: "Fix login redirect" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Draft release notes" })).toBeTruthy();
-  });
-
-  it("shows the placeholder for Scheduled", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
-    expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
-  });
-
-  it("shows honest placeholders for Plugins, Automation and Artifacts", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
-    expect(screen.getByText("Discover and install agent plugins here.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Automation" }));
-    expect(screen.getByText("Recurring runs and rules will live here once configured.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
-    expect(screen.getByText("Files your agents produce will be collected here.")).toBeTruthy();
-  });
-
-  it("pins a task atop the sidebar and unpins it again", async () => {
-    const one = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
-    const two = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
-    useAgents.setState({
-      tasks: new Map([
-        ["t1", one],
-        ["t2", two],
-      ]),
-      pinned: ["t1"],
-    });
-    await renderWelcome();
-    expect(screen.getByText("Pinned")).toBeTruthy();
-    // The pinned task shows in the Pinned section and in its project group.
-    expect(screen.getAllByRole("button", { name: "Unpin Task" })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpin Task" })[0]!);
-    expect(screen.queryByText("Pinned")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Unpin Task" })).toBeNull();
-    useAgents.setState({ pinned: [] });
+    expect(screen.getByRole("button", { name: "IDE" })).toBeTruthy();
   });
 
   it("jumps to the IDE for the current workspace from the Cowork home", async () => {
@@ -367,23 +324,13 @@ describe("Welcome › Cowork", () => {
     expect(openProject).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
   });
 
-  it("opens the workspace list from Projects and switches workspace from its children", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+  it("returns home from Projects with the back button", async () => {
+    await renderProjects();
     expect(screen.getByLabelText("Search projects")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "acme-api" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     await act(async () => {});
-    expect(useWorkspace.getState().root).toBe("/Users/me/repo/acme-api");
-    expect(openProject).not.toHaveBeenCalled();
-  });
-
-  it("collapses to an icon rail and back", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Scheduled" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
+    expect(useWorkspace.getState().root).toBeNull();
   });
 
   it("opens a terminal drawer rooted at the workspace from the terminal action", async () => {
@@ -417,12 +364,12 @@ describe("Welcome › Cowork", () => {
     expect(termNewTab).toHaveBeenCalledTimes(2);
   });
 
-  it("switches the picked workspace to the IDE from the composer", async () => {
+  it("opens the picked workspace in the IDE from the home", async () => {
     useWorkspace.setState({ root: "/Users/me/repo/acme-api" });
     await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Open in IDE" }));
+    fireEvent.click(screen.getByRole("button", { name: "IDE" }));
     await act(async () => {});
-    expect(executeAction).toHaveBeenCalledWith("welcome.openInIDE");
+    expect(openProject).toHaveBeenCalledWith("/Users/me/repo/acme-api");
   });
 });
 
