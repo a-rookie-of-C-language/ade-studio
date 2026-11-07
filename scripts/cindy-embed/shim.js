@@ -202,7 +202,8 @@
       m.efforts.forEach(function (e) {
         if (!seen[e]) {
           seen[e] = true;
-          effortLevels.push({ id: e, displayName: e.charAt(0).toUpperCase() + e.slice(1) });
+          // MobileChoiceOption is { id, label }: displayName renders blank.
+          effortLevels.push({ id: e, label: e.charAt(0).toUpperCase() + e.slice(1) });
         }
       });
     });
@@ -218,7 +219,7 @@
       }),
       hasFastMode: false,
       effortLevels: effortLevels,
-      permissionModes: [{ id: "default", displayName: "Default" }],
+      permissionModes: [{ id: "default", label: "Default" }],
     };
   }
 
