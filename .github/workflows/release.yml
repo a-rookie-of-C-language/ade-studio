@@ -117,7 +117,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The Cindy bridge ships inside the app bundle (see bundle.resources):
       # its dist for the resolution fallback, its prod deploy for the runtime.
-      - run: pnpm build:bridge && pnpm deploy:bridge
+      # verify-deploy boots the closure; the per-OS step below checks the bundle.
+      - name: Build and verify bridge closure
+        run: |
+          pnpm build:bridge && pnpm deploy:bridge
+          node agent/cindy-bridge/scripts/verify-deploy.js agent/cindy-bridge/deploy
       # Signing is optional: only secrets that are set get exported, so forks and
       # unconfigured repos produce unsigned builds instead of failing.
       - name: Signing env
@@ -146,6 +150,34 @@ jobs:
           args: --target ${{ matrix.target }}
           # The parallel builds would race on one latest.json; `updater-manifest` writes it once.
           uploadUpdaterJson: false
+      # The bundled bridge must be where the Rust resolver looks (any nesting
+      # works) and boot: unpack the per-OS artifact and run the same check as
+      # for the raw deploy closure.
+      - name: Verify bundled bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="target/${{ matrix.target }}/release/bundle"
+          ROOT=""
+          if [ "${{ runner.os }}" = macOS ]; then
+            APP=$(echo "$BUNDLE"/macos/*.app | head -1)
+            test -d "$APP" || { echo "no .app bundle in $BUNDLE/macos"; exit 1; }
+            ROOT="$APP/Contents/Resources"
+          elif [ "${{ runner.os }}" = Linux ]; then
+            DEB=$(echo "$BUNDLE"/deb/*.deb | head -1)
+            test -f "$DEB" || { echo "no .deb bundle in $BUNDLE/deb"; exit 1; }
+            mkdir -p "$RUNNER_TEMP/cindy-bundle"
+            dpkg-deb --fsys-tarfile "$DEB" | tar -x -C "$RUNNER_TEMP/cindy-bundle"
+            ROOT="$RUNNER_TEMP/cindy-bundle"
+          else
+            NSIS=$(echo "$BUNDLE"/nsis/*.exe | head -1)
+            test -f "$NSIS" || { echo "no nsis bundle in $BUNDLE/nsis"; exit 1; }
+            7z l "$NSIS" | grep -i "cindy-bridge.*index\.js" || { echo "bridge entry missing from installer"; exit 1; }
+            mkdir -p "$RUNNER_TEMP/cindy-bundle"
+            7z x "$NSIS" -o"$RUNNER_TEMP/cindy-bundle" > /dev/null
+            ROOT="$RUNNER_TEMP/cindy-bundle"
+          fi
+          node agent/cindy-bridge/scripts/verify-deploy.js "$ROOT"
       # tauri-action notarizes the .app but not the DMG around it; notarize and
       # staple the DMG too, then replace the uploaded asset.
       - name: Notarize DMG
@@ -205,6 +237,10 @@ jobs:
           pnpm build:bridge && pnpm deploy:bridge
           tar -czf "$ASSET" -C agent/cindy-bridge deploy
           if command -v sha256sum >/dev/null; then sha256sum "$ASSET"; else shasum -a 256 "$ASSET"; fi > "$ASSET.sha256"
+          # The tarball must hold a bootable closure (entry + prod deps + prompt resources).
+          rm -rf "$RUNNER_TEMP/cindy-tarball" && mkdir -p "$RUNNER_TEMP/cindy-tarball"
+          tar -xzf "$ASSET" -C "$RUNNER_TEMP/cindy-tarball"
+          node agent/cindy-bridge/scripts/verify-deploy.js "$RUNNER_TEMP/cindy-tarball"
       - name: Upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -214,7 +250,6 @@ jobs:
           gzip -9 -c target/${{ matrix.target }}/release/openidea-server > "$ASSET"
           if command -v sha256sum >/dev/null; then sha256sum "$ASSET"; else shasum -a 256 "$ASSET"; fi > "$ASSET.sha256"
           gh release upload "$TAG" "$ASSET" "$ASSET.sha256" "$BRIDGE" "$BRIDGE.sha256" --clobber
-          gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber
 
   # The official plugins, signed, and the marketplace index released apps read
   # (releases/latest/download/plugins-index.json). They are not in the

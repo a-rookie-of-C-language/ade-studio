@@ -6,6 +6,11 @@
  * ~250 MB bundled executable is dead weight. Booting the pruned closure still
  * reaches the auth gate, which the bridge e2e covers.
  *
+ * Orphaned links left behind by the prune are deleted: Node tolerates dangling
+ * symlinks, but resource packers that walk the tree choke on them. Links that
+ * still resolve are kept as-is (pnpm's isolated layout depends on them; the
+ * tarball path preserves them and is the proven-good carrier).
+ *
  * Usage: `node scripts/prune-deploy.js [deploy-dir]` (defaults to `../deploy`).
  */
 import { rmSync, readdirSync, existsSync, statSync, lstatSync } from "node:fs";
@@ -13,7 +18,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const deploy = process.argv[2] ?? join(root, "..", "deploy");
+const deploy = process.argv[2] && !process.argv[2].startsWith("-") ? process.argv[2] : join(root, "..", "deploy");
 const pnpmDir = join(deploy, "node_modules", ".pnpm");
 const scopedDir = join(deploy, "node_modules", "@anthropic-ai");
 
@@ -45,8 +50,8 @@ if (existsSync(scopedDir)) {
     if (name.startsWith("claude-agent-sdk-")) remove(join(scopedDir, name));
   }
 }
-// The prune orphans symlinks (the SDK's nested link to its platform package).
-// Node tolerates them, but resource packers walk the tree and choke.
+// Delete links whose target is gone (the platform-package prune orphans the
+// SDK's nested link to it). Valid links are kept: the isolated layout needs them.
 let dangling = 0;
 const sweep = (dir) => {
   for (const name of readdirSync(dir)) {
@@ -65,5 +70,5 @@ const sweep = (dir) => {
 };
 const modulesDir = join(deploy, "node_modules");
 if (existsSync(modulesDir)) sweep(modulesDir);
-console.log(`prune-deploy: removed ${dangling} dangling symlink(s)`);
+console.log(`prune-deploy: removed ${dangling} dangling link(s)`);
 console.log(`prune-deploy: saved ${(removed / 1024 / 1024).toFixed(1)} MB`);
