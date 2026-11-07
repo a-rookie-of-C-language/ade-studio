@@ -129,12 +129,14 @@
     if (efforts.indexOf("medium") !== -1) return "medium";
     return efforts[0];
   }
+  // Effort union in @cindy/model-providers: anything else breaks the picker.
+  var KNOWN_EFFORTS = { minimal: 1, low: 1, medium: 1, high: 1, xhigh: 1, max: 1, ultra: 1 };
   function magpieCatalogModels(models) {
     return (models || [])
       .map(function (m) {
         var raw = Array.isArray(m.efforts) ? m.efforts : [];
         var efforts = raw.filter(function (e) {
-          return typeof e === "string" && e;
+          return typeof e === "string" && KNOWN_EFFORTS[e] === 1;
         });
         var contextWindow = typeof m.context_window === "number" && m.context_window > 0 ? m.context_window : 200000;
         return {
@@ -150,7 +152,21 @@
       });
   }
   function magpieProviderView(models) {
-    var entries = magpieCatalogModels(models);
+    // Group rows under their real provider ids: the picker's trigger and
+    // panel resolve by (providerId, modelId) with non-null assertions, so a
+    // single lumped provider leaves every stored selection dangling at
+    // "Model Details Unavailable" (and the panel throws on open).
+    var groups = {};
+    var order = [];
+    (models || []).forEach(function (m) {
+      var pid = typeof m.provider === "string" && m.provider ? m.provider : "magpie-local";
+      if (!groups[pid]) {
+        groups[pid] = [];
+        order.push(pid);
+      }
+      groups[pid].push(m);
+    });
+    if (order.length === 0) order.push("magpie-local");
     var routing = function () {
       return {
         upstream: "http://127.0.0.1:3425",
@@ -158,21 +174,24 @@
         modelsUrl: "http://127.0.0.1:3425/v1/models",
       };
     };
-    var provider = {
-      id: "magpie-local",
-      name: "Magpie",
-      source: "user",
-      agents: ["claude-code", "codex", "pi"],
-      auth: { method: "none" },
-      routing: { "claude-code": routing(), codex: routing(), pi: routing() },
-      models: { "claude-code": entries, codex: entries, pi: entries },
-      connected: true,
-    };
+    var providers = order.map(function (pid) {
+      var entries = magpieCatalogModels(groups[pid] || []);
+      return {
+        id: pid,
+        name: pid === "magpie-local" ? "Magpie" : pid,
+        source: "user",
+        agents: ["claude-code", "codex", "pi"],
+        auth: { method: "none" },
+        routing: { "claude-code": routing(), codex: routing(), pi: routing() },
+        models: { "claude-code": entries, codex: entries, pi: entries },
+        connected: true,
+      };
+    });
     return {
       dataOwnerId: "local",
       ownerGeneration: 1,
-      providers: [provider],
-      providerOrder: [provider.id],
+      providers: providers,
+      providerOrder: order,
     };
   }
   function magpieCapabilities(models) {
