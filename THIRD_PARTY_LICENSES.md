@@ -186,6 +186,15 @@ declarations, key and animation binding names (`(keydown.enter)`, `[@fade]`,
 `(@fade.done)`), runs of text that entities split (`a && b`) parsed as one, and one
 token for `{` and `}`.
 
+## Magpie mark (Cindy agent icon)
+
+`src/ui/openidea/agents/cindy.svg` traces the Magpie mark adapted from
+[yetone/magpie](https://github.com/yetone/magpie/blob/main/site/public/img/magpie-small.svg)
+(MIT), via the 24 px grid version in Cindy
+`packages/model-providers/src/providerBranding.ts`. Recoloured to `currentColor`
+so the icon follows the theme; shape unmodified. Copyright the Magpie
+contributors; MIT licence, full text below.
+
 ## nvim-treesitter queries
 
 `crates/ide-syntax/queries/<grammar>/locals.scm` are derived from the `locals.scm`
@@ -376,3 +385,32 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE
 ```
+
+## Cindy maker agent core (Claude chain snapshot)
+
+`third-party/cindy-agent/` contains a read-only snapshot of selected files from
+[cindy](https://github.com/a-rookie-of-C-language/cindy) (Apache-2.0,
+Copyright 2026 XD Inc.), taken at upstream commit
+`5c1ddeeab20476e9fc8fd40a99ad19ac958b7006` (2026-11-07):
+
+- `maker-core/`: the 87-file import closure rooted at
+  `packages/maker-core/src/agents/claude-code/index.ts` (Claude Code
+  orchestration only, including dynamic `import('...')` type references) plus
+  two `?raw` markdown assets. The seven files from the codex/pi directories
+  (`agents/codex/app-server/protocol.ts|transport.ts|external-auth.ts`,
+  `agents/codex/retry-escalation.ts`, `agents/pi/managed-command.ts|transport.ts|
+  cache-compatibility.ts`) appear in the chain only in type positions and have
+  no runtime imports. No other codex/pi runtime, no desktop host code.
+- `model-providers/`: 16 pure-logic files backing `effort-resolution`
+  (`clampEffortToSupported`) and `classification` (`isCodexGatewayWireModel`);
+  zero external dependencies, no network calls. Gateway/account/OAuth code is
+  excluded.
+- `maker-shared/`: 11 self-contained files actually imported by the Claude chain.
+- Upstream `LICENSE`/`NOTICE` are retained verbatim as
+  `third-party/cindy-agent/UPSTREAM-LICENSE` and `UPSTREAM-NOTICE`
+  ("This product includes software developed by XD Inc.").
+- Full file manifest, snapshot method and resync procedure:
+  [third-party/cindy-agent/VERSIONS.md](third-party/cindy-agent/VERSIONS.md).
+
+The snapshot does not track upstream history; upstream security or protocol
+fixes are synced manually per `VERSIONS.md`.
