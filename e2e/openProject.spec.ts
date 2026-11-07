@@ -51,13 +51,12 @@ test("Close Project shows the Welcome screen; a recent project becomes the works
   await expect(search.getByRole("option", { name: /^Close Project/ }).first()).toBeVisible();
   await page.keyboard.press("Enter");
 
-  // The agent-first home lands on Cowork; recent projects live under Projects.
-  const nav = page.getByRole("navigation", { name: "Cowork" });
-  await expect(nav).toBeVisible();
+  // The agent-first home lands on the Cindy home; the workspace pill opens Projects.
+  await expect(page.getByRole("button", { name: "IDE" })).toBeVisible();
   await expect(page.getByRole("tree", { name: "Project" })).toBeHidden();
   expect(await ipcCalls(page, "close_project")).toHaveLength(1);
 
-  await nav.getByRole("button", { name: "Projects" }).click();
+  await page.getByRole("button", { name: "Projects" }).click();
   const projects = page.getByRole("region", { name: "Projects" });
   await expect(projects.getByRole("option", { name: /^billing/ })).toBeVisible();
 
@@ -68,9 +67,9 @@ test("Close Project shows the Welcome screen; a recent project becomes the works
   await trust.getByRole("button", { name: "Trust Project" }).click();
   await expect(trust).toBeHidden();
   expect(await ipcCalls(page, "project_trust_set")).toEqual([{ path: BILLING, trusted: true, folder: false }]);
-  // Trusting points the home workspace at the project and returns to Cowork.
+  // Trusting points the home workspace at the project and returns home.
   await expect
     .poll(() => page.evaluate(() => window.localStorage.getItem("openidea.workspace.root")))
     .toBe(JSON.stringify(BILLING));
-  await expect(page.getByRole("navigation", { name: "Cowork" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "IDE" })).toBeVisible();
 });

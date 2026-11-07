@@ -1,6 +1,5 @@
 {
   "Group actions": "分组操作",
-  "New task in this project": "在此项目中新建任务",
   "New Project Group": "新建项目组",
   "Group name:": "组名称：",
   "New Group…": "新建组…",
@@ -1217,7 +1216,6 @@
   "Make Read-only": "设为只读",
   "Make Writable": "设为可写",
   "Make another changelist active first.": "请先将其他更改列表设为活动。",
-  "Manage": "管理",
   "Manage Plugins": "管理插件",
   "Mark Directory as": "将目录标记为",
   "Mark Resolved": "标记为已解决",

@@ -19,3 +19,47 @@
   min-height: 0;
   height: auto;
 }
+
+/* Top-right cluster: workspace switcher and IDE jump, like TRAE's home. */
+.bar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--bg-elev);
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: default;
+  max-width: 240px;
+}
+
+.jump:hover {
+  background: var(--bg-hover);
+  color: var(--fg-strong);
+}
+
+.jump:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.jumpName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
