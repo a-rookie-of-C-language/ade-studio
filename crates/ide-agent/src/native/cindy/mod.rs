@@ -10,7 +10,7 @@
 //! error. Nothing is silently rebuilt.
 
 mod frames;
-mod magpie;
+pub(crate) mod magpie;
 mod translate;
 
 #[cfg(test)]

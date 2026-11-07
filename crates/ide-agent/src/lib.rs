@@ -21,6 +21,38 @@ mod worktree;
 
 pub use model::*;
 
+/// One row of the local Magpie gateway catalog for the embedded Cindy model
+/// picker (loopback `GET /v1/models`, no credentials). Serializable across the
+/// Tauri boundary; the embed maps it onto Cindy's `ProviderView` shape.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+pub struct CindyCatalogModel {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub label: Option<String>,
+    pub context_window: u64,
+    pub efforts: Vec<String>,
+}
+
+/// Live Magpie catalog for the embedded Cindy UI. `Err` means the gateway is
+/// down: the caller must surface load-failed (with retry), never hang loading.
+/// Uses the default loopback base URL (env-aware, same as the agent driver).
+pub async fn cindy_magpie_catalog() -> Result<Vec<CindyCatalogModel>, String> {
+    let base = native::cindy::magpie::magpie_base_url(&[]);
+    let models = native::cindy::magpie::fetch_models(&base, Duration::from_secs(10)).await?;
+    Ok(models
+        .into_iter()
+        .map(|m| CindyCatalogModel {
+            id: m.id,
+            name: m.name,
+            provider: m.provider,
+            label: m.label,
+            context_window: m.context_window,
+            efforts: m.efforts,
+        })
+        .collect())
+}
+
 use conversation::{Conversation, SavedSubagent, Session};
 use ide_core::{IdeError, IdeResult, IpcPath};
 use ide_jsonrpc::{Framing, Handler, NoopHandler, Peer, RpcError, codes};

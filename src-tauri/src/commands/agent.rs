@@ -36,6 +36,16 @@ pub fn agent_providers(window: Window, state: State<'_, AppState>) -> IdeResult<
     agent::providers(&state.host, window.label())
 }
 
+/// Live Magpie gateway catalog for the embedded Cindy model picker.
+/// Served from Rust (no CORS): the embed asks its parent, the parent invokes
+/// this, the shim maps rows onto Cindy's `ProviderView` shape. Gateway down =
+/// `Unavailable` so the picker shows load-failed with retry, never hangs.
+#[tauri::command]
+#[specta::specta]
+pub async fn cindy_magpie_catalog() -> IdeResult<Vec<ide_agent::CindyCatalogModel>> {
+    ide_agent::cindy_magpie_catalog().await.map_err(ide_core::IdeError::unavailable)
+}
+
 /// Session settings (model, mode, effort…) `provider` advertises without a task,
 /// so the New Task page shows its pickers before the first session.
 #[tauri::command]

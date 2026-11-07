@@ -36,12 +36,43 @@ pub(crate) struct MagpieModel {
     pub name: String,
     pub provider: String,
     pub label: Option<String>,
+    /// Usable context window for the picker (context_window || context_length
+    /// || max_input_tokens, else the 200k custom-provider default).
+    pub context_window: u64,
+    /// Reasoning efforts (supported_reasoning_levels[].effort || reasoning_levels).
+    pub efforts: Vec<String>,
 }
 
 fn text(v: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().filter_map(|k| v.get(k)).filter_map(Value::as_str).find_map(|s| {
         let s = s.trim();
         (!s.is_empty()).then(|| s.to_owned())
+    })
+}
+
+fn uint(v: &Value, keys: &[&str]) -> Option<u64> {
+    keys.iter()
+        .filter_map(|k| v.get(k))
+        .find_map(|n| n.as_u64().or_else(|| n.as_f64().map(|f| f as u64)))
+        .filter(|n| *n > 0)
+}
+
+fn efforts(v: &Value) -> Vec<String> {
+    if let Some(levels) = v.get("supported_reasoning_levels").and_then(Value::as_array) {
+        let out: Vec<String> = levels
+            .iter()
+            .filter_map(|l| l.get("effort"))
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if !out.is_empty() {
+            return out;
+        }
+    }
+    v.get("reasoning_levels").and_then(Value::as_array).map_or_else(Vec::new, |levels| {
+        levels.iter().filter_map(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()
     })
 }
 
@@ -58,6 +89,8 @@ pub(crate) fn parse_models(body: &Value) -> Vec<MagpieModel> {
                 name: text(m, &["display_name", "displayName", "name"]).unwrap_or_else(|| id.clone()),
                 provider: text(m, &["owned_by", "ownedBy", "providerId", "provider"]).unwrap_or_default(),
                 label: text(m, &["magpie_label", "magpieLabel", "label"]),
+                context_window: uint(m, &["context_window", "context_length", "max_input_tokens"]).unwrap_or(200_000),
+                efforts: efforts(m),
                 id,
             })
         })
@@ -234,26 +267,64 @@ mod tests {
         ]});
         let models = parse_models(&wrapped);
         assert_eq!(models.len(), 2);
-        assert_eq!(
-            models[0],
-            MagpieModel { id: "auto/a".into(), name: "A".into(), provider: "p".into(), label: Some("A · p".into()) }
-        );
+        assert_eq!(models[0].id, "auto/a",);
+        assert_eq!(models[0].name, "A");
+        assert_eq!(models[0].provider, "p");
+        assert_eq!(models[0].label.as_deref(), Some("A · p"));
         assert_eq!(models[1].name, "Bare");
         assert_eq!(parse_models(&json!([])).len(), 0);
         assert_eq!(parse_models(&json!({})).len(), 0);
     }
 
     #[test]
+    fn parses_context_window_and_efforts() {
+        let body = json!({ "data": [
+            { "id": "auto/a", "context_window": 922000, "supported_reasoning_levels": [{"effort": "low"}, {"effort": "high"}] },
+            { "id": "auto/b", "context_length": 500000, "reasoning_levels": ["low", "medium"] },
+            { "id": "auto/c" },
+        ]});
+        let models = parse_models(&body);
+        assert_eq!(models.len(), 3);
+        assert_eq!(models[0].context_window, 922000);
+        assert_eq!(models[0].efforts, vec!["low", "high"]);
+        assert_eq!(models[1].context_window, 500000);
+        assert_eq!(models[1].efforts, vec!["low", "medium"]);
+        assert_eq!(models[2].context_window, 200_000);
+        assert!(models[2].efforts.is_empty());
+    }
+
+    #[test]
     fn default_prefers_exact_then_claude_family_then_first() {
         let models = vec![
-            MagpieModel { id: "auto/g".into(), name: "G".into(), provider: "x".into(), label: None },
-            MagpieModel { id: "auto/claude-x".into(), name: "C".into(), provider: "x".into(), label: None },
+            MagpieModel {
+                id: "auto/g".into(),
+                name: "G".into(),
+                provider: "x".into(),
+                label: None,
+                context_window: 200_000,
+                efforts: Vec::new(),
+            },
+            MagpieModel {
+                id: "auto/claude-x".into(),
+                name: "C".into(),
+                provider: "x".into(),
+                label: None,
+                context_window: 200_000,
+                efforts: Vec::new(),
+            },
         ];
         assert_eq!(pick_default(&models, Some("auto/g")), Some("auto/g".into()));
         assert_eq!(pick_default(&models, None), Some("auto/claude-x".into()));
         assert_eq!(pick_default(&models, Some("  ")), Some("auto/claude-x".into()));
         assert_eq!(pick_default(&[], None), None);
-        let gpt = vec![MagpieModel { id: "auto/g".into(), name: "G".into(), provider: "x".into(), label: None }];
+        let gpt = vec![MagpieModel {
+            id: "auto/g".into(),
+            name: "G".into(),
+            provider: "x".into(),
+            label: None,
+            context_window: 200_000,
+            efforts: Vec::new(),
+        }];
         assert_eq!(pick_default(&gpt, None), Some("auto/g".into()));
     }
 

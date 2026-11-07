@@ -112,6 +112,13 @@ export const commands = {
 	 */
 	agentModels: (provider: string) => typedError<AgentConfigOption[], IdeError>(__TAURI_INVOKE("agent_models", { provider })),
 	/**
+	 *  Live Magpie gateway catalog for the embedded Cindy model picker.
+	 *  Served from Rust (no CORS): the embed asks its parent, the parent invokes
+	 *  this, the shim maps rows onto Cindy's `ProviderView` shape. Gateway down =
+	 *  `Unavailable` so the picker shows load-failed with retry, never hangs.
+	 */
+	cindyMagpieCatalog: () => typedError<CindyCatalogModel[], IdeError>(__TAURI_INVOKE("cindy_magpie_catalog")),
+	/**
 	 *  Overrides built-in agent `id`'s command with `command` (its agent file keeps the
 	 *  built-in's driver and arguments), or returns it to auto-detection with `None`.
 	 */
@@ -2235,6 +2242,20 @@ export type CheckoutOutcome = { kind: "done" } |
  *  on conflicts in these files.
  */
 { kind: "conflicts"; files: string[] };
+
+/**
+ *  One row of the local Magpie gateway catalog for the embedded Cindy model
+ *  picker (loopback `GET /v1/models`, no credentials). Serializable across the
+ *  Tauri boundary; the embed maps it onto Cindy's `ProviderView` shape.
+ */
+export type CindyCatalogModel = {
+	id: string,
+	name: string,
+	provider: string,
+	label: string | null,
+	context_window: number,
+	efforts: string[],
+};
 
 export type ClassifiedReference = {
 	/**  Optional for older Java extensions; missing means unclassified. */
