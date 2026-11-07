@@ -189,10 +189,19 @@
         getStartupProgress: function () {
           return Promise.resolve(null);
         },
+        // Null: no slimming result to celebrate or mourn.
+        getLastResult: function () {
+          return Promise.resolve(null);
+        },
       }),
       // Empty session lists: chat/task UI renders its empty state.
       sessions: namespace("electronAPI.localDb.sessions", {
         list: function () {
+          return Promise.resolve([]);
+        },
+        // No interrupted sessions: the resume dialog stays shut.
+        // (A proxy here is truthy-but-empty and trips the open gate.)
+        interruptedResumeCandidates: function () {
           return Promise.resolve([]);
         },
       }),
@@ -323,6 +332,18 @@
         return Promise.resolve(null);
       },
     }),
+    // Voice shortcut recovery never pending: no listener to recover.
+    voiceInput: namespace("electronAPI.voiceInput", {
+      consumeShortcutRecoveryFailure: function () {
+        return Promise.resolve({ failed: false });
+      },
+    }),
+    // No plugin removals in the embed: null means nothing pending.
+    pluginMarket: namespace("electronAPI.pluginMarket", {
+      consumeRemovalNotice: function () {
+        return Promise.resolve(null);
+      },
+    }),
     // No pending daemon upgrades in the embed.
     remoteSsh: {
       ccMgrListPendingUpgrades: function () {
@@ -359,9 +380,25 @@
     getAnalyticsSettings: function () {
       return Promise.resolve({ allowed: false });
     },
-    // Signed out until the auth bridge lands (P2).
+    // Default to local mode: the embed has no sign-in backend, so boot
+    // straight into the local owner instead of parking on the login wall.
+    // GuestRoute navigates on a real mode === 'local'; dataOwnerId and the
+    // generation are stable values (never null/proxy) for owner fencing.
     authInitialize: function () {
-      return Promise.resolve({ isAuthenticated: false, user: null });
+      return Promise.resolve({
+        mode: "local",
+        isAuthenticated: false,
+        canEnterApp: true,
+        user: null,
+        dataOwnerId: "local",
+        ownerGeneration: 1,
+        ownerBoundaryPending: false,
+        isCanary: false,
+        deviceId: "embed-dev",
+        hasAccountDeletionReceipt: false,
+        accountDeletionRestored: false,
+        credentialStoreUnavailable: false,
+      });
     },
     // Local-mode entry: GuestRoute navigates away only on a real
     // mode === 'local'. Data owner is a stable string (never null here)
