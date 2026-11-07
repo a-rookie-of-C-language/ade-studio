@@ -52,7 +52,6 @@
   "First-token avg {ttftAvgText} seconds · {samplesText} samples": "First-token avg {ttftAvgText} seconds · {samplesText} samples",
   "Message index": "Message index",
   "Go to message {num}": "Go to message {num}",
-  "New task in this project": "New task in this project",
   "Model {model}": "Model {model}",
   "Estimated from the last response": "Estimated from the last response",
   "{name}: {tokens} tokens": "{name}: {tokens} tokens",

@@ -36,6 +36,27 @@ export default defineConfig({
     react(),
     {
       name: "cindy-embed-shim",
+      configureServer(server) {
+        // Dev loop: editing shim.js invalidates the cached index.html
+        // transform (which inlines it) and reloads the page. No restart.
+        try {
+          const fsPath = new URL(SHIM_PATH).pathname.replace(/^\//, "");
+          server.watcher.add(fsPath);
+          server.watcher.on("change", (p) => {
+            if (String(p).replace(/\\/g, "/") !== String(fsPath).replace(/\\/g, "/")) return;
+            try {
+              for (const mod of server.moduleGraph.getModulesByFile(path.join(RENDERER_ROOT, "index.html")) ?? []) {
+                server.moduleGraph.invalidateModule(mod);
+              }
+            } catch {
+              /* fall through to reload */
+            }
+            server.ws.send({ type: "full-reload" });
+          });
+        } catch {
+          /* watcher unavailable (build): shim is read fresh per transform anyway */
+        }
+      },
       async transformIndexHtml(html) {
         const SHIM = await fs.promises.readFile(SHIM_PATH, "utf8");
         return html.replace(

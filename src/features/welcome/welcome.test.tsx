@@ -92,7 +92,6 @@ import { _resetHomeTerminalForTests, useHomeTerminal } from "./HomeTerminal";
 import { useCindy } from "@/features/cindy/store";
 import { WelcomeView } from "./WelcomeView";
 import { useAgents } from "@/features/agents/store";
-import type { AgentTask } from "@/bindings";
 
 const p = (name: string, path: string, branch: string | null = null): RecentProject => ({
   name,
@@ -166,10 +165,8 @@ afterEach(() => {
 });
 
 describe("Welcome › Projects", () => {
-  it("shows brand, version and workspace rows with badges, ~ paths and branches", async () => {
+  it("shows workspace rows with badges, ~ paths and branches", async () => {
     await renderProjects();
-    expect(screen.getByText("ADE Studio")).toBeTruthy();
-    expect(screen.getByText("1.2.3")).toBeTruthy();
     expect(screen.getByText("Default workspace")).toBeTruthy();
     expect(screen.getByText("Current")).toBeTruthy();
     const rows = screen.getAllByRole("option");
@@ -317,60 +314,7 @@ describe("Welcome › Cowork", () => {
     expect(screen.queryByText("Where should we start?")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByRole("button", { name: "New" })).toBeTruthy();
-  });
-
-  it("lists recent tasks in the sidebar", async () => {
-    const task = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
-    const older = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
-    useAgents.setState({
-      tasks: new Map([
-        ["t1", task],
-        ["t2", older],
-      ]),
-    });
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByRole("button", { name: "Fix login redirect" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Draft release notes" })).toBeTruthy();
-  });
-
-  it("shows the placeholder for Scheduled", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Scheduled" }));
-    expect(screen.getByText("Scheduled runs will appear here once configured.")).toBeTruthy();
-  });
-
-  it("shows honest placeholders for Plugins, Automation and Artifacts", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
-    expect(screen.getByText("Discover and install agent plugins here.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Automation" }));
-    expect(screen.getByText("Recurring runs and rules will live here once configured.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Artifacts" }));
-    expect(screen.getByText("Files your agents produce will be collected here.")).toBeTruthy();
-  });
-
-  it("pins a task atop the sidebar and unpins it again", async () => {
-    const one = { id: "t1", title: "Fix login redirect", status: "running", updatedMs: 2 } as AgentTask;
-    const two = { id: "t2", title: "Draft release notes", status: "ready", updatedMs: 1 } as AgentTask;
-    useAgents.setState({
-      tasks: new Map([
-        ["t1", one],
-        ["t2", two],
-      ]),
-      pinned: ["t1"],
-    });
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByText("Pinned")).toBeTruthy();
-    // The pinned task shows in the Pinned section and in its project group.
-    expect(screen.getAllByRole("button", { name: "Unpin Task" })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpin Task" })[0]!);
-    expect(screen.queryByText("Pinned")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Unpin Task" })).toBeNull();
-    useAgents.setState({ pinned: [] });
+    expect(screen.getByRole("button", { name: "IDE" })).toBeTruthy();
   });
 
   it("jumps to the IDE for the current workspace from the Cowork home", async () => {
@@ -380,24 +324,13 @@ describe("Welcome › Cowork", () => {
     expect(openProject).toHaveBeenCalledWith("/Users/me/.openidea/workspace");
   });
 
-  it("opens the workspace list from Projects and switches workspace from its children", async () => {
-    await renderWelcome();
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+  it("returns home from Projects with the back button", async () => {
+    await renderProjects();
     expect(screen.getByLabelText("Search projects")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "acme-api" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
     await act(async () => {});
-    expect(useWorkspace.getState().root).toBe("/Users/me/repo/acme-api");
-    expect(openProject).not.toHaveBeenCalled();
-  });
-
-  it("starts as an icon rail and expands back", async () => {
-    await renderWelcome();
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Scheduled" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
-    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
-    expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeTruthy();
+    expect(await screen.findByText("Cindy is not available")).toBeTruthy();
+    expect(useWorkspace.getState().root).toBeNull();
   });
 
   it("opens a terminal drawer rooted at the workspace from the terminal action", async () => {

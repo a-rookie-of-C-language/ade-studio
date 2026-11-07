@@ -19,3 +19,57 @@
   min-height: 0;
   height: auto;
 }
+
+/* Top-right cluster: one pill holding the workspace switcher and the IDE jump. */
+.bar {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-toolbar-button);
+  background: var(--bg-elev);
+}
+
+.bar > * + * {
+  border-left: 1px solid var(--border);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: default;
+  max-width: 240px;
+}
+
+.jump:hover {
+  background: var(--bg-hover);
+  color: var(--fg-strong);
+}
+
+.jump:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.jumpName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

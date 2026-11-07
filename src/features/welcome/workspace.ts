@@ -12,9 +12,6 @@ import { openRecent, removeRecent } from "./recent";
 
 const STORAGE_KEY = "openidea.workspace.root";
 
-/** Sidebar child id for a recent workspace. */
-export const RECENT_PREFIX = "recent:";
-
 interface WorkspaceState {
   /** Selected workspace folder; `null` is the default (`~/.openidea/workspace`). */
   root: string | null;

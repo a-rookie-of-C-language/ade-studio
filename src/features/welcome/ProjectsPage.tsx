@@ -325,6 +325,7 @@ export function ProjectsPage({ onPick }: { onPick?: () => void }) {
   return (
     <div className={styles.projects}>
       <div className={styles.header}>
+        <IconButton icon="arrow-left" title={tx("Back")} onClick={() => onPick?.()} />
         <SearchField
           ref={search}
           variant="bare"
