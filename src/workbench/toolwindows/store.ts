@@ -529,38 +529,6 @@ export function exitDistractionFreeLayout() {
 }
 
 /**
- * Entering Agent Mode: remembers the visible windows and sizes, then applies
- * the agent layout computed by the caller (bottom hidden, Agents pinned
- * right). Windows can still be opened meanwhile (by shortcut); exiting
- * restores the remembered layout. No-op without a project layout loaded,
- * atop Distraction Free Mode, or when already in the mode.
- */
-export function enterAgentModeLayout(nextVisible: SlotRecord, rightSize: number) {
-  const s = useToolWindowLayout.getState();
-  if (!s.scope || s.distractionFreeStash || s.agentModeStash) return;
-  const hadFocus = !!s.focused;
-  update({
-    agentModeStash: { visible: { ...s.visible }, sizes: { ...s.sizes } },
-    visible: { ...nextVisible },
-    sizes: { ...s.sizes, right: Math.round(rightSize) },
-    maximized: null,
-    stashed: null,
-  });
-  if (hadFocus) focusEditor();
-}
-
-export function exitAgentModeLayout() {
-  const s = useToolWindowLayout.getState();
-  if (!s.agentModeStash) return;
-  const visible = { ...s.agentModeStash.visible };
-  const sizes = { ...s.agentModeStash.sizes };
-  const mounted = new Set(s.mounted);
-  for (const id of Object.values(visible)) if (id) mounted.add(id);
-  update({ visible, sizes, mounted, agentModeStash: null, maximized: null, stashed: null });
-  if (s.focused && !Object.values(visible).includes(s.focused)) focusEditor();
-}
-
-/**
  * Entering Solo Mode: remembers the visible windows and sizes, then applies
  * the solo layout computed by the caller (left and bottom hidden, chat kept
  * on the right). Windows can still be opened meanwhile (by shortcut);

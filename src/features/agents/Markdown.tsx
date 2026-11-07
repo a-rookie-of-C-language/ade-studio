@@ -14,7 +14,7 @@ import { copyText, tooltipAttrs } from "@/ui";
 import { basename, openLightEdit, useProject } from "@/platform/project";
 import { editorService, notifications } from "@/workbench/contributions";
 import { fileHref, pathLink, type PathLink } from "./conversation";
-import styles from "./Session.module.css";
+import styles from "./Markdown.module.css";
 
 const marked = new Marked({ gfm: true, breaks: true });
 
