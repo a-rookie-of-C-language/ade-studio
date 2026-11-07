@@ -43,3 +43,9 @@ CLAUDE.local.md
 
 # Local reference screenshots
 pycharm-screenshots/
+
+# Built Cindy renderer embed (scripts/cindy-embed/build.mjs regenerates it).
+/public/cindy/
+
+# Local embed-spike scratch (harness + logs, never committed).
+/.tmp-cindy/

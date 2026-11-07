@@ -6351,5 +6351,8 @@
   "Pin Task": "置顶任务",
   "Unpin Task": "取消置顶",
   "Solo Mode": "专注模式",
-  "Exit Solo Mode": "退出专注模式"
+  "Exit Solo Mode": "退出专注模式",
+  "Checking…": "检查中…",
+  "Cindy is not available": "Cindy 不可用",
+  "Build the embedded interface, then press Retry.": "先构建内嵌界面，然后点击重试。"
 }

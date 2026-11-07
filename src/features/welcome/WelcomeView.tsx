@@ -1,4 +1,4 @@
-/** Agent-first home: one screen with the composer, workspaces and scheduled tasks. */
+/** Agent-first home: the embedded Cindy interface fills the center; the rail keeps workspaces, tasks and scheduled runs. */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useT, useTx } from "@/platform/i18n";
@@ -20,7 +20,8 @@ import {
   T,
 } from "@/ui";
 import logo from "../../../src-tauri/icons/128x128.png";
-import { CoworkHome, CoworkSoon, CoworkTasks } from "./CoworkPage";
+import { CoworkSoon, CoworkTasks } from "./CoworkPage";
+import { CindyHome } from "./CindyHome";
 import { ProjectsPage } from "./ProjectsPage";
 import { loadRecent, useRecent } from "./recent";
 import { useSession } from "./session";
@@ -220,6 +221,7 @@ export function WelcomeView() {
         collapseLabel={t("sidebar.collapse")}
         expandLabel={t("sidebar.expand")}
         storageKey="openidea.welcome.sidebar.collapsed"
+        defaultCollapsed
         header={
           <>
             <div className={styles.brand}>
@@ -252,7 +254,7 @@ export function WelcomeView() {
         </ExpandedOnly>
       </Sidebar>
       <section className={styles.content} aria-label={contentLabel} aria-busy={opening || undefined}>
-        {page === "cowork" && <CoworkHome />}
+        {page === "cowork" && <CindyHome />}
         {page === "plugins" && <CoworkSoon icon="plugin" title={t("cowork.plugins")} hint={t("cowork.soon.plugins")} />}
         {page === "automation" && (
           <CoworkSoon icon="run" title={t("cowork.automation")} hint={t("cowork.soon.automation")} />
