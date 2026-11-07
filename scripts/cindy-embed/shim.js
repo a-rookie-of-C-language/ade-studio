@@ -412,9 +412,20 @@
       getCompanionCloudState: undefined,
       listBotGroups: undefined,
       // Real model catalog for the picker: live magpie rows via the parent.
-      // Fail-closed (reject) so the selector shows retry, never infinite loading.
+      // Fail-closed (reject) so the selector shows retry, never infinite
+      // loading — and never an empty catalog either (the panel assumes at
+      // least one provider with models and throws on open otherwise).
       listProviders: function () {
-        return requestMagpieCatalog().then(magpieProviderView);
+        return requestMagpieCatalog().then(function (models) {
+          var view = magpieProviderView(models);
+          var total = view.providers.reduce(function (n, p) {
+            return (
+              n + (p.models["claude-code"] || []).length + (p.models.codex || []).length + (p.models.pi || []).length
+            );
+          }, 0);
+          if (total === 0) return Promise.reject(new Error("magpie catalog empty"));
+          return view;
+        });
       },
       getCapabilities: function () {
         return requestMagpieCatalog().then(magpieCapabilities);
