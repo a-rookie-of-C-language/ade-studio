@@ -1497,6 +1497,19 @@
   padding-left: 10px;
   border-left: 1px solid var(--border);
 }
+.turnFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  padding: 4px 0 4px 10px;
+  border-left: 1px solid var(--border);
+}
+.turnFileName {
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 24ch;
+}
 
 /* Above the composer: what waits for the user, the plan and changes, what runs now. */
 .tray {

@@ -73,7 +73,15 @@ import { ConfigPickers } from "./ConfigPickers";
 import { findRanges, formatDuration, formatSentAt } from "./conversation";
 import { ImagePreview, imageSrc } from "./ImagePreview";
 import { useAgentSettings } from "./agentSettings";
-import { currentTool, foldedTurns, summarizeWork, workParts, type FoldedTurn, type WorkSummary } from "./timeline";
+import {
+  currentTool,
+  foldedTurns,
+  summarizeWork,
+  turnDiffs,
+  workParts,
+  type FoldedTurn,
+  type WorkSummary,
+} from "./timeline";
 import { useRevealedText } from "./reveal";
 import { AgentReply, MessageActions, ReplyActions } from "./AgentReply";
 import {
@@ -748,7 +756,7 @@ function Stream({ loadError, task, entries, subagent, onOpenSubagent, finding, f
   );
   const renderConversationRow = (row: ConversationRow): ReactNode =>
     row.kind === "turn" ? (
-      <TurnFold row={row} entries={entries ?? []}>
+      <TurnFold row={row} task={task} entries={entries ?? []}>
         {row.rows.map((inner) => (
           <div key={inner.index} className={styles.conversationRow}>
             {renderConversationRow(inner)}
@@ -1634,18 +1642,22 @@ function workSummaryText(work: WorkSummary, tx: ReturnType<typeof useTx>, toolCa
 /** A finished turn's work, folded under its message: one line saying what it did and for how long. */
 function TurnFold({
   row,
+  task,
   entries,
   children,
 }: {
   row: Extract<ConversationRow, { kind: "turn" }>;
+  task: AgentTask;
   entries: readonly AgentEntry[];
   children: ReactNode;
 }) {
   const tx = useTx();
   const { turn } = row;
-  const work = summarizeWork(entries.slice(turn.user + 1, turn.reply));
+  const slice = entries.slice(turn.user + 1, turn.reply);
+  const work = summarizeWork(slice);
+  const files = turnDiffs(slice);
   const parts = workSummaryText(work, tx, 0);
-  const messages = entries.slice(turn.user + 1, turn.reply).filter((e) => e.type === "agent").length;
+  const messages = slice.filter((e) => e.type === "agent").length;
   if (messages) parts.push(tx(messages === 1 ? "1 message" : "{count} messages").replace("{count}", String(messages)));
   const took = turn.sentMs != null && turn.doneMs != null ? formatDuration(turn.doneMs - turn.sentMs) : null;
   return (
@@ -1661,6 +1673,26 @@ function TurnFold({
         </summary>
       }
     >
+      {files.length > 0 && (
+        <div className={styles.turnFiles}>
+          {files.map((f) => (
+            <button
+              key={f.path}
+              type="button"
+              className={styles.toolDiff}
+              title={f.path}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void openChangeDiff(task, f.path);
+              }}
+            >
+              <span className={styles.turnFileName}>{basename(f.path)}</span>{" "}
+              <span className={styles.added}>+{f.added}</span> <span className={styles.removed}>−{f.removed}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className={styles.turnBody}>{children}</div>
     </Fold>
   );

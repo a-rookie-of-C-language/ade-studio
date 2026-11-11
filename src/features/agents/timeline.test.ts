@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentEntry } from "@/bindings";
-import { currentTool, foldedTurns, summarizeWork, workParts } from "./timeline";
+import { currentTool, foldedTurns, summarizeWork, turnDiffs, workParts } from "./timeline";
 
 const user = (text: string, extra: Partial<Extract<AgentEntry, { type: "user" }>> = {}): AgentEntry => ({
   type: "user",
@@ -49,6 +49,31 @@ describe("summarizeWork", () => {
   it("finds the call in progress", () => {
     expect(currentTool([tool("read", { status: "running" }), tool("search")])?.kind).toBe("read");
     expect(currentTool([tool("read")])).toBeNull();
+  });
+});
+
+describe("turnDiffs", () => {
+  it("aggregates a turn's file diffs by path", () => {
+    expect(
+      turnDiffs([
+        tool("edit", { diffs: [{ path: "/b.ts", added: 1, removed: 1 }] }),
+        tool("edit", {
+          diffs: [
+            { path: "/a.ts", added: 3, removed: 0 },
+            { path: "/b.ts", added: 2, removed: 0 },
+          ],
+        }),
+        tool("read"),
+        { type: "thought", text: "hmm" },
+      ]),
+    ).toEqual([
+      { path: "/a.ts", added: 3, removed: 0 },
+      { path: "/b.ts", added: 3, removed: 1 },
+    ]);
+  });
+
+  it("is empty when tools report no diffs", () => {
+    expect(turnDiffs([tool("read"), tool("edit", { locations: ["/a.ts"] })])).toEqual([]);
   });
 });
 

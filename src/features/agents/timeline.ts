@@ -91,6 +91,35 @@ export function workParts(s: WorkSummary): Array<{ text: string; count: number }
   return parts.filter(([, , n]) => n > 0).map(([one, many, count]) => ({ text: count === 1 ? one : many, count }));
 }
 
+/** One file changed by a turn: tool-reported diffs aggregated by path. */
+export interface TurnFileDiff {
+  path: string;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Files changed by `entries`: per-tool `diffs` summed by path, sorted for stable rendering.
+ * Tool entries without reported diffs contribute nothing (their work still counts in
+ * `summarizeWork`; the worktree Changes panel stays the source of truth for those).
+ */
+export function turnDiffs(entries: Iterable<AgentEntry>): TurnFileDiff[] {
+  const byPath = new Map<string, TurnFileDiff>();
+  for (const e of entries) {
+    if (e.type !== "tool") continue;
+    for (const d of e.diffs) {
+      const found = byPath.get(d.path);
+      if (found) {
+        found.added += d.added;
+        found.removed += d.removed;
+      } else {
+        byPath.set(d.path, { path: d.path, added: d.added, removed: d.removed });
+      }
+    }
+  }
+  return [...byPath.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
 /** The running tool call of a run, if any: what the agent is doing right now. */
 export function currentTool(entries: readonly AgentEntry[]): ToolEntry | null {
   for (let i = entries.length - 1; i >= 0; i--) {
