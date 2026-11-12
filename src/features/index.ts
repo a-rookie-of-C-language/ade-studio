@@ -5,6 +5,7 @@
  * barrier before welcome can restore a remembered project.
  */
 import { activate as mcp } from "./mcp";
+import { activate as agentCenter } from "./agent-center";
 import { activate as projectTrust } from "./project-trust";
 import { activate as editor } from "@/editor/core";
 import { activate as editorLsp } from "@/editor/lsp";
@@ -61,6 +62,7 @@ const features: Array<[string, Activate]> = [
   ["editor", editor],
   ["editor-lsp", editorLsp],
   ["mcp", mcp],
+  ["agent-center", agentCenter],
   ["app", app],
   ["welcome", welcome],
   ["project-tree", projectTree],
