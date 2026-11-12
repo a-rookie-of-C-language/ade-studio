@@ -5,33 +5,12 @@ for (const [id, selector] of [
   ["editor.inspections", "[class*='split'] > [class*='details']"],
   ["languages.servers", "[class*='body'] > [class*='details']"],
   ["plugins", "[class*='body'] > [class*='details']"],
-  ["agents.list", "section[aria-label='Codex']"],
 ]) {
   test(`${id} keeps its details usable beside the list`, async ({ workbench: page }) => {
     await page.keyboard.press("Meta+,");
     const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
     await expect(dialog).toBeVisible();
     await page.evaluate(async (id) => {
-      if (id === "agents.list") {
-        const path = "/src/features/agents/registry.ts";
-        const { tauriCommands } = await import(/* @vite-ignore */ path);
-        tauriCommands.providers = async () => [
-          {
-            id: "codex",
-            name: "Codex",
-            program: "codex",
-            defaultProgram: "codex",
-            args: [],
-            defaultArgs: [],
-            installed: true,
-            commandOverridden: false,
-            env: {},
-            config: [],
-            commands: [],
-            source: { kind: "builtin" },
-          },
-        ];
-      }
       const path = "/src/features/settings/model/staging.ts";
       (await import(/* @vite-ignore */ path)).selectPage(id);
     }, id);

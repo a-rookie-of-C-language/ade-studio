@@ -594,7 +594,7 @@ export function ProjectView() {
       startY = e.clientY;
     let active = false;
     let paths: string[] = [];
-    // Files and folders can be dropped on the agent composer as references; an
+    // Files and folders can be dropped on drag targets as references; an
     // editor opens only files, so folders carry the trailing slash `findDirs`
     // uses and the editor leaves them out.
     let files: DragSession | null = null;

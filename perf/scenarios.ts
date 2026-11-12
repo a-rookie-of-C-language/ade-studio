@@ -547,118 +547,6 @@ const tabs: Scenario = {
   },
 };
 
-/**
- * Two agent tasks with long conversations (150 turns, 2,100 entries) in editor tabs:
- * switching between them with the Switcher (Ctrl+Tab) shows a kept-alive conversation
- * again, which must not restyle its whole history; then scrolling up through one.
- * Chromium anchors scrolling on its own (WebKit doesn't), so anchoring is turned off
- * here: rows that take their real height only once scrolled into view would jump.
- */
-const agentTabs: Scenario = {
-  id: "agentTabs",
-  title: "Switch between and scroll long agent conversations",
-  async run(h) {
-    await h.page.addStyleTag({ content: "* { overflow-anchor: none !important; }" });
-    await h.page.evaluate(() =>
-      (
-        window as never as { __openideaPerf: { runAction(id: string, arg?: unknown): Promise<boolean> } }
-      ).__openideaPerf.runAction("agents.openSampleConversations", { tasks: 2, turns: 150 }),
-    );
-    const shown = (n: number) => `[data-editor-focus] span[title="Sample task ${n}"]`;
-    // Both conversations get their earlier entries painted in background batches, also the
-    // first one, hidden behind the second as soon as it opened.
-    await h.page.waitForFunction(
-      () =>
-        [...document.querySelectorAll("[data-message]")]
-          .map((m) => m.parentElement!)
-          .filter((stream, i, all) => all.indexOf(stream) === i && stream.textContent!.includes("Turn 0:")).length ===
-        2,
-      undefined,
-      { timeout: 30_000, polling: 200 },
-    );
-    // Rows painted while hidden are laid out the first time their conversation shows.
-    for (const n of [1, 2]) {
-      await h.page.getByRole("tab", { name: `Sample task ${n}` }).click();
-      await h.page.locator(shown(n)).waitFor();
-      await h.page.waitForTimeout(300);
-    }
-    // WebKit restyles a hidden conversation in full when it is shown again (Chromium keeps its
-    // style): what bounds that there is the history's DOM, and rows skipping rendering off screen.
-    const { conversationNodes, rowsAlwaysRendered } = await h.page.evaluate((selector) => {
-      const conversation = document.querySelector(selector)!.closest("[data-editor-focus]")!;
-      const rows = [...conversation.querySelector("[data-message]")!.parentElement!.children];
-      return {
-        conversationNodes: conversation.querySelectorAll("*").length,
-        rowsAlwaysRendered: rows.filter((r) => getComputedStyle(r).contentVisibility !== "auto").length,
-      };
-    }, shown(2));
-
-    const t0 = await h.now();
-    const before = await h.counters();
-    const switches: number[] = [];
-    for (let i = 0; i < 10; i++) {
-      switches.push(await h.measure(() => h.pressAction("navigate.switcher"), shown(i % 2 ? 2 : 1)));
-      await h.page.waitForTimeout(150);
-    }
-    const work = Harness.delta(before, await h.counters());
-    const switchTbtMs = totalBlockingTime(await h.longTasksSince(t0));
-
-    // Scrolling up from the end, a step at a time: how far the text under the pointer moves
-    // beyond the scroll itself.
-    const scrollJumps = await h.page.evaluate(async (selector) => {
-      const stream = document
-        .querySelector(selector)!
-        .closest("[data-editor-focus]")!
-        .querySelector("[data-message]")!.parentElement!;
-      const frame = () => new Promise(requestAnimationFrame);
-      stream.scrollTop = stream.scrollHeight;
-      await frame();
-      await frame();
-      const top = stream.getBoundingClientRect().top;
-      let jumps = 0;
-      for (let i = 0; i < 100 && stream.scrollTop > 0; i++) {
-        const row = [...stream.children].find((r) => r.getBoundingClientRect().bottom > top + 200)!;
-        const from = row.getBoundingClientRect().top;
-        const scrolled = stream.scrollTop;
-        // A wheel step: the user scrolls, so the conversation stops following its end.
-        stream.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }));
-        stream.scrollTop -= 120;
-        const by = scrolled - stream.scrollTop;
-        await frame();
-        await frame();
-        if (Math.abs(row.getBoundingClientRect().top - from - by) > 2) jumps++;
-      }
-      stream.scrollTop = stream.scrollHeight;
-      return jumps;
-    }, shown(2));
-
-    const refresh = await h.refreshMs();
-    const box = (await h.page.locator("[data-editor-focus]").boundingBox())!;
-    await h.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await h.page.waitForTimeout(200);
-    const t1 = await h.now();
-    await h.inPage((p) => p.startFrames());
-    for (let i = 0; i < 120; i++) {
-      await h.page.mouse.wheel(0, -120);
-      await h.page.waitForTimeout(16);
-    }
-    await h.page.waitForTimeout(200);
-    const scroll = frameSummary(await h.inPage((p) => p.stopFrames()), refresh);
-    return {
-      conversationNodes,
-      rowsAlwaysRendered,
-      ...latencySummary(switches, "switch"),
-      switchMainThreadMs: work.taskMs / switches.length,
-      switchStyleLayoutMs: work.styleLayoutMs / switches.length,
-      switchTbtMs,
-      scrollJumps,
-      scrollFrameP95Ms: scroll.frameP95Ms,
-      scrollDroppedFramesPct: scroll.droppedFramesPct,
-      scrollTbtMs: totalBlockingTime(await h.longTasksSince(t1)),
-    };
-  },
-};
-
 /** Find Action and Search Everywhere: open, then query → first result painted. */
 const popups: Scenario = {
   id: "popups",
@@ -807,7 +695,6 @@ export const SCENARIOS: Scenario[] = [
   keyRepeat,
   scroll,
   tabs,
-  agentTabs,
   popups,
   toolWindows,
   projectTree,

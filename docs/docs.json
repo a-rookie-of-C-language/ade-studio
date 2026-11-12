@@ -81,7 +81,7 @@
               },
               {
                 "group": "AI",
-                "pages": ["en/guide/agents", "en/guide/mcp"]
+                "pages": ["en/guide/mcp"]
               },
               {
                 "group": "Remote development",
@@ -281,7 +281,7 @@
               },
               {
                 "group": "AI",
-                "pages": ["zh/guide/agents", "zh/guide/mcp"]
+                "pages": ["zh/guide/mcp"]
               },
               {
                 "group": "远程开发",

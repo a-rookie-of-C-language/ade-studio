@@ -28,7 +28,7 @@ describe("EditorController", () => {
     ctrl.start();
     await ctrl.openFile("/p/a.ts", { focus: false });
     setProjectViewLead({ path: "/p/src", dir: true });
-    await ctrl.openInput({ kind: "agent-session", key: "task" });
+    await ctrl.openInput({ kind: "custom-session", key: "task" });
     expect(useProjectViewLead.getState().lead).toBeNull();
   });
 
@@ -103,7 +103,7 @@ describe("EditorController", () => {
     const send = vi.fn();
     message.addEventListener("keydown", send);
     try {
-      await ctrl.openInput({ kind: "agent-session", key: "task" });
+      await ctrl.openInput({ kind: "custom-session", key: "task" });
       slot.unmount();
       host.appendChild(message);
       message.focus();

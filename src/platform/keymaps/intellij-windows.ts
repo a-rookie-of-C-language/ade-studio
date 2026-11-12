@@ -64,7 +64,6 @@ export const intellijWindows: Record<string, string[]> = {
 
   // Find
   "find.inFile": ["Ctrl+F"],
-  "agents.findInConversation": ["Ctrl+F"],
   "find.replaceInFile": ["Ctrl+R"],
   "find.next": ["F3", "Ctrl+L"],
   "find.previous": ["Shift+F3", "Ctrl+Shift+L"],
@@ -364,9 +363,6 @@ export const intellijWindows: Record<string, string[]> = {
   "db.submitChanges": ["Ctrl+Enter"],
   "db.revertChanges": ["Ctrl+Alt+Z"],
   "db.showToolWindow": [],
-  "agents.newTask": ["Ctrl+Alt+Shift+I"],
-  "agents.showToolWindow": [],
-  "agents.sendToAgent": [],
   // Database tool window (when the tree has focus; `db.openConsole` anywhere).
   "db.openConsole": ["Ctrl+Shift+Q"],
   "db.newDataSource": [],

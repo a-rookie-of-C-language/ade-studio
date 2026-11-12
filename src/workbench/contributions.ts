@@ -130,7 +130,7 @@ export interface EditorKindContribution {
   standalone?: boolean;
   /**
    * Its recently used tabs stay mounted, hidden, while another tab is active: switching back
-   * shows them as they were instead of building them again (long agent conversations). A hidden
+   * shows them as they were instead of building them again (long documents). A hidden
    * tab keeps running; `useEditorShown` tells it whether it is the one shown.
    */
   keepAlive?: boolean;
@@ -175,7 +175,7 @@ export interface EditorDocumentLifecycle {
 /** Bumped by `notifyTabTitlesChanged`; tab labels whose `title(input)` changed re-render. */
 export const useEditorTabTitles = create<{ revision: number }>(() => ({ revision: 0 }));
 
-/** An editor kind's tab title may have changed outside the tab state (e.g. a renamed agent task). */
+/** An editor kind's tab title may have changed outside the tab state (e.g. a renamed document). */
 export function notifyTabTitlesChanged() {
   useEditorTabTitles.setState((s) => ({ revision: s.revision + 1 }));
 }
@@ -752,7 +752,7 @@ export function registerCommitCheckProvider(p: CommitCheckProvider): () => void 
 
 /**
  * Handles a pointer drag dropped on the editor content: features register handlers for
- * their own drag types (e.g. an agent task dragged from the tool window) without the
+ * their own drag types (e.g. an item dragged from a tool window) without the
  * editor depending on them. The editor shows its center drop-zone for accepted types.
  */
 export interface EditorDropHandler {

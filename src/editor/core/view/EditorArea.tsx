@@ -83,7 +83,7 @@ export function EditorAreaView() {
   );
 }
 
-/** The empty editor still accepts drops: reopening tabs, opening files, feature drags (agent tasks). */
+/** The empty editor still accepts drops: reopening tabs, opening files, feature drags. */
 function EmptyEditorArea() {
   const ref = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
@@ -187,7 +187,7 @@ function PaneView({ paneId }: { paneId: string }) {
     showFileIcon ? tabs.flatMap((t) => (t.input.kind === "file" && t.input.path ? [t.input.path] : [])) : [],
   );
   const items: TabItem[] = useMemo(() => {
-    // A kind's title may change without the tab state (a renamed agent task).
+    // A kind's title may change without the tab state (a renamed document).
     void titleRevision;
     const names = tabs.map((t) => tabTitle(t.input, kinds));
     return tabs.map((t, i) => {

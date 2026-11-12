@@ -13,7 +13,7 @@ export interface RecentFileItem {
   name: string;
   dir: string;
   indices: number[];
-  /** Switcher: an open editor that is not a file (agent session, diff…); `path` is its input key. */
+  /** Switcher: an open editor that is not a file (custom editor, diff…); `path` is its input key. */
   editor?: { input: EditorInput; icon: string };
 }
 

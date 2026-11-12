@@ -386,7 +386,7 @@ function ToolWindowsGrid() {
           <BoundToggle
             k="appearance.showToolWindowBadges"
             label="Show tool window badges"
-            hint="Counts on the stripe icons, e.g. changed files or agent tasks needing input"
+            hint="Counts on the stripe icons, e.g. changed files or unread notifications"
           />
         </>
       }

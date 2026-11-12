@@ -51,15 +51,6 @@ Capabilities the architecture can't provide (such as structural search that need
 
 Done when: a third-party author can build a language, tool window or theme plugin from the documentation alone and publish it to the marketplace, and users can find and install it from the IDE or the web, without any change to the host.
 
-### 3. Basic agent support
-
-- Connect agents that speak ACP, including ones users add themselves.
-- A chat panel that can send the selection, files and problems to the agent as context.
-- Agent edits are shown as diffs and applied after review; tool calls need the user's permission.
-- A built-in MCP server lets external agents use the IDE's code intelligence, run and debug features.
-
-Done when: mainstream agents can go from request to code change to diff review to running tests, entirely inside the IDE.
-
 ## Not planned
 
 - **Loading IntelliJ Platform plugins**: the plugin models differ, so they can't be loaded directly. Themes can be imported (see [Themes and fonts](/en/guide/themes)); other plugins need to be ported to the OpenIDEA plugin API.

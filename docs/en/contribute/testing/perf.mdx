@@ -29,7 +29,7 @@ pnpm perf -- --only typing --profile --unminified   # CPU profile and top functi
 
 Other options: `--warmup <n>` (default 1), `--headed`, `--no-build` (reuse the last build), `--channel <browser>` (default `chromium`, or `OPENIDEA_PERF_CHANNEL`), `--fail-on-regression`.
 
-Scenarios (`perf/scenarios.ts`): `typing`, `typingLarge`, `typingAngular`, `completion`, `consoleOutput`, `terminalTui`, `keyRepeat`, `scroll`, `gitLog`, `gitLogScrollbar`, `resizePanels`, `startup`, `tabs`, `agentTabs`, `popups`, `toolWindows`, `projectTree`, `leaks`. Bundle size (`bundle.initialJsKb`, `bundle.initialCssKb`) is checked on every run.
+Scenarios (`perf/scenarios.ts`): `typing`, `typingLarge`, `typingAngular`, `completion`, `consoleOutput`, `terminalTui`, `keyRepeat`, `scroll`, `gitLog`, `gitLogScrollbar`, `resizePanels`, `startup`, `tabs`, `popups`, `toolWindows`, `projectTree`, `leaks`. Bundle size (`bundle.initialJsKb`, `bundle.initialCssKb`) is checked on every run.
 
 Latencies are measured from input to the start of the first frame that shows the result, so about 16.7 ms means "next frame".
 

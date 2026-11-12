@@ -29,7 +29,7 @@ pnpm perf -- --only typing --profile --unminified   # CPU profile 和耗时最�
 
 其他选项：`--warmup <n>`（默认 1）、`--headed`、`--no-build`（复用上次构建）、`--channel <browser>`（默认 `chromium`，或 `OPENIDEA_PERF_CHANNEL`）、`--fail-on-regression`。
 
-场景（`perf/scenarios.ts`）：`typing`、`typingLarge`、`typingAngular`、`completion`、`consoleOutput`、`terminalTui`、`keyRepeat`、`scroll`、`gitLog`、`gitLogScrollbar`、`resizePanels`、`startup`、`tabs`、`agentTabs`、`popups`、`toolWindows`、`projectTree`、`leaks`。每次运行都会检查包体积（`bundle.initialJsKb`、`bundle.initialCssKb`）。
+场景（`perf/scenarios.ts`）：`typing`、`typingLarge`、`typingAngular`、`completion`、`consoleOutput`、`terminalTui`、`keyRepeat`、`scroll`、`gitLog`、`gitLogScrollbar`、`resizePanels`、`startup`、`tabs`、`popups`、`toolWindows`、`projectTree`、`leaks`。每次运行都会检查包体积（`bundle.initialJsKb`、`bundle.initialCssKb`）。
 
 延迟是从输入到显示结果的第一帧开始的时间，因此约 16.7 ms 就表示“下一帧”。
 

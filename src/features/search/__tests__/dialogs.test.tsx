@@ -492,9 +492,9 @@ describe("Switcher", () => {
 
   it("opens the selection when Ctrl is released, once the popup closed, in the same task", async () => {
     const tab = (key: string, lastActive: number) => ({
-      input: { kind: "agent-session", key },
+      input: { kind: "custom-editor", key },
       title: key,
-      icon: "toolwindow-agents",
+      icon: "toolwindow-services",
       lastActive,
     });
     const seen: Array<{ key: string; popup: boolean; focus: Element | null }> = [];

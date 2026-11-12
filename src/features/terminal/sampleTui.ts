@@ -1,5 +1,5 @@
 /**
- * Synthetic output of a full-screen TUI (agent CLIs such as Claude Code or Grok) for the
+ * Synthetic output of a full-screen TUI application for the
  * performance harness: every frame repaints the whole screen and retitles the window, while
  * only the spinner row actually changes. That is the pattern that made typing lag (#2239).
  */
